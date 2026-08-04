@@ -1166,3 +1166,79 @@ por suposição — todos os itens abaixo foram checados no servidor.
    `urgenciarenal.duckdns.org` válido até 2026-10-05, `certbot.timer` ativo e
    rodando normalmente.
 
+## Vistoria de bugs de 2026-08-03 (busca ampla, não restrita a merges recentes)
+
+Vistoria com múltiplos agentes especializados em paralelo, cobrindo todo o
+código (não só os PRs recém-mesclados), com verificação manual de cada achado
+antes de corrigir. 5 dos 6 achados confirmados foram corrigidos nesta mesma
+sessão (branch `fix/vistoria-anexo-pausa-metricas-versao`):
+
+1. **`EmailSenderService.enviarComAnexo` enviava o e-mail SEM o anexo se o
+   arquivo não existisse em disco**, em vez de falhar — o destinatário recebia
+   um e-mail "de sucesso" prometendo um anexo (ofício, comprovante SNT) que
+   nunca chegou. Corrigido: se `anexo != null` mas `!anexo.exists()`, o método
+   agora retorna `false` sem enviar nada (mesmo padrão de falha alta usado no
+   resto do serviço). `anexo == null` continua sendo o caminho legítimo de
+   "enviar sem anexo de propósito" (usado por outros callers) — não mudou.
+2. **`ProcessoService.registrarEnvio` podia tirar o processo da pausa
+   `SOLICITA_INFORMACAO` silenciosamente.** A condição antiga
+   (`status.isEmAndamento()`) incluía `SOLICITA_INFORMACAO`, então reenviar
+   durante uma pausa "acordava" o processo para `ENVIADO` por engano,
+   deixando o parecer que pediu a informação preso para sempre e pulando a
+   trava de `ProcessoValidator.validarPausaDecisao`. Corrigido: `registrarEnvio`
+   agora só avança para `ENVIADO` quando o status NÃO é `SOLICITA_INFORMACAO`.
+3. **Reenvio (`RegistroEnvioService`) resetava `dataEnvio` de pareceres JÁ
+   respondidos.** Isso zerava injustamente o indicador de "tempo de resposta"
+   do avaliador que já tinha votado, contando o prazo dele de novo a partir
+   do reenvio. Corrigido: só os pareceres com `resultado == null` (ainda sem
+   voto) têm `dataEnvio` atualizada.
+4. **`ProcessoValidator.temVotoCoordenadorFavoravel` lê `coordenador` ao
+   vivo, não no momento do voto** (achado, **NÃO corrigido** de propósito —
+   requer decisão de produto). Cenário: se o coordenador votar Favorável, o
+   processo é deferido com esse voto sozinho; mas se ELE deixar de ser
+   coordenador depois (outro médico assume o cargo) e o processo ainda não
+   foi decidido, o voto antigo dele deixa de contar como "voto de coordenador"
+   na hora do `decidir` — ou o inverso, um médico que virou coordenador DEPOIS
+   de votar como membro comum ganha retroativamente o peso de coordenador.
+   Corrigir exigiria uma coluna nova em `Parecer` (snapshot do papel no
+   momento do voto) com decisão explícita sobre a semântica correta — fora de
+   escopo desta sessão, fica pendente de definição do usuário.
+5. **`ControleUrgencia` era a única entidade "quente" do sistema sem
+   `@Version`** (lock otimista). Cenário real: operador A abre a tela de
+   edição (carrega a `dataVencimento` atual); operador B clica "Renovar"
+   nesse meio tempo (grava `RENOVADA` + vencimento hoje+30); A salva a edição
+   que tinha aberto ANTES da renovação de B e sobrescreve silenciosamente o
+   trabalho de B, sem nenhum erro, numa tela cuja única função é controlar o
+   prazo de 30 dias. **Corrigido em 2 camadas** (`@Version` sozinho NÃO
+   bastaria — ver adiante):
+   - `ControleUrgencia` ganhou o campo `versao` (`@Version`) +
+     `getVersao()`/`setVersao()`.
+   - `controle-urgencias/form.html` ganhou um `<input type="hidden"
+     th:field="*{versao}">` que carrega a versão lida junto com a tela.
+   - `ControleUrgenciaService.atualizar` agora compara explicitamente
+     `dados.getVersao()` (o que veio do formulário) contra a versão atual do
+     registro no banco, **antes** de aplicar os demais campos, lançando
+     `ObjectOptimisticLockingFailureException` em caso de divergência —
+     reaproveitando o mesmo handler genérico já existente em
+     `GlobalExceptionHandler` para conflito de escrita concorrente.
+   - **Por que a checagem explícita é necessária:** `atualizar()` sempre
+     recarrega a entidade GERENCIADA via `findById` e muta essa instância
+     (nunca o objeto `dados` vindo do formulário) antes de chamar `save()`.
+     Isso significa que o `@Version` puro do JPA, sozinho, nunca detectaria
+     nada aqui — o `save()` sempre flusharia com a versão mais recente
+     recém-lida, nunca a versão antiga que o navegador tinha. A checagem
+     manual contra `dados.getVersao()` é o que realmente fecha a janela.
+   - **Requer backfill manual em produção após o deploy** (mesmo pitfall de
+     `@Version` novo em entidade já populada, documentado acima):
+     `UPDATE controle_urgencia SET versao = 0 WHERE versao IS NULL;`
+   - Coberto por `ControleUrgenciaAtualizacaoIntegrationTest
+     .edicaoConcorrenteComRenovacaoNaoSobrescreveSilenciosamente` (H2 real,
+     serviço real — simula A lendo antes, B renovando, A tentando salvar por
+     cima).
+6. **Auditoria de exportação de dossiê (`ProcessoExportacaoController`) vazava
+   o NOME COMPLETO do paciente** no log de `/auditoria` (ADMIN-only) — recaída
+   do mesmo padrão já endurecido em 2026-07-28 para `PROCESSO_CADASTRADO`
+   (que usa `Iniciais.de()` por causa exatamente disto). Corrigido: a mensagem
+   de auditoria agora só cita o id do processo, sem `dossie.nomePasta()`
+   (que carrega `<Paciente> - Processo CET-RS NN-AAAA`).
+

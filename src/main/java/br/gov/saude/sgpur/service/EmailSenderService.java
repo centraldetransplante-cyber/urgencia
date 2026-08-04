@@ -115,17 +115,35 @@ public class EmailSenderService {
     /**
      * Envia e-mail com anexo.
      *
+     * <p><b>{@code anexo == null} é "sem anexo, de propósito"</b> (ex.: modo
+     * teste redirecionando o envio) e envia normalmente sem anexar nada.
+     * <b>Já {@code anexo != null} significa que o chamador espera aquele
+     * arquivo especificamente</b> — se ele não existir mais em disco (perdido,
+     * backup restaurado parcialmente), o método FALHA (devolve {@code false})
+     * em vez de mandar o e-mail sem o anexo prometido. Antes desta correção o
+     * arquivo ausente era só ignorado e o envio "funcionava" sem o anexo — em
+     * {@code ProcessoService.finalizarResposta}, isso fazia o solicitante
+     * receber um e-mail de Deferido/Indeferido dizendo "segue em anexo" sem
+     * nada anexado, e o processo era marcado como respondido mesmo assim
+     * (falha silenciosa com impacto assistencial, o cenário que o javadoc de
+     * {@code finalizarResposta} documenta querer evitar a todo custo).
+     *
      * @param to        destinatario
      * @param subject   assunto
      * @param body      corpo do e-mail
-     * @param anexo     arquivo a anexar
+     * @param anexo     arquivo a anexar, ou {@code null} para enviar sem anexo
      * @param nomeAnexo nome de exibicao do anexo no e-mail
-     * @return true se enviou com sucesso
+     * @return true se enviou com sucesso (com o anexo, se um foi pedido)
      */
     public boolean enviarComAnexo(String to, String subject, String body,
                                   File anexo, String nomeAnexo) {
         if (from == null || from.isBlank()) {
             log.warn("EmailSender: remetente (from) nao configurado.");
+            return false;
+        }
+        if (anexo != null && !anexo.exists()) {
+            log.error("EmailSender: anexo esperado nao encontrado em disco, e-mail NAO enviado: {}",
+                anexo.getAbsolutePath());
             return false;
         }
         DestinoResolvido destino = resolverDestino(new String[]{to}, null, subject);
@@ -136,7 +154,7 @@ public class EmailSenderService {
             helper.setTo(destino.to());
             helper.setSubject(destino.subject());
             helper.setText(body, false);
-            if (anexo != null && anexo.exists()) {
+            if (anexo != null) {
                 helper.addAttachment(nomeAnexo != null ? nomeAnexo : anexo.getName(), anexo);
             }
             mailSender.send(msg);

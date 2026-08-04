@@ -109,6 +109,20 @@ public class ControleUrgenciaService {
      * @throws IllegalStateException se a data de vencimento vier vazia - a
      *         coluna e {@code NOT NULL} e o formulario a marca como obrigatoria;
      *         falhar alto e melhor do que descartar a edicao em silencio.
+     * @throws org.springframework.orm.ObjectOptimisticLockingFailureException
+     *         se a {@code versao} trazida pelo formulario (campo oculto,
+     *         carregado junto com a tela de edicao) nao bater com a versao
+     *         atual do registro no banco - ou seja, alguem alterou o registro
+     *         (ex.: clicou "Renovar") depois que esta tela foi aberta. Sem esta
+     *         checagem explicita, {@code @Version} sozinho NAO protege este
+     *         metodo: como ele sempre recarrega a entidade GERENCIADA via
+     *         {@code findById} e muta essa instancia (nunca a {@code dados}
+     *         recebida do formulario), o {@code save()} sempre flusharia com a
+     *         versao mais recente ja lida agora mesmo, nunca a versao antiga
+     *         que o navegador tinha - o conflito precisa ser comparado a mao
+     *         contra o valor que veio do formulario. Reaproveita o mesmo
+     *         handler generico de {@code GlobalExceptionHandler} ja usado para
+     *         conflitos de escrita concorrente em outras entidades.
      */
     @Transactional
     public ControleUrgencia atualizar(ControleUrgencia dados) {
@@ -118,6 +132,10 @@ public class ControleUrgenciaService {
             throw new IllegalStateException(
                 "Informe a data de vencimento da urgencia. Para prorrogar por mais "
                 + DIAS_URGENCIA + " dias, use o botao Renovar.");
+        }
+        if (c.getVersao() != null && !c.getVersao().equals(dados.getVersao())) {
+            throw new org.springframework.orm.ObjectOptimisticLockingFailureException(
+                ControleUrgencia.class, dados.getId());
         }
         c.setNomePaciente(dados.getNomePaciente());
         c.setRgct(dados.getRgct());

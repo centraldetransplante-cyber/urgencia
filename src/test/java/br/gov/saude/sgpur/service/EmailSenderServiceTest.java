@@ -75,6 +75,24 @@ class EmailSenderServiceTest {
         assertThat(captured[0].getSubject()).contains("[TESTE - para: solicitante@example.com]");
     }
 
+    /**
+     * anexo == null continua sendo "sem anexo, de proposito" (ex.: modo teste
+     * acima) e envia normalmente - ver o teste seguinte para o caso oposto.
+     */
+    @Test
+    void anexoAusenteEmDiscoFalhaEmVezDeEnviarSemAnexo(@org.junit.jupiter.api.io.TempDir java.nio.file.Path tempDir)
+            throws Exception {
+        JavaMailSender sender = mailSenderMock();
+        EmailSenderService service = new EmailSenderService(sender, "remetente@saur.gov.br", "");
+        java.io.File anexoInexistente = tempDir.resolve("comprovante-que-nao-existe-mais.pdf").toFile();
+
+        boolean ok = service.enviarComAnexo("solicitante@example.com", "Deferido", "corpo",
+            anexoInexistente, "comprovante.pdf");
+
+        assertThat(ok).isFalse();
+        org.mockito.Mockito.verify(sender, org.mockito.Mockito.never()).send(org.mockito.Mockito.any(MimeMessage.class));
+    }
+
     private MimeMessage[] capturarMensagem(JavaMailSender sender) {
         org.mockito.ArgumentCaptor<MimeMessage> captor = org.mockito.ArgumentCaptor.forClass(MimeMessage.class);
         org.mockito.Mockito.verify(sender).send(captor.capture());

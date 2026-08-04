@@ -55,8 +55,14 @@ public class ProcessoExportacaoController {
         // Materializa TUDO antes de comecar o stream (ver javadoc da classe).
         Dossie dossie = exportacaoService.montarDossie(id);
 
+        // Sem dossie.nomePasta() aqui: ela leva o NOME COMPLETO do paciente
+        // (bug real corrigido em 2026-08-03 - recaida do mesmo padrao ja
+        // endurecido em 2026-07-28 para PROCESSO_CADASTRADO, que usa
+        // Iniciais.de() por causa exatamente disto: /auditoria e ADMIN-only,
+        // mas nao deveria expor nome completo). O id do processo ja basta
+        // para localizar o registro na auditoria.
         auditoria.registrar("PROCESSO_EXPORTADO",
-            "Dossie completo (ZIP) do processo id " + id + " - pasta: " + dossie.nomePasta());
+            "Dossie completo (ZIP) do processo id " + id);
 
         StreamingResponseBody corpo = out -> {
             try {

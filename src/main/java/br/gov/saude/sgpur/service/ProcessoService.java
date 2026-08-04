@@ -142,9 +142,22 @@ public class ProcessoService {
 
     /**
      * Marca o processo como ENVIADO aos avaliadores (etapa 5 do fluxo).
-     * So altera o status quando ainda esta em uma fase anterior a decisao
-     * (SOLICITADO / ENVIADO / SOLICITA_INFORMACAO); nunca rebaixa
-     * um processo ja decidido.
+     * So promove SOLICITADO/ENVIADO para ENVIADO; nunca rebaixa um processo
+     * ja decidido, e NUNCA tira o processo da pausa SOLICITA_INFORMACAO.
+     *
+     * <p><b>Bug real corrigido (2026-08-03):</b> antes, a condicao era
+     * {@code p.getStatus().isEmAndamento()}, que inclui SOLICITA_INFORMACAO —
+     * reenviar documentos atualizados aos avaliadores enquanto o processo
+     * aguardava a informacao complementar do solicitante desfazia a pausa
+     * silenciosamente (status virava ENVIADO sem passar por
+     * {@code retomarAposInformacao}), com dois efeitos: o parecer de quem
+     * pediu a informacao ficava travado para sempre com
+     * {@code resultado = SOLICITA_INFORMACAO} (so {@code retomarAposInformacao}
+     * o reabre), e {@link ProcessoValidator#validarPausaDecisao} para de
+     * bloquear a decisao (ele so olha o status atual) — o operador podia
+     * Indeferir com 2 desfavoraveis e um pedido de informacao nunca resolvido,
+     * e o {@code DecisaoAutomaticaScheduler} podia auto-decidir sozinho um
+     * processo que ainda esperava resposta do solicitante.
      */
     @Transactional
     public Processo registrarEnvio(Long id) {
@@ -156,7 +169,7 @@ public class ProcessoService {
         // teste) sem passar pela validacao do controller HTTP.
         validator.validarRegistroEnvio(p)
             .ifPresent(msg -> { throw new IllegalStateException(msg); });
-        if (p.getStatus().isEmAndamento()) {
+        if (p.getStatus() != StatusProcesso.SOLICITA_INFORMACAO && p.getStatus().isEmAndamento()) {
             p.setStatus(StatusProcesso.ENVIADO);
         }
         return processoRepository.save(p);

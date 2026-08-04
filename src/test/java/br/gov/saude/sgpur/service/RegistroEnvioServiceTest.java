@@ -130,6 +130,45 @@ class RegistroEnvioServiceTest {
         verify(auditoria).registrar(eq("ENVIO_AVALIADORES_REGISTRADO"), anyString());
     }
 
+    /**
+     * Bug real corrigido (2026-08-03): reenviar documentos atualizados aos
+     * avaliadores NAO pode sobrescrever dataEnvio de quem JA respondeu -
+     * antes, o forEach rodava sobre todos os pareceres sem filtro, deixando
+     * dataEnvio > dataResposta pra quem ja tinha votado. TempoRespostaService
+     * descarta silenciosamente pareceres com dias negativos, entao o parecer
+     * simplesmente sumia das metricas sem nenhum aviso.
+     */
+    @Test
+    void reenvioSoAtualizaDataEnvioDeQuemAindaNaoRespondeu() throws Exception {
+        Parecer jaRespondeu = processo.getPareceres().get(0);
+        java.time.LocalDate dataEnvioOriginal = java.time.LocalDate.of(2026, 7, 1);
+        jaRespondeu.setDataEnvio(dataEnvioOriginal);
+        jaRespondeu.setResultado(br.gov.saude.sgpur.domain.ResultadoParecer.FAVORAVEL);
+        jaRespondeu.setDataResposta(java.time.LocalDate.of(2026, 7, 5));
+
+        Parecer aindaPendente = new Parecer(new br.gov.saude.sgpur.domain.MembroUrgenciaRenal("HNSC", "Medico 2", null));
+        processo.addParecer(aindaPendente);
+
+        processo.addAnexo(documentoClinicoPdf("exame-atualizado.pdf", pdfValido()));
+        when(solicitacaoAvaliadorService.consolidar(any())).thenReturn(pdfValido());
+        when(solicitacaoAvaliadorService.carimbarCabecalho(any(), eq(processo))).thenReturn(pdfValido());
+        Anexo novoAnexo = new Anexo();
+        novoAnexo.setId(101L);
+        when(anexoStorage.salvarBytes(eq(processo), eq(TipoAnexo.SOLICITACAO_AVALIADOR),
+            anyString(), anyString(), anyString(), any(byte[].class))).thenReturn(novoAnexo);
+        when(processoService.registrarEnvio(1L)).thenReturn(processo);
+
+        RegistroEnvioService.RegistroEnvioResultado resultado = service.registrar(1L);
+
+        assertThat(resultado.ok()).isTrue();
+        assertThat(jaRespondeu.getDataEnvio())
+            .as("dataEnvio de quem ja respondeu nao pode ser sobrescrita pelo reenvio")
+            .isEqualTo(dataEnvioOriginal);
+        assertThat(aindaPendente.getDataEnvio())
+            .as("dataEnvio de quem ainda nao respondeu deve ser atualizada pelo reenvio")
+            .isEqualTo(java.time.LocalDate.now());
+    }
+
     @Test
     void pdfCorrompidoFicaDeForaComAvisoMasEnvioSeguePorHaverOutroValido() throws Exception {
         processo.addAnexo(documentoClinicoPdf("bom.pdf", pdfValido()));

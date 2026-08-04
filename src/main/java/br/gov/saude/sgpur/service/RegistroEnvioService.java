@@ -198,7 +198,20 @@ public class RegistroEnvioService {
             anexoStorage.removerAntigosDoTipo(p, TipoAnexo.SOLICITACAO_AVALIADOR, novoAnexo.getId());
 
             // SO depois de o novo anexo estar seguro, efetiva o envio.
-            p.getPareceres().forEach(par -> par.setDataEnvio(hoje));
+            //
+            // So atualiza dataEnvio de quem AINDA NAO respondeu (resultado ==
+            // null). Bug real corrigido (2026-08-03): antes, o forEach rodava
+            // sobre TODOS os pareceres, inclusive os ja votados - num reenvio
+            // (documento atualizado apos um avaliador ja ter dado o parecer),
+            // isso sobrescrevia o dataEnvio original com hoje, deixando
+            // dataEnvio > dataResposta para quem ja tinha votado. A guarda de
+            // "dias < 0" em TempoRespostaService evita excecao/media negativa,
+            // mas descarta silenciosamente esse parecer de TODAS as metricas
+            // (media geral, media do avaliador, contagem fora do prazo) - o
+            // voto simplesmente sumia das estatisticas, sem nenhum aviso.
+            p.getPareceres().stream()
+                .filter(par -> par.getResultado() == null)
+                .forEach(par -> par.setDataEnvio(hoje));
             processoService.salvar(p);
             processoService.registrarEnvio(processoId);
 

@@ -11,6 +11,11 @@
     <form th:action="@{/controle-urgencias}" th:object="${registro}" method="post" class="card">
         <div class="card-body">
             <input type="hidden" th:field="*{id}">
+            <!-- Lock otimista: carrega a versao lida junto com o formulario para
+                 ControleUrgenciaService.atualizar detectar edicao concorrente
+                 (ex.: renovacao feita por outro operador enquanto esta tela
+                 estava aberta) em vez de sobrescrever em silencio. -->
+            <input type="hidden" th:field="*{versao}">
 
             <div class="mb-3">
                 <label class="form-label">Nome do paciente *</label>

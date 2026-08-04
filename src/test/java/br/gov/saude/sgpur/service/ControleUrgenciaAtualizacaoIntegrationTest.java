@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.test.context.TestPropertySource;
 
 import java.beans.PropertyDescriptor;
@@ -50,7 +51,7 @@ class ControleUrgenciaAtualizacaoIntegrationTest {
      * nao sao bug, sao defesa. Se um deles passar a ser copiado, este teste
      * (metodo {@link #camposDeSistemaContinuamIgnorados()}) quebra.
      */
-    private static final List<String> IGNORADOS_DE_PROPOSITO = List.of("id");
+    private static final List<String> IGNORADOS_DE_PROPOSITO = List.of("id", "versao");
 
     @Autowired
     private ControleUrgenciaService service;
@@ -85,6 +86,7 @@ class ControleUrgenciaAtualizacaoIntegrationTest {
             null, LocalDate.now().plusDays(75));
         dados.setId(id);
         dados.setObservacoes("Observacao editada");
+        dados.setVersao(repo.findById(id).orElseThrow().getVersao());
 
         service.atualizar(dados);
 
@@ -147,6 +149,7 @@ class ControleUrgenciaAtualizacaoIntegrationTest {
         dados.setDataUltimaRenovacao(LocalDate.now());
         dados.setProcessoId(999L);
         dados.setAtivo(true);
+        dados.setVersao(repo.findById(id).orElseThrow().getVersao());
 
         service.atualizar(dados);
 
@@ -176,11 +179,58 @@ class ControleUrgenciaAtualizacaoIntegrationTest {
         assertThat(doBanco.getNomePaciente()).isEqualTo("Maria Original");
     }
 
+    /**
+     * Bug real corrigido (2026-08-03): {@code ControleUrgencia} era a unica
+     * entidade "quente" do sistema sem {@code @Version}. Cenario reproduzido
+     * aqui: operador A abre o formulario de edicao (le a entidade, guarda o
+     * estado "antigo" em memoria); enquanto isso, operador B clica "Renovar"
+     * e commita; A entao salva a edicao que tinha aberto ANTES da renovacao -
+     * sem lock otimista, isso sobrescrevia silenciosamente a renovacao de B
+     * com a dataVencimento antiga, sem nenhum erro, numa tela cuja unica
+     * funcao e controlar o prazo de 30 dias. Com {@code @Version} + a checagem
+     * explicita em {@code ControleUrgenciaService.atualizar} (o campo oculto
+     * {@code versao} do formulario e comparado contra a versao atual do
+     * registro ANTES de aplicar os demais campos), a segunda escrita tem que
+     * estourar {@code ObjectOptimisticLockingFailureException} em vez de
+     * "vencer" silenciosamente. Note que {@code @Version} sozinho NAO bastaria
+     * aqui: {@code atualizar} sempre recarrega a entidade GERENCIADA via
+     * {@code findById} e muta essa instancia (nunca a que veio do formulario),
+     * entao sem a comparacao explicita o {@code save()} sempre flusharia com a
+     * versao mais recente ja lida na hora, nunca detectando o formulario
+     * desatualizado de A.
+     */
+    @Test
+    void edicaoConcorrenteComRenovacaoNaoSobrescreveSilenciosamente() {
+        // A le a entidade (simula o formulario ja aberto, antes da renovacao de B).
+        ControleUrgencia lidoPorA = repo.findById(id).orElseThrow();
+        ControleUrgencia dadosDoFormularioDeA = copiaEditavel(lidoPorA);
+        dadosDoFormularioDeA.setId(id);
+        dadosDoFormularioDeA.setNomePaciente("Maria Editada por A");
+
+        // B renova (commita separado, incrementando a versao no banco).
+        service.renovar(id);
+        ControleUrgencia depoisDaRenovacao = repo.findById(id).orElseThrow();
+        assertThat(depoisDaRenovacao.getSituacao()).isEqualTo(SituacaoUrgencia.RENOVADA);
+        LocalDate vencimentoRenovado = depoisDaRenovacao.getDataVencimento();
+
+        // A tenta salvar por cima do estado que leu ANTES da renovacao de B.
+        // A versao presa no form (hidden field) de A ja esta desatualizada -
+        // atualizar() compara essa versao contra a atual e recusa a escrita.
+        assertThatThrownBy(() -> service.atualizar(dadosDoFormularioDeA))
+            .isInstanceOf(ObjectOptimisticLockingFailureException.class);
+
+        // A renovacao de B sobrevive intacta - nao foi sobrescrita por A.
+        ControleUrgencia doBanco = repo.findById(id).orElseThrow();
+        assertThat(doBanco.getSituacao()).isEqualTo(SituacaoUrgencia.RENOVADA);
+        assertThat(doBanco.getDataVencimento()).isEqualTo(vencimentoRenovado);
+    }
+
     /** Cria um objeto "de formulario" com o estado editavel atual do registro. */
     private ControleUrgencia copiaEditavel(ControleUrgencia origem) {
         ControleUrgencia c = new ControleUrgencia(origem.getNomePaciente(), origem.getRgct(),
             origem.getEquipe(), origem.getAbo(), null, origem.getDataVencimento());
         c.setObservacoes(origem.getObservacoes());
+        c.setVersao(origem.getVersao());
         return c;
     }
 }

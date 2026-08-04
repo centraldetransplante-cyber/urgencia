@@ -223,6 +223,29 @@ class ProcessoServiceTest {
     }
 
     /**
+     * Bug real corrigido (2026-08-03): reenviar documentos atualizados aos
+     * avaliadores enquanto o processo aguarda informacao complementar do
+     * solicitante NAO pode tirar o processo da pausa - so
+     * retomarAposInformacao() faz isso, depois de o operador confirmar que a
+     * informacao chegou. Antes, a condicao era isEmAndamento() (que inclui
+     * SOLICITA_INFORMACAO), e o reenvio desfazia a pausa silenciosamente:
+     * validarPausaDecisao passava a nao bloquear mais a decisao, e o parecer
+     * de quem pediu a informacao ficava travado para sempre.
+     */
+    @Test
+    void registrarEnvioNaoTiraProcessoDaPausaSolicitaInformacao() {
+        Processo p = new Processo();
+        p.setStatus(StatusProcesso.SOLICITA_INFORMACAO);
+        anexarDocumentoClinicoPdf(p);
+        when(processoRepository.findById(4L)).thenReturn(java.util.Optional.of(p));
+        when(processoRepository.save(p)).thenReturn(p);
+
+        service.registrarEnvio(4L);
+
+        assertThat(p.getStatus()).isEqualTo(StatusProcesso.SOLICITA_INFORMACAO);
+    }
+
+    /**
      * Defesa em profundidade: registrarEnvio() espelha, no servico, a mesma
      * regra ja imposta no controller (documento clinico PDF obrigatorio),
      * para que o metodo nunca marque ENVIADO sem essa garantia, mesmo

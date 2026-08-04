@@ -73,6 +73,23 @@ public class ControleUrgencia {
     @Column(nullable = false, updatable = false)
     private LocalDateTime dataCadastro;
 
+    /**
+     * Lock otimista. Bug real corrigido (2026-08-03): era a unica entidade
+     * "quente" do sistema sem @Version (Processo, Parecer, Usuario,
+     * SolicitacaoOnline, MembroUrgenciaRenal e MensagemSolicitacao ja tinham).
+     * Cenario: operador A abre o formulario de edicao com a dataVencimento
+     * atual carregada; operador B clica "Renovar" (grava RENOVADA + vencimento
+     * hoje+30); A salva a edicao que tinha aberto antes e sobrescreve
+     * silenciosamente a renovacao com a data antiga, sem nenhum erro - numa
+     * tela cuja unica funcao e controlar o prazo de 30 dias. Requer backfill
+     * manual em prod apos o deploy (ver CLAUDE.md, pitfall de @Version novo em
+     * entidade ja populada): {@code UPDATE controle_urgencia SET versao = 0
+     * WHERE versao IS NULL;}
+     */
+    @Version
+    @Column(name = "versao")
+    private Long versao;
+
     @PrePersist
     protected void onCreate() {
         dataCadastro = LocalDateTime.now();
@@ -185,5 +202,13 @@ public class ControleUrgencia {
 
     public LocalDateTime getDataCadastro() {
         return dataCadastro;
+    }
+
+    public Long getVersao() {
+        return versao;
+    }
+
+    public void setVersao(Long versao) {
+        this.versao = versao;
     }
 }
