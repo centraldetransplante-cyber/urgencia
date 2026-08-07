@@ -3,7 +3,11 @@
 **Data:** 2026-08-07
 **Origem:** relato do dono do produto, textual: *"dois votos deferem, mesmo que o
 processo esteja em 'solicita informação'"*.
-**Escopo:** diagnóstico. **Nenhuma correção foi implementada** (pedido explícito).
+**Escopo original:** diagnóstico. **Atualização de 2026-08-07 (mesmo dia):** os
+achados C e D foram **corrigidos**, aprovados explicitamente pelo usuário ("sim
+corrija tudo") — ver o item 3 da seção 10 para o detalhe da correção. Achado A foi
+corrigido em outra branch da mesma sessão (card de Respostas/Sugestão automática).
+Achado B segue **fora de escopo**, aguardando decisão de produto do usuário.
 **Base:** leitura integral do caminho de decisão no código + consulta SQL direta ao
 Postgres de produção (só leitura, via SSH).
 
@@ -18,12 +22,12 @@ relato quase palavra por palavra (achado A) e **três defeitos estruturais reais
 na forma como a pausa é travada (achados B, C, D), sendo o achado B
 **determinístico e já armado no processo 09/2026 neste momento**.
 
-| # | Achado | Já aconteceu em prod? | Gravidade |
-|---|---|---|---|
-| A | A tela diz "Maioria já formada" e "Sugestão automática: **Deferido**" sem citar a pausa | Sim, é o que a tela mostra agora | Alta (confiança/comunicação) |
-| B | Retomar a análise defere **na hora**, sem o avaliador que pediu a informação votar | Não, mas está armado no 09/2026 | Alta (decisão de produto) |
-| C | Reabrir (ADMIN) não restaura a pausa: processo volta a ENVIADO com parecer `SOLICITA_INFORMACAO` vivo | Não | Média |
-| D | Corrida entre dois votos quase simultâneos pode furar a pausa | Não | Baixa (probabilidade) / Alta (efeito) |
+| # | Achado | Já aconteceu em prod? | Gravidade | Status |
+|---|---|---|---|---|
+| A | A tela diz "Maioria já formada" e "Sugestão automática: **Deferido**" sem citar a pausa | Sim, é o que a tela mostra agora | Alta (confiança/comunicação) | Corrigido (outra branch da mesma sessão) |
+| B | Retomar a análise defere **na hora**, sem o avaliador que pediu a informação votar | Não, mas está armado no 09/2026 | Alta (decisão de produto) | Fora de escopo — aguarda decisão do usuário |
+| C | Reabrir (ADMIN) não restaura a pausa: processo volta a ENVIADO com parecer `SOLICITA_INFORMACAO` vivo | Não | Média | **Corrigido em 2026-08-07** |
+| D | Corrida entre dois votos quase simultâneos pode furar a pausa | Não | Baixa (probabilidade) / Alta (efeito) | **Corrigido em 2026-08-07** (risco residual documentado, ver seção 10) |
 
 ---
 
@@ -339,15 +343,79 @@ Em ordem de custo/benefício:
    para o próximo voto ou para a varredura), mas **muda comportamento em produção** e
    por isso não deve ser feita sem aval. Em qualquer dos casos, vale documentar a
    escolha no CLAUDE.md, que hoje é silencioso sobre ela.
-3. **(Achados C e D, mesma causa raiz)** Ancorar a trava da pausa no fato, não no
-   campo derivado: fazer `validarPausaDecisao`/`tentarDecisaoAutomatica` bloquearem
-   quando **existe um parecer com `resultado == SOLICITA_INFORMACAO`**, e não apenas
-   quando `status == SOLICITA_INFORMACAO` (mantendo a exceção do coordenador
-   intacta). Fecha os dois de uma vez e torna a proteção independente da ordem das
-   transações. Complementarmente, `reabrir` poderia recalcular o status a partir dos
-   pareceres em vez de assumir `ENVIADO`. Ambas mexem em invariante central do
-   `Processo` — exigem suíte completa e, pela convenção do projeto, um teste de
-   integração real (H2, sem mock do serviço) para cada caminho.
+3. **(Achados C e D, mesma causa raiz) — CORRIGIDO em 2026-08-07, aprovado
+   explicitamente pelo usuário ("sim corrija tudo").**
+
+   **O que foi feito:**
+   - `ProcessoValidator.temPedidoInformacaoAtivo(Processo)` (método novo,
+     função pura): `true` se existe algum parecer do processo com
+     `resultado == SOLICITA_INFORMACAO` — o FATO observável, independente de
+     `Processo.status`.
+   - `ProcessoValidator.validarPausaDecisao` passou a bloquear quando
+     `status == SOLICITA_INFORMACAO` **OU** `temPedidoInformacaoAtivo(processo)`
+     (OU, não substituição — o status continua sendo a fonte no caminho
+     normal, o fato cobre exatamente os casos em que os dois dessincronizam).
+     A exceção do coordenador (voto Favorável dele defere mesmo com a pausa
+     ativa) foi mantida intacta, testada inclusive com o status
+     dessincronizado.
+   - `ProcessoService.tentarDecisaoAutomatica` usa a mesma checagem OR antes
+     de considerar decidir — como o método sempre recarrega o processo via
+     `buscar(id)` no início da própria transação, a leitura reflete o que
+     estiver commitado no banco naquele instante (ver análise do achado D
+     abaixo).
+   - `DecisaoAutomaticaScheduler.elegivel` (pré-filtro em memória da
+     varredura periódica) recebeu a mesma checagem OR, para não virar o elo
+     mais fraco da cadeia depois que `reabrir` passou a poder devolver
+     `SOLICITA_INFORMACAO` mesmo com o status anterior tendo sido `ENVIADO`
+     num appended read desatualizado (defesa em profundidade, coerente com
+     o resto).
+   - `ProcessoService.reabrir`: depois de setar `ENVIADO` (como antes), passou
+     a chamar `atualizarStatusPorPareceres(id)` em seguida, que recalcula o
+     status a partir dos pareceres de verdade — se ainda houver um parecer
+     `SOLICITA_INFORMACAO` não resolvido, o status pós-reabertura vira
+     `SOLICITA_INFORMACAO` (a pausa continua valendo) em vez de `ENVIADO`.
+     Sem nenhum parecer pendente, o resultado é o mesmo de antes (`ENVIADO`)
+     — nenhuma mudança de comportamento no caso comum.
+
+   **Conclusão sobre o achado D (corrida entre transações):** a correção do
+   item 1 fecha a janela quase por completo, não por acaso — `decidir`/
+   `tentarDecisaoAutomatica` sempre releem os pareceres do banco (via
+   `buscar(id)`) no início da própria transação, então a checagem baseada no
+   FATO reflete o que estiver commitado naquele instante, não um snapshot
+   antigo. A única janela residual que sobra é mais estreita que a original:
+   as DUAS transações do voto que fecha a maioria (recálculo de status +
+   tentativa de decisão) teriam que terminar de ler ANTES do commit da
+   transação do voto que pede informação — uma corrida de poucos
+   milissegundos entre 4 operações de banco. **Decisão consciente, documentada
+   no javadoc de `tentarDecisaoAutomatica`: não vale o custo/complexidade de
+   lock pessimista ou isolamento SERIALIZABLE para essa janela residual**,
+   dada a ausência de qualquer evidência de ocorrência em produção (seção 3.1)
+   e a magnitude da janela. Tratado como risco residual aceito, não como
+   pendência.
+
+   **Testes novos** (padrão do projeto — trava de decisão é escrita
+   irreversível, exige teste de integração real, sem mock do serviço):
+   - `ProcessoValidatorTest`: `temPedidoInformacaoAtivo*`,
+     `validarPausaDecisaoBloqueiaQuandoStatusDessincronizaDoParecerAtivo`,
+     `validarPausaDecisaoLiberaDeferidoDoCoordenadorMesmoComStatusDessincronizado`.
+   - `ReaberturaMantemPausaAtivaIntegrationTest` (novo, `@SpringBootTest` + H2
+     real, `ProcessoService`/`DecisaoAutomaticaScheduler` reais — mesmo
+     padrão de `DecisaoAutomaticaSchedulerIntegrationTest`): reabertura com
+     parecer `SOLICITA_INFORMACAO` ativo restaura a pausa (não `ENVIADO`);
+     reabertura sem pendência continua indo para `ENVIADO` (regressão);
+     cenário completo do achado C — processo pausado → Cancelado (caminho que
+     a pausa permite) → ADMIN reabre → um 3º voto favorável forma maioria
+     "crua" de 2/3, mas a decisão continua bloqueada nos 3 caminhos (manual,
+     evento de voto, varredura periódica) enquanto o parecer antigo não for
+     resolvido; e o caminho positivo — depois de `retomarAposInformacao` de
+     verdade e o voto definitivo, a decisão automática volta a funcionar
+     normalmente.
+   - Testes existentes de `ProcessoValidatorTest`/`ProcessoServiceTest`/
+     `DecisaoAutomaticaSchedulerIntegrationTest` que dependiam do
+     comportamento antigo continuam passando sem nenhum ajuste (a checagem
+     nova é um OR aditivo sobre a condição de status já coberta).
+
+   **Validação:** suíte completa, **822 testes, 0 falhas** (JDK 21).
 
 ---
 

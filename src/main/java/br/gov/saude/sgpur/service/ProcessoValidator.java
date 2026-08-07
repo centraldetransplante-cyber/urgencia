@@ -113,6 +113,42 @@ public class ProcessoValidator {
     // encadeia todas em validarDecisao (defesa em profundidade).
 
     /**
+     * True se existe, AGORA, algum parecer deste processo com resultado
+     * {@code SOLICITA_INFORMACAO} ainda nao resolvido — o FATO observavel que
+     * caracteriza a pausa, independente do campo derivado
+     * {@code Processo.status}.
+     *
+     * <p><b>Por que este metodo existe (docs/RELATORIO-BUG-DOIS-VOTOS-DEFEREM-
+     * DURANTE-PAUSA-2026-08.md, achados C e D):</b> a trava da pausa era
+     * ancorada so em {@code processo.getStatus() == SOLICITA_INFORMACAO}, um
+     * campo derivado que pode dessincronizar do fato real:</p>
+     * <ul>
+     *   <li><b>Achado C</b> — {@link ProcessoService#reabrir} forcava o status
+     *   para {@code ENVIADO} incondicionalmente, mesmo que um parecer
+     *   {@code SOLICITA_INFORMACAO} continuasse vivo (processo pausado,
+     *   encerrado por um caminho que a pausa permite — Cancelado, ou Deferido
+     *   pelo coordenador — e depois reaberto pelo ADMIN). A pausa simplesmente
+     *   deixava de existir para o sistema.</li>
+     *   <li><b>Achado D</b> — dois votos quase simultaneos (um pedindo
+     *   informacao, outro fechando a maioria) podiam intercalar as
+     *   transacoes de forma que a checagem de status lesse um valor
+     *   "atrasado" em relacao ao parecer ja commitado no banco.</li>
+     * </ul>
+     * <p>Este metodo sempre le a colecao de pareceres do {@code Processo} que
+     * o caller ja tem em maos — quando chamado dentro de {@code decidir}/
+     * {@code tentarDecisaoAutomatica} (ambos recarregam o processo via
+     * {@code buscar(id)} no INICIO da propria transacao), reflete o estado
+     * mais recente commitado no banco naquele instante, o que fecha a maior
+     * parte da janela do achado D (ver javadoc de
+     * {@link ProcessoService#tentarDecisaoAutomatica} para a analise
+     * completa da janela residual).</p>
+     */
+    public boolean temPedidoInformacaoAtivo(Processo processo) {
+        return processo.getPareceres().stream()
+            .anyMatch(p -> p.getResultado() == ResultadoParecer.SOLICITA_INFORMACAO);
+    }
+
+    /**
      * Bloqueio por PAUSA: aguardando informacao complementar do solicitante.
      * Excecao: o voto Favoravel do coordenador CET-RS defere sozinho e na hora,
      * mesmo com o processo pausado por causa do parecer de outro avaliador —
@@ -120,13 +156,23 @@ public class ProcessoValidator {
      * A excecao vale SO para Deferir: o coordenador nao tem peso especial para
      * indeferir (CLAUDE.md), entao Indeferido continua bloqueado pela pausa
      * mesmo com o coordenador favoravel registrado.
+     *
+     * <p><b>Pausa ativa = status OU fato (desde a correcao dos achados C/D —
+     * ver {@link #temPedidoInformacaoAtivo}).</b> Mantido em OU (nao
+     * substituido) de proposito: o status continua sendo a fonte principal no
+     * caminho normal (voto -&gt; {@code atualizarStatusPorPareceres} -&gt;
+     * status sincronizado), e o fato cobre exatamente os casos em que os dois
+     * dessincronizam. Checar so o fato tambem funcionaria no caminho normal,
+     * mas manter o status explicito documenta a intencao e preserva o
+     * comportamento historico ja coberto por teste.</p>
      */
     public Optional<String> validarPausaDecisao(Processo processo, StatusProcesso decisao) {
         boolean bloqueiaDeferido = decisao == StatusProcesso.DEFERIDO
             && !temVotoCoordenadorFavoravel(processo);
         boolean bloqueiaIndeferido = decisao == StatusProcesso.INDEFERIDO;
-        if (processo.getStatus() == StatusProcesso.SOLICITA_INFORMACAO
-                && (bloqueiaDeferido || bloqueiaIndeferido)) {
+        boolean pausaAtiva = processo.getStatus() == StatusProcesso.SOLICITA_INFORMACAO
+            || temPedidoInformacaoAtivo(processo);
+        if (pausaAtiva && (bloqueiaDeferido || bloqueiaIndeferido)) {
             return Optional.of(
                 "Processo aguardando informacao complementar do solicitante. "
                 + "Registre o recebimento da informacao (retomar analise) antes de decidir.");

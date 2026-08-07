@@ -174,13 +174,26 @@ public class DecisaoAutomaticaScheduler {
      * principalmente, como <b>defesa em profundidade</b>: um processo pausado
      * so e considerado quando o coordenador CET-RS votou favoravel, sem
      * depender apenas da mesma checagem feita la dentro.
+     *
+     * <p><b>Pausa ativa = status OU fato</b> (achado C do docs/RELATORIO-BUG-
+     * DOIS-VOTOS-DEFEREM-DURANTE-PAUSA-2026-08.md — ver
+     * {@link ProcessoValidator#temPedidoInformacaoAtivo}): {@code
+     * findCandidatosDecisaoAutomatica} ja filtra por {@link #STATUS_VARRIDOS}
+     * (ENVIADO/SOLICITA_INFORMACAO), entao um processo com status
+     * dessincronizado do fato (ex.: {@code ENVIADO} com um parecer
+     * {@code SOLICITA_INFORMACAO} ainda vivo, cenario que {@link
+     * ProcessoService#reabrir} deixava de produzir apos a correcao do achado
+     * C) ainda passa por aqui — este pre-filtro precisa reconhecer o mesmo
+     * fato que o servico reconhece, coerentemente, senao a varredura vira o
+     * elo mais fraco da cadeia.</p>
      */
     private boolean elegivel(Processo p) {
         if (p.getStatus() == null || p.getStatus().isFinalizado()) {
             return false;                       // corrida com uma decisao manual
         }
-        if (p.getStatus() == StatusProcesso.SOLICITA_INFORMACAO
-                && !validator.temVotoCoordenadorFavoravel(p)) {
+        boolean pausaAtiva = p.getStatus() == StatusProcesso.SOLICITA_INFORMACAO
+            || validator.temPedidoInformacaoAtivo(p);
+        if (pausaAtiva && !validator.temVotoCoordenadorFavoravel(p)) {
             return false;                       // pausa vale: nao decide
         }
         return validator.sugerirDecisao(p).isPresent();

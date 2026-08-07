@@ -184,6 +184,57 @@ class ProcessoValidatorTest {
         assertThat(validator.validarPausaDecisao(p, StatusProcesso.INDEFERIDO)).isEmpty();
     }
 
+    // ----- temPedidoInformacaoAtivo / achados C e D (RELATORIO-BUG-DOIS-VOTOS-DEFEREM-DURANTE-PAUSA) -----
+
+    @Test
+    void temPedidoInformacaoAtivoTrueComParecerSolicitaInformacao() {
+        Processo p = new Processo();
+        p.addParecer(parecer(ResultadoParecer.SOLICITA_INFORMACAO, false));
+        assertThat(validator.temPedidoInformacaoAtivo(p)).isTrue();
+    }
+
+    @Test
+    void temPedidoInformacaoAtivoFalseSemParecerNesseEstado() {
+        Processo p = new Processo();
+        p.addParecer(parecer(ResultadoParecer.FAVORAVEL, false));
+        p.addParecer(parecer(ResultadoParecer.NAO_FAVORAVEL, false));
+        assertThat(validator.temPedidoInformacaoAtivo(p)).isFalse();
+    }
+
+    /**
+     * ACHADO C: apos uma reabertura, o status derivado pode voltar para
+     * ENVIADO mesmo com um parecer SOLICITA_INFORMACAO ainda ativo (antes da
+     * correcao, {@code ProcessoService.reabrir} forcava ENVIADO
+     * incondicionalmente). A trava precisa reconhecer o FATO (o parecer
+     * ativo), nao so o status.
+     */
+    @Test
+    void validarPausaDecisaoBloqueiaQuandoStatusDessincronizaDoParecerAtivo() {
+        Processo p = new Processo();
+        p.setStatus(StatusProcesso.ENVIADO);
+        p.addParecer(parecer(ResultadoParecer.FAVORAVEL, false));
+        p.addParecer(parecer(ResultadoParecer.SOLICITA_INFORMACAO, false));
+
+        assertThat(validator.validarPausaDecisao(p, StatusProcesso.DEFERIDO)).isPresent();
+        assertThat(validator.validarPausaDecisao(p, StatusProcesso.INDEFERIDO)).isPresent();
+    }
+
+    /**
+     * Mesmo com o status dessincronizado, a excecao do coordenador continua
+     * valendo (o voto Favoravel do coordenador defere sozinho mesmo com a
+     * pausa ativa por FATO).
+     */
+    @Test
+    void validarPausaDecisaoLiberaDeferidoDoCoordenadorMesmoComStatusDessincronizado() {
+        Processo p = new Processo();
+        p.setStatus(StatusProcesso.ENVIADO);
+        p.addParecer(parecer(ResultadoParecer.FAVORAVEL, true));
+        p.addParecer(parecer(ResultadoParecer.SOLICITA_INFORMACAO, false));
+
+        assertThat(validator.validarPausaDecisao(p, StatusProcesso.DEFERIDO)).isEmpty();
+        assertThat(validator.validarPausaDecisao(p, StatusProcesso.INDEFERIDO)).isPresent();
+    }
+
     // ----- validarContagemVotos -----
 
     @Test

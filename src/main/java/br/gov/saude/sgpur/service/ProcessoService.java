@@ -209,6 +209,29 @@ public class ProcessoService {
      * Deve ser chamado apos {@link #atualizarStatusPorPareceres} e apos
      * {@link #retomarAposInformacao}. Processo ja finalizado e erro de
      * programacao do caller (mesma razao de atualizarStatusPorPareceres).
+     *
+     * <p><b>Achados C/D do docs/RELATORIO-BUG-DOIS-VOTOS-DEFEREM-DURANTE-PAUSA-
+     * 2026-08.md — analise da janela de corrida (achado D):</b> o pre-filtro
+     * abaixo usa {@link ProcessoValidator#temPedidoInformacaoAtivo}, que le a
+     * colecao de pareceres do {@code Processo} recem-carregado por
+     * {@code buscar(id)} NO INICIO desta transacao — ou seja, sempre o que
+     * estiver commitado no banco naquele instante, nao um snapshot antigo.
+     * Isso fecha a janela descrita no achado D: mesmo que a TX de
+     * {@code atualizarStatusPorPareceres} de um voto B (SOLICITA_INFORMACAO)
+     * ainda nao tivesse commitado quando a TX de {@code atualizarStatusPorPareceres}
+     * de um voto C leu o status (deixando {@code Processo.status} "atrasado"
+     * em ENVIADO), esta chamada a {@code tentarDecisaoAutomatica} (disparada
+     * DEPOIS, pelo mesmo evento de voto de C) recarrega os pareceres do zero:
+     * se o voto de B ja tiver commitado ate esse momento, o fato aparece e a
+     * pausa bloqueia. A UNICA janela residual que sobra e mais estreita ainda
+     * que a original: as DUAS transacoes de C (atualizarStatusPorPareceres E
+     * tentarDecisaoAutomatica) teriam que terminar de ler ANTES do commit da
+     * TX de B — uma corrida de poucos milissegundos entre 4 operacoes de
+     * banco, sem nenhuma evidencia de ter ocorrido em producao (relatório,
+     * secao 3.1: zero deferimentos com pedido de informacao ativo). Decisao
+     * consciente: nao vale o custo/complexidade de lock pessimista ou
+     * SERIALIZABLE para uma janela dessa magnitude — documentado aqui como
+     * risco residual aceito, nao como pendencia.</p>
      */
     @Transactional
     public Processo tentarDecisaoAutomatica(Long id) {
@@ -221,7 +244,12 @@ public class ProcessoService {
         // por causa do parecer de outro avaliador. Essa prioridade so vale para
         // esse caminho automatico; sem o voto do coordenador, a pausa continua
         // bloqueando qualquer decisao automatica.
-        if (p.getStatus() == StatusProcesso.SOLICITA_INFORMACAO && !temVotoCoordenadorFavoravel(p)) {
+        //
+        // Pausa ativa = status OU fato (existe parecer SOLICITA_INFORMACAO
+        // vivo) — ver ProcessoValidator.temPedidoInformacaoAtivo/achado C.
+        boolean pausaAtiva = p.getStatus() == StatusProcesso.SOLICITA_INFORMACAO
+            || validator.temPedidoInformacaoAtivo(p);
+        if (pausaAtiva && !temVotoCoordenadorFavoravel(p)) {
             return p;
         }
         Optional<StatusProcesso> sugestao = sugerirDecisao(p);
@@ -691,6 +719,24 @@ public class ProcessoService {
      * resultado definitivo para um processo que voltou para analise (o
      * template trata esses dois status com badge fixo, sem consultar o
      * processo).</p>
+     *
+     * <p><b>Achado C corrigido (docs/RELATORIO-BUG-DOIS-VOTOS-DEFEREM-DURANTE-
+     * PAUSA-2026-08.md):</b> antes, este metodo forcava {@code ENVIADO}
+     * incondicionalmente, mesmo que um parecer {@code SOLICITA_INFORMACAO}
+     * continuasse vivo — cenario real: um avaliador pede informacao (pausa),
+     * o processo e encerrado por um caminho que a pausa permite (Cancelado,
+     * ou Deferido pelo coordenador), e o ADMIN reabre depois. A pausa
+     * simplesmente deixava de existir para o sistema: dali em diante 2
+     * favoraveis comuns (ou a varredura periodica) decidiam o processo com
+     * um pedido de informacao nunca resolvido. Agora, logo apos setar
+     * ENVIADO, {@link #atualizarStatusPorPareceres} recalcula o status a
+     * partir do FATO (mesma fonte de {@link ProcessoValidator
+     * #temPedidoInformacaoAtivo}): se ainda existir um parecer
+     * {@code SOLICITA_INFORMACAO} nao resolvido, o status correto pos-reabertura
+     * e {@code SOLICITA_INFORMACAO} (a pausa continua valendo), nao
+     * {@code ENVIADO}. Sem nenhum parecer pendente de informacao, o resultado
+     * e o mesmo de antes ({@code ENVIADO}) — nenhuma mudanca de comportamento
+     * para o caso comum.</p>
      */
     @Transactional
     public Processo reabrir(Long id) {
@@ -703,7 +749,11 @@ public class ProcessoService {
         p.setMotivoIndeferimento(null);
         p.setEmailEnviadoSolicitante(false);
         p.setMensagemResposta(null);
-        Processo salvo = processoRepository.save(p);
+        processoRepository.save(p);
+        // Recalcula o status a partir dos pareceres de verdade: se ainda
+        // houver um SOLICITA_INFORMACAO ativo, volta para a pausa em vez de
+        // ficar preso em ENVIADO (achado C, ver javadoc acima).
+        Processo salvo = atualizarStatusPorPareceres(id);
         // Devolve a solicitacao de origem para CONVERTIDA ("convertida em
         // processo, em andamento") — o unico status que o template do
         // solicitante resolve consultando processoGerado.status, refletindo
