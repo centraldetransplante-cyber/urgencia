@@ -100,15 +100,33 @@ public class FluxoProcessoService {
         // 2. Respostas dos medicos. Por MAIORIA SIMPLES (2 de 3), assim que ha
         //    2 votos do mesmo tipo a etapa esta pronta: nao e preciso aguardar
         //    o 3o parecer para decidir.
+        //
+        //    ATENCAO: "maioria formada" (sugerirDecisao) so conta votos - nao
+        //    sabe nada sobre a pausa SOLICITA_INFORMACAO. Um processo pode ter
+        //    2 favoraveis E, ao mesmo tempo, um 3o parecer pedindo informacao
+        //    complementar (pausa ainda ativa, ninguem retomou a analise). Sem
+        //    o `pausaBloqueiaDecisao` abaixo, o texto dizia "pronto para
+        //    decidir" mesmo com a decisao de fato TRAVADA pela etapa 2b logo
+        //    depois (liberadoDecisao=false) - lido por quem nao sabe da regra
+        //    do coordenador, parecia que o sistema ia ignorar o pedido de
+        //    informacao do 3o avaliador. So NAO esta bloqueada quando o
+        //    coordenador CET-RS ja votou favoravel (excecao que defere mesmo
+        //    pausado - ver ProcessoValidator.validarPausaDecisao).
         long respondidos = processoService.contarRespondidos(p);
         long favoraveis = processoService.contarFavoraveis(p);
         var sugestaoResp = processoService.sugerirDecisao(p);
         boolean maioria = sugestaoResp.isPresent();
         boolean todasRespondidas = totalMedicos > 0 && respondidos == totalMedicos;
         boolean respostasOk = maioria || todasRespondidas;
+        boolean pausaBloqueiaDecisao = p.getStatus() == StatusProcesso.SOLICITA_INFORMACAO
+            && !processoService.temVotoCoordenadorFavoravel(p);
         String detResp;
         if (totalMedicos == 0) {
             detResp = "Aguardando definicao dos medicos.";
+        } else if (maioria && pausaBloqueiaDecisao) {
+            detResp = "Maioria formada (" + sugestaoResp.get().getDescricao()
+                + ") mas a decisao esta BLOQUEADA: aguardando informacao complementar "
+                + "de outro avaliador. Favoraveis: " + favoraveis + ".";
         } else if (maioria) {
             detResp = "Maioria formada (" + sugestaoResp.get().getDescricao()
                 + ") - pronto para decidir. Favoraveis: " + favoraveis + ".";
@@ -139,6 +157,15 @@ public class FluxoProcessoService {
         String detDecisao;
         if (decidido) {
             detDecisao = "Processo " + p.getStatus().getDescricao() + ".";
+        } else if (pausaBloqueiaDecisao) {
+            // Mesmo motivo do detResp acima: maioria formada nao significa
+            // decisao liberada enquanto a pausa estiver ativa (exceto pelo
+            // voto favoravel do coordenador).
+            var sugestao = processoService.sugerirDecisao(p);
+            detDecisao = sugestao
+                .map(s -> "Sugestao automatica: " + s.getDescricao()
+                    + " - BLOQUEADA pela pausa (aguardando informacao complementar).")
+                .orElse("Aguardando informacao complementar do solicitante.");
         } else {
             var sugestao = processoService.sugerirDecisao(p);
             detDecisao = sugestao

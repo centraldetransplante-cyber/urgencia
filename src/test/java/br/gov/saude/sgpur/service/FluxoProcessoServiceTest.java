@@ -442,6 +442,15 @@ class FluxoProcessoServiceTest {
         // Decisao continua bloqueada mesmo com maioria formada: a pausa vence.
         assertThat(estado(pausado, Chave.DECISAO)).isEqualTo(EstadoEtapa.BLOQUEADA);
         assertThat(fluxo().resumoPendencia(p)).startsWith("Informação complementar");
+        // Bug real relatado em producao (processo 09/2026): o texto da etapa
+        // "Respostas dos medicos" dizia "pronto para decidir" mesmo com a
+        // decisao de fato bloqueada logo abaixo pela pausa - dava a impressao
+        // de que o pedido de informacao do 3o avaliador seria ignorado.
+        assertThat(detalhe(pausado, Chave.RESPOSTAS))
+                .contains("BLOQUEADA")
+                .doesNotContain("pronto para decidir");
+        assertThat(detalhe(pausado, Chave.DECISAO))
+                .contains("BLOQUEADA pela pausa");
 
         // Retoma: ProcessoService.retomarAposInformacao volta o status para
         // ENVIADO e limpa (reabre) apenas o parecer que pediu informacao.
@@ -466,6 +475,31 @@ class FluxoProcessoServiceTest {
         // permanece concluida e a Decisao fica liberada (ATUAL) imediatamente.
         assertThat(estado(apos, Chave.RESPOSTAS)).isEqualTo(EstadoEtapa.CONCLUIDA);
         assertThat(estado(apos, Chave.DECISAO)).isEqualTo(EstadoEtapa.ATUAL);
+    }
+
+    @Test
+    void solicitaInformacaoComVotoFavoravelDoCoordenadorNaoFicaMarcadoComoBloqueado() {
+        // Mesma pausa (3o medico pediu informacao), mas um dos 2 favoraveis e
+        // o coordenador da CET-RS: a excecao documentada em CLAUDE.md defere
+        // sozinho mesmo com o processo pausado (ProcessoValidator.
+        // temVotoCoordenadorFavoravel). Aqui a decisao NAO esta de fato
+        // bloqueada, entao o texto continua dizendo "pronto para decidir" -
+        // diferente do cenario sem coordenador acima.
+        Processo p = processoComTresPareceres();
+        registrarEnvioCompleto(p);
+        p.getPareceres().get(0).getMembro().setCoordenador(true);
+        registrarMaioria(p, ResultadoParecer.FAVORAVEL); // pareceres 0 (coordenador) e 1 favoraveis
+        Parecer par2 = p.getPareceres().get(2);
+        par2.setId(3L);
+        par2.setResultado(ResultadoParecer.SOLICITA_INFORMACAO);
+        p.setStatus(StatusProcesso.SOLICITA_INFORMACAO);
+
+        List<EtapaFluxo> etapas = fluxo().montarEtapas(p);
+        assertThat(detalhe(etapas, Chave.RESPOSTAS))
+                .contains("pronto para decidir")
+                .doesNotContain("BLOQUEADA");
+        assertThat(detalhe(etapas, Chave.DECISAO))
+                .doesNotContain("BLOQUEADA pela pausa");
     }
 
     // ----------------------------------------------------------------
@@ -685,5 +719,13 @@ class FluxoProcessoServiceTest {
                 .findFirst()
                 .orElseThrow(() -> new AssertionError("Etapa nao encontrada: " + chave))
                 .estado();
+    }
+
+    private String detalhe(List<EtapaFluxo> etapas, EtapaFluxo.Chave chave) {
+        return etapas.stream()
+                .filter(e -> e.chave() == chave)
+                .findFirst()
+                .orElseThrow(() -> new AssertionError("Etapa nao encontrada: " + chave))
+                .detalhe();
     }
 }
