@@ -1000,6 +1000,10 @@ tr.linha-inativa > td:first-child {
     cursor: pointer; color: var(--rs-gray-400); padding: 0; flex-shrink: 0;
 }
 .toast-sgpur .toast-close:hover { color: var(--rs-gray-700); }
+/* Toast clicavel (mostrarToast com 3o argumento onClick, 2026-08-07): usado
+   pelo aviso de mensagem nova de chat, que leva direto ao card do chat. */
+.toast-sgpur-clicavel { cursor: pointer; }
+.toast-sgpur-clicavel:hover { box-shadow: 0 4px 14px rgba(0,0,0,.16); }
 @keyframes toastIn {
     from { opacity: 0; transform: translateX(100%); }
     to   { opacity: 1; transform: translateX(0); }

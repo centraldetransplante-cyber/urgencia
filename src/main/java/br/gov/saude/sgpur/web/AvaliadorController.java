@@ -299,6 +299,11 @@ public class AvaliadorController {
             ResultadoParecer.NAO_FAVORAVEL,
             ResultadoParecer.SOLICITA_INFORMACAO
         ));
+        // O card de chat nasce expandido quando ja existe conversa (mesmo com
+        // tudo lido) - so fica recolhido quando ainda nao ha nenhuma mensagem
+        // (CLAUDE.md, 2026-08-07). Antes o card nascia SEMPRE recolhido, o que
+        // escondia mensagens do operador ja recebidas (bug relatado em producao).
+        model.addAttribute("existeConversaAval", mensagemAvaliadorService.existeConversa(processoId, membro.getId()));
         return "avaliador/votar";
     }
 

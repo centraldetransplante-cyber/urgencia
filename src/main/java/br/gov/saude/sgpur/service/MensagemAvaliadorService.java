@@ -82,6 +82,17 @@ public class MensagemAvaliadorService {
             processoId, membroId, RemetenteMensagemAvaliador.AVALIADOR);
     }
 
+    /**
+     * Ja existe alguma mensagem (de qualquer lado, lida ou nao) nesta
+     * thread? Decide se o card do chat nasce expandido (ver CLAUDE.md,
+     * 2026-08-07): recolhido so quando a conversa esta genuinamente vazia,
+     * evitando ocupar espaco a toa num processo sem nenhuma mensagem.
+     */
+    @Transactional(readOnly = true)
+    public boolean existeConversa(Long processoId, Long membroId) {
+        return repository.countByProcessoIdAndMembroId(processoId, membroId) > 0;
+    }
+
     @Transactional
     public void apagar(Long mensagemId, Long remetenteId, RemetenteMensagemAvaliador remetente) {
         MensagemAvaliador msg = repository.findById(mensagemId)

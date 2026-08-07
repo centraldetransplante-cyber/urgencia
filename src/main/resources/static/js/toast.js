@@ -1,5 +1,5 @@
 // === SAUR - Toast de notificacao ===
-// Implementacao UNICA de mostrarToast(mensagem, tipo). Ate 2026-08-04
+// Implementacao UNICA de mostrarToast(mensagem, tipo, onClick). Ate 2026-08-04
 // existiam DUAS definicoes divergentes: uma inline em layout.html (fragment
 // "notificacaoSonora", incluido automaticamente em toda tela com navbar - 24
 // telas) e outra em processo-detalhe.js (so a tela de detalhe do processo),
@@ -9,7 +9,14 @@
 // dos dois. Unificadas aqui (a versao mais completa), carregado por
 // layout.html dentro do fragment "notificacaoSonora" - toda tela que ja
 // tinha mostrarToast() disponivel continua tendo, com a mesma assinatura.
-window.mostrarToast = function (mensagem, tipo) {
+//
+// 3o parametro `onClick` (opcional, 2026-08-07): quando informado, o toast
+// vira clicavel (cursor pointer + role="button") e chama essa funcao ao
+// clicar, alem de fechar o proprio toast - usado por chat-solicitacao.js
+// para levar direto ao chat que gerou a notificacao (rolar ate o card +
+// expandir o collapse se estiver fechado). As ~24 chamadas existentes sem
+// esse argumento continuam identicas (nunca clicaveis).
+window.mostrarToast = function (mensagem, tipo, onClick) {
     tipo = tipo || 'info';
     var container = document.getElementById('toastContainer');
     if (!container) {
@@ -32,10 +39,23 @@ window.mostrarToast = function (mensagem, tipo) {
     fechar.className = 'toast-close';
     fechar.setAttribute('aria-label', 'Fechar');
     fechar.textContent = '×';
-    fechar.addEventListener('click', function () { toast.remove(); });
+    fechar.addEventListener('click', function (e) {
+        e.stopPropagation();
+        toast.remove();
+    });
     toast.appendChild(icone);
     toast.appendChild(corpo);
     toast.appendChild(fechar);
+    if (typeof onClick === 'function') {
+        toast.classList.add('toast-sgpur-clicavel');
+        toast.setAttribute('role', 'button');
+        toast.setAttribute('tabindex', '0');
+        var ativar = function () { toast.remove(); onClick(); };
+        toast.addEventListener('click', ativar);
+        toast.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ativar(); }
+        });
+    }
     container.appendChild(toast);
     setTimeout(function () {
         toast.style.opacity = '0';

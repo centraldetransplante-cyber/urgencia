@@ -3063,3 +3063,83 @@ janela normal de indisponibilidade de um restart do systemd. Se voltar a
 acontecer FORA de uma janela de deploy, investigar de novo (memória de RAM
 apertada da VM compartilhada — ver seção "Vistoria de 2026-08-03" acima —
 é a suspeita mais provável de uma próxima causa real).
+
+## Fix: card de "Dúvida sobre este processo" (avaliador) nascia sempre
+recolhido, escondendo mensagem nova + toast de chat virou clicável
+(2026-08-07, mesma sessão do fix acima)
+
+Continuação do relato do usuário: além do botão desalinhado (corrigido
+acima), duas queixas adicionais confirmadas navegando de verdade com
+Playwright contra o app local (screenshot antes/depois, não só leitura de
+código):
+
+**Causa raiz 1 — card do avaliador sempre nascia fechado.** Em
+`avaliador/votar.html`, o card "Dúvida sobre este processo"
+(`#chatBodyAvaliador`) tinha `class="card-body collapse"` **sem** `show` —
+recolhido incondicionalmente no primeiro load, mesmo quando o operador já
+tinha mandado mensagem antes. O poll (`iniciarChatSolicitacao`) sempre
+rodou ali desde que essa tela existe (diferente do chat por-avaliador do
+lado do operador, que só inicia o poll ao expandir de fato — ver comentário
+"risco R5" no template) — ou seja, a mensagem **chegava** via AJAX (o badge
+"N total" atualizava), só ficava escondida dentro do `<div class="collapse">`
+fechado. Confirmado com Playwright: operador manda mensagem, avaliador
+recarrega a tela, card continua fechado por padrão até 2026-08-07.
+
+**Correção:** `MensagemAvaliadorRepository.countByProcessoIdAndMembroId` +
+`MensagemAvaliadorService.existeConversa(processoId, membroId)` (nova
+query de existência, não de contagem de não-lidas — decide só "já existe
+QUALQUER mensagem nesta thread, lida ou não"). `AvaliadorController.votar`
+expõe `existeConversaAval` ao model; `avaliador/votar.html` usa
+`th:classappend="${existeConversaAval} ? 'show' : ''"` no `card-body` e
+`th:attr="aria-expanded=${existeConversaAval}"` no cabeçalho — nasce
+recolhido **só** quando a conversa está genuinamente vazia (não compete
+com o formulário de voto, que é a ação primária da tela), e expandido
+sempre que já há histórico, mesmo com tudo lido. Mesmo padrão aplicado ao
+lado do operador: `ProcessoDetalheController.detalhe` calcula
+`existeConversaPorParecer` (`Map<Long, Boolean>`, um por avaliador) e
+`processos/detalhe.html` usa a mesma classe condicional na thread
+`.chat-avaliador-thread` de cada parecer — o botão "Conversa" tinha um
+badge de não-lidas, mas o card em si também nascia sempre fechado mesmo
+com conversa relida.
+
+**Causa raiz 2 — toast de "mensagem nova" não levava a lugar nenhum.**
+Pedido explícito do usuário: "o aviso que vem no canto direito da tela
+deveria ter um atalho pro local ideal do chat". `mostrarToast(mensagem,
+tipo)` (`static/js/toast.js`) ganhou um **3º parâmetro opcional**
+`onClick` — retrocompatível com as ~24 chamadas existentes sem esse
+argumento (nunca clicáveis). Quando informado, o toast ganha
+`role="button"`, `tabindex`, cursor de ponteiro (`.toast-sgpur-clicavel`
+em `app.css`) e dispara `onClick()` ao clicar/Enter/Espaço, além de se
+fechar. `chat-solicitacao.js` ganhou `irParaOChat()` (rola até
+`cfg.collapseAlvoSelector` com `scrollIntoView({block:'center'})` e
+expande o collapse via `bootstrap.Collapse.getOrCreateInstance(...).show()`
+se estiver fechado) — chamado por `detectarNovasMensagens` como o 3º
+argumento de `mostrarToast`, só quando `cfg.collapseAlvoSelector` foi
+informado. Os 5 pontos de chamada de `iniciarChatSolicitacao` do sistema
+(chat com o solicitante em `processos/detalhe.html`,
+`processos/solicitacoes-online-detalhe.html` e `solicitante/detalhe.html`;
+chat com o avaliador em `avaliador/votar.html` e por-parecer em
+`processos/detalhe.html`) passaram a informar `collapseAlvoSelector`
+apontando para o `id` do respectivo `.collapse` — nos 3 chats que já
+nasciam sempre expandidos (solicitante), o toast clicável ainda funciona
+(rola até o card, o `show()` do Bootstrap é idempotente se já estiver
+aberto).
+
+**Validado com Playwright real, não só os 841 testes de unidade** (novo
+teste `src/test/java/br/gov/saude/sgpur/e2e/ChatVisualVerificacaoIT.java`,
+roda via `mvn verify -Pe2e`/`.\e2e.ps1`, fora do `mvn test` do dia a dia):
+cria um processo com os 3 pareceres pendentes, operador manda mensagem
+real para o avaliador pela tabela de Respostas (confere via
+`getComputedStyle`/`boundingBox()` que o botão continua ao lado do campo,
+não regride o fix de CSS acima), avaliador abre `/avaliador/{id}` numa
+sessão própria e confere que o card já nasce expandido com a mensagem
+visível **sem nenhum clique**, avaliador responde, operador (página já
+aberta, poll de 5s rodando) recebe um toast clicável, clica nele sem gerar
+erro JS, e por fim confirma round-trip do chat com o solicitante também
+com o botão alinhado. Screenshots em `target/e2e-screenshots/`
+(`chat-operador-avaliador-alinhado.png`,
+`avaliador-chat-expandido-com-mensagem.png`,
+`operador-toast-clicavel-resposta-avaliador.png`,
+`solicitante-chat-recebendo-mensagem-operador.png`) confirmam visualmente
+os 4 pontos. Suíte completa (`mvn test`): **841 testes, 0 falhas** (JDK
+21) antes deste commit.

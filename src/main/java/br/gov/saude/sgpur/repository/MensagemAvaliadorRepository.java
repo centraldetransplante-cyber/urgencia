@@ -32,6 +32,14 @@ public interface MensagemAvaliadorRepository extends JpaRepository<MensagemAvali
     long countByProcessoIdAndMembroIdAndLidaFalseAndRemetente(Long processoId, Long membroId, RemetenteMensagemAvaliador remetente);
 
     /**
+     * Existe pelo menos 1 mensagem (de qualquer lado) nesta thread? Usado
+     * so para decidir se o card de chat nasce expandido ou recolhido na
+     * tela (ver CLAUDE.md, secao de 2026-08-07 "chat do avaliador nasce
+     * recolhido") - nao e contagem de nao lidas, e existencia de conversa.
+     */
+    long countByProcessoIdAndMembroId(Long processoId, Long membroId);
+
+    /**
      * Todas as mensagens, mais recente primeiro, com Processo e Membro
      * carregados via fetch join - base da caixa de entrada do operador (F5),
      * que agrupa em Java por (processoId, membroId) para montar o resumo por

@@ -410,11 +410,19 @@ public class ProcessoDetalheController {
         // tela) - alimenta o badge "N nova(s)" no botao de conversa de cada
         // linha da tabela "Respostas dos Avaliadores".
         java.util.Map<Long, Long> naoLidasPorParecer = new java.util.HashMap<>();
+        // Idem, mas so "existe alguma mensagem nesta thread" (lida ou nao) -
+        // decide se o card de conversa desse avaliador nasce expandido
+        // (CLAUDE.md, 2026-08-07): antes ficava sempre recolhido e o operador
+        // podia nao perceber que ja havia conversa em andamento.
+        java.util.Map<Long, Boolean> existeConversaPorParecer = new java.util.HashMap<>();
         for (Parecer par : p.getPareceres()) {
             naoLidasPorParecer.put(par.getId(),
                 mensagemAvaliadorService.contarNaoLidasPorThreadParaOperador(p.getId(), par.getMembro().getId()));
+            existeConversaPorParecer.put(par.getId(),
+                mensagemAvaliadorService.existeConversa(p.getId(), par.getMembro().getId()));
         }
         model.addAttribute("naoLidasPorParecer", naoLidasPorParecer);
+        model.addAttribute("existeConversaPorParecer", existeConversaPorParecer);
         // Placar de 3 posicoes no card de Respostas: so apresentacao do que a
         // maioria simples ja calcula (ProcessoValidator), nunca reimplementa a
         // regra aqui - se um dia a regra mudar, este texto some sozinho porque
