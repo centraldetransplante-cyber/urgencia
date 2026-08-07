@@ -3143,3 +3143,28 @@ com o botão alinhado. Screenshots em `target/e2e-screenshots/`
 `solicitante-chat-recebendo-mensagem-operador.png`) confirmam visualmente
 os 4 pontos. Suíte completa (`mvn test`): **841 testes, 0 falhas** (JDK
 21) antes deste commit.
+
+**Reconfirmação independente (mesma sessão, revisão posterior):** os dois
+achados acima foram reproduzidos manualmente do zero com um script
+Playwright avulso (fora da suíte), rodando o app local via `java -jar` (H2
+limpo): criação dos usuários pelo próprio `/usuarios/novo`, envio real de
+solicitação pelo Portal do Solicitante, conversão/envio pelo operador,
+confirmando (a) `#chatBodyAvaliador` sem `show` no primeiro load sem
+conversa, (b) toast `.toast-sgpur-clicavel` aparecendo após o poll do
+avaliador e expandindo/rolando até o chat ao clicar, (c) reload da tela do
+avaliador já nascendo com `show` quando a conversa existe, e (d) reload
+"a frio" da tela do operador (sessão nova, sem ter clicado em "Conversa"
+antes) confirmando que o `<div class="chat-avaliador-thread">` já vem
+`show` do servidor. Também foram adicionados 3 testes de integração novos
+em `MensagemAvaliadorIntegrationTest`
+(`telaDeVotoDoAvaliadorNascecomChatRecolhidoQuandoAindaNaoHaConversa`,
+`telaDeVotoDoAvaliadorNascecomChatEXPANDIDOQuandoJaExisteConversa`,
+`telaDeDetalheDoProcessoNascecomThreadDoAvaliadorEXPANDIDAQuandoJaExisteConversa`)
+que leem o HTML renderizado (`MockMvc` + contexto real) e travam a presença/
+ausência da classe `collapse show` conforme exista ou não mensagem na
+thread — cobertura de regressão mais barata que o E2E Playwright para essa
+parte específica (o E2E continua sendo o único jeito de cobrir o toast
+clicável de verdade, que depende de JS rodando no navegador). Suíte
+completa após esses 3 testes novos: **864 testes** (861 + 3), única falha
+é a flakiness de precisão de timestamp já documentada em
+`LembreteAvaliadorTimestampIntegrationTest` (não relacionada).

@@ -280,6 +280,86 @@ class MensagemAvaliadorIntegrationTest {
         assertThat(mensagens.get(0).getRemetente()).isEqualTo(RemetenteMensagemAvaliador.AVALIADOR);
     }
 
+    // ---- Card do chat nasce recolhido/expandido conforme ja existe conversa
+    //      (bug real relatado em producao em 2026-08-07: o card nascia SEMPRE
+    //      recolhido, escondendo mensagens do operador ja recebidas - ver
+    //      CLAUDE.md) -----------------------------------------------------
+
+    @Test
+    @WithMockUser(username = "avaliador-msg-it", roles = "AVALIADOR")
+    void telaDeVotoDoAvaliadorNascecomChatRecolhidoQuandoAindaNaoHaConversa() throws Exception {
+        String html = mvc.perform(get("/avaliador/" + processoId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(html).contains("id=\"chatBodyAvaliador\"");
+        // O card-body do chat NAO deve ter a classe "show" (Bootstrap collapse)
+        // quando a thread esta vazia - procura o trecho do elemento inteiro e
+        // confirma que "show" nao aparece antes de "chatBodyAvaliador".
+        int idx = html.indexOf("id=\"chatBodyAvaliador\"");
+        String trechoAntes = html.substring(Math.max(0, idx - 200), idx);
+        assertThat(trechoAntes)
+                .as("Sem nenhuma mensagem na thread, o card do chat deve nascer RECOLHIDO "
+                        + "(sem a classe Bootstrap 'show') - a acao primaria da tela e votar.")
+                .doesNotContain("collapse show");
+    }
+
+    @Test
+    @WithMockUser(username = "avaliador-msg-it", roles = "AVALIADOR")
+    void telaDeVotoDoAvaliadorNascecomChatEXPANDIDOQuandoJaExisteConversa() throws Exception {
+        var msg = new MensagemAvaliador();
+        msg.setProcesso(processoRepo.findById(processoId).orElseThrow());
+        msg.setMembro(membroRepo.findById(membroId).orElseThrow());
+        msg.setRemetente(RemetenteMensagemAvaliador.OPERADOR);
+        msg.setRemetenteId(999L);
+        msg.setTexto("Poderia revisar o laudo anexado?");
+        msg.setDataEnvio(java.time.LocalDateTime.now());
+        mensagemRepo.saveAndFlush(msg);
+
+        String html = mvc.perform(get("/avaliador/" + processoId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        int idx = html.indexOf("id=\"chatBodyAvaliador\"");
+        String trechoAntes = html.substring(Math.max(0, idx - 200), idx);
+        assertThat(trechoAntes)
+                .as("Ja existindo mensagem na thread (mesmo so do lado do operador), o card do "
+                        + "chat deve nascer EXPANDIDO (classe 'show') - bug real corrigido em "
+                        + "2026-08-07: o card nascia sempre recolhido, escondendo mensagem ja "
+                        + "recebida do operador (CLAUDE.md).")
+                .contains("collapse show");
+    }
+
+    @Test
+    @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
+    void telaDeDetalheDoProcessoNascecomThreadDoAvaliadorEXPANDIDAQuandoJaExisteConversa() throws Exception {
+        var msg = new MensagemAvaliador();
+        msg.setProcesso(processoRepo.findById(processoId).orElseThrow());
+        msg.setMembro(membroRepo.findById(membroId).orElseThrow());
+        msg.setRemetente(RemetenteMensagemAvaliador.AVALIADOR);
+        msg.setRemetenteId(1L);
+        msg.setTexto("Duvida operacional sobre o PDF.");
+        msg.setDataEnvio(java.time.LocalDateTime.now());
+        mensagemRepo.saveAndFlush(msg);
+
+        Long parecerId = parecerRepo.findByProcessoIdAndMembroId(processoId, membroId)
+                .orElseThrow().getId();
+
+        String html = mvc.perform(get("/processos/" + processoId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        String idAtributo = "id=\"chatAval" + parecerId + "\"";
+        assertThat(html).contains(idAtributo);
+        int idx = html.indexOf(idAtributo);
+        String trechoAntes = html.substring(Math.max(0, idx - 200), idx);
+        assertThat(trechoAntes)
+                .as("A thread com este avaliador, na tela de detalhe do processo, deve nascer "
+                        + "EXPANDIDA quando ja existe conversa - mesma correcao do lado do "
+                        + "avaliador, CLAUDE.md 2026-08-07.")
+                .contains("show");
+    }
+
     /** Posse: um medico so acessa/escreve na thread de um processo em que ele E avaliador. */
     @Test
     @WithMockUser(username = "avaliador-msg-it", roles = "AVALIADOR")
