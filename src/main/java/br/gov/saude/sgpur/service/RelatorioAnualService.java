@@ -65,8 +65,8 @@ public class RelatorioAnualService {
     public byte[] gerar(int ano, List<Processo> processos) {
         byte[] semCabecalho = gerarSemCabecalho(ano, processos);
         return PdfCabecalhoStamper.estampar(semCabecalho,
-            PdfCabecalhoStamper.NOME_INSTITUICAO + " - URGENCIA RENAL",
-            "Relatorio Geral de Urgencia Renal - Ano " + ano);
+            PdfCabecalhoStamper.NOME_INSTITUICAO + " - URGÊNCIA RENAL",
+            "Relatório Geral de Urgência Renal - Ano " + ano);
     }
 
     private byte[] gerarSemCabecalho(int ano, List<Processo> processos) {
@@ -163,7 +163,7 @@ public class RelatorioAnualService {
         secretaria.setAlignment(Element.ALIGN_CENTER);
         doc.add(secretaria);
 
-        Paragraph urgencia = new Paragraph("URGENCIA RENAL", fUrgencia);
+        Paragraph urgencia = new Paragraph("URGÊNCIA RENAL", fUrgencia);
         urgencia.setAlignment(Element.ALIGN_CENTER);
         urgencia.setSpacingAfter(36);
         doc.add(urgencia);
@@ -181,7 +181,7 @@ public class RelatorioAnualService {
         separador.addCell(linhaSep);
         doc.add(separador);
 
-        Paragraph tituloDoc = new Paragraph("RELATORIO GERAL DE URGENCIA RENAL - ANO " + ano, fTituloDoc);
+        Paragraph tituloDoc = new Paragraph("RELATÓRIO GERAL DE URGÊNCIA RENAL - ANO " + ano, fTituloDoc);
         tituloDoc.setAlignment(Element.ALIGN_CENTER);
         tituloDoc.setSpacingAfter(16);
         doc.add(tituloDoc);
@@ -221,13 +221,13 @@ public class RelatorioAnualService {
 
         linhaResumo(t, "Total de processos", String.valueOf(total), true);
         linhaResumo(t, "Solicitados (aguardando envio)", String.valueOf(solicitado), false);
-        linhaResumo(t, "Em andamento (enviados / em analise)", String.valueOf(emAndamento), false);
-        linhaResumo(t, "Solicita informacao", String.valueOf(solicitaInfo), false);
+        linhaResumo(t, "Em andamento (enviados / em análise)", String.valueOf(emAndamento), false);
+        linhaResumo(t, "Solicita informação", String.valueOf(solicitaInfo), false);
         linhaResumo(t, "Deferidos", String.valueOf(deferido), false);
         linhaResumo(t, "Indeferidos", String.valueOf(indeferido), false);
         linhaResumo(t, "Cancelados", String.valueOf(cancelado), false);
         linhaResumo(t, "% de deferimento (sobre os decididos)", percentDeferimento, true);
-        linhaResumo(t, "Tempo medio de resposta dos avaliadores",
+        linhaResumo(t, "Tempo médio de resposta dos avaliadores",
             TempoRespostaService.formatarDias(tempoAno.mediaGeralDias()), true);
         linhaResumo(t, "Pareceres fora do prazo (meta " + tempoAno.prazoDias() + " dias corridos)",
             tempoAno.foraDoPrazo() + " de " + tempoAno.totalAvaliados(), false);
@@ -243,7 +243,7 @@ public class RelatorioAnualService {
         t.setWidthPercentage(80);
         t.setSpacingBefore(6);
         t.setHeaderRows(1);
-        cabecalho(t, "Avaliador", "Respondidos", "Tempo medio", "Fora do prazo");
+        cabecalho(t, "Avaliador", "Respondidos", "Tempo médio", "Fora do prazo");
 
         if (tempoAno.porMembro().isEmpty()) {
             PdfPCell vazio = new PdfPCell(new Phrase("Nenhum parecer respondido neste ano.",
@@ -290,8 +290,8 @@ public class RelatorioAnualService {
         t.setWidthPercentage(100);
         t.setSpacingBefore(6);
         t.setHeaderRows(1);
-        cabecalho(t, "No/Ano", "Paciente", "RGCT", "Status",
-            "Medico 1", "Medico 2", "Medico 3", "Cadastro", "Decisao");
+        cabecalho(t, "Nº/Ano", "Paciente", "RGCT", "Status",
+            "Médico 1", "Médico 2", "Médico 3", "Cadastro", "Decisão");
 
         if (processos.isEmpty()) {
             PdfPCell vazio = new PdfPCell(new Phrase("Nenhum processo neste ano.",
@@ -308,14 +308,14 @@ public class RelatorioAnualService {
             celula(t, nvl(p.getNumero()));
             celula(t, nvl(p.getPacienteNome()));
             celula(t, nvl(p.getPacienteRgct()));
-            celula(t, p.getStatus().getDescricao());
+            celula(t, PdfRelatorioBuilder.descricaoStatus(p.getStatus()));
 
             List<Parecer> pareceres = p.getPareceres();
             for (int i = 0; i < 3; i++) {
                 if (i < pareceres.size()) {
                     Parecer par = pareceres.get(i);
                     String res = par.getResultado() != null
-                        ? par.getResultado().getDescricao() : "Aguardando";
+                        ? PdfRelatorioBuilder.descricaoResultado(par.getResultado()) : "Aguardando";
                     celula(t, par.getMembro().getRotulo() + " (" + res + ")");
                 } else {
                     celula(t, "-");

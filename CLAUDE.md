@@ -2858,3 +2858,35 @@ rótulo (bug real visto no primeiro PDF gerado).
 visualmente** (não só assertivas de texto) nos 3 casos, com duas iterações de
 ajuste a partir do que se viu (tamanho do brasão, leading do painel,
 equilíbrio vertical). Suíte completa: **844 testes, 0 falhas** (JDK 21).
+
+## Acentuação em RelatorioAnualService e RelatorioAvaliadorService (2026-08-07)
+
+Mesmo tratamento já aplicado ao Relatório Final (R1b/R2, ver seção acima) —
+esses dois documentos tinham ficado de fora daquela leva. Corrigidos todos
+os literais de texto visíveis no PDF: título institucional
+("URGÊNCIA RENAL"), títulos dos documentos ("Relatório Geral de Urgência
+Renal", "Relatório do Avaliador"), rótulos de tabela ("Tempo médio", "Em
+análise", "Solicita informação", "Médico 1/2/3", "Decisão") e o cabeçalho
+"Nº/Ano" (era "No/Ano" — mesmo padrão "Nº" já usado no Relatório Final,
+R0).
+
+**`ResultadoParecer.descricao` continua INTOCADO** (decisão deliberada,
+documentada acima) — as duas linhas que exibiam
+`par.getResultado().getDescricao()` diretamente foram trocadas por
+`PdfRelatorioBuilder.descricaoResultado(...)`, o mesmo tradutor local
+(switch com literais acentuados) já usado pelo Relatório Final. Um segundo
+tradutor novo, `PdfRelatorioBuilder.descricaoStatus(StatusProcesso)`, foi
+criado no mesmo espírito para a coluna "Status" da lista de processos do
+Relatório Anual — `StatusProcesso.getDescricao()` também não foi acentuado
+(alimenta badges/telas do sistema, mudança de raio de impacto maior), só o
+texto impresso no PDF usa a versão acentuada.
+
+**Validação:** os dois PDFs foram **gerados de verdade e inspecionados
+visualmente** (renderizados em imagem via PyMuPDF, já que este ambiente não
+tinha `pdftoppm`/visualizador gráfico) — capa, resumo, tabela de tempo por
+avaliador e lista de processos, cobrindo Deferido/Indeferido/Solicita
+informação. Todos os acentos (Ê, Ó, É, Á, Ã, Ç) renderizaram corretamente
+com a fonte Helvetica padrão do OpenPDF (WinAnsi/Cp1252, mesmo mecanismo já
+usado no resto do sistema — nenhuma mudança de encoding foi necessária, só
+escrever os literais Java com os caracteres acentuados corretos). Suíte
+completa: **853 testes, 0 falhas** (JDK 21).

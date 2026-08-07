@@ -65,8 +65,8 @@ public class RelatorioAvaliadorService {
     public byte[] gerar(int ano, MembroUrgenciaRenal membro, List<Processo> processos) {
         byte[] semCabecalho = gerarSemCabecalho(ano, membro, processos);
         return PdfCabecalhoStamper.estampar(semCabecalho,
-            PdfCabecalhoStamper.NOME_INSTITUICAO + " - URGENCIA RENAL",
-            "Relatorio do Avaliador - " + membro.getRotulo() + " - Ano " + ano);
+            PdfCabecalhoStamper.NOME_INSTITUICAO + " - URGÊNCIA RENAL",
+            "Relatório do Avaliador - " + membro.getRotulo() + " - Ano " + ano);
     }
 
     private byte[] gerarSemCabecalho(int ano, MembroUrgenciaRenal membro, List<Processo> processos) {
@@ -157,7 +157,7 @@ public class RelatorioAvaliadorService {
         secretaria.setAlignment(Element.ALIGN_CENTER);
         doc.add(secretaria);
 
-        Paragraph urgencia = new Paragraph("URGENCIA RENAL", fUrgencia);
+        Paragraph urgencia = new Paragraph("URGÊNCIA RENAL", fUrgencia);
         urgencia.setAlignment(Element.ALIGN_CENTER);
         urgencia.setSpacingAfter(36);
         doc.add(urgencia);
@@ -175,7 +175,7 @@ public class RelatorioAvaliadorService {
         separador.addCell(linhaSep);
         doc.add(separador);
 
-        Paragraph tituloDoc = new Paragraph("RELATORIO DO AVALIADOR - ANO " + ano, fTituloDoc);
+        Paragraph tituloDoc = new Paragraph("RELATÓRIO DO AVALIADOR - ANO " + ano, fTituloDoc);
         tituloDoc.setAlignment(Element.ALIGN_CENTER);
         tituloDoc.setSpacingAfter(8);
         doc.add(tituloDoc);
@@ -204,7 +204,7 @@ public class RelatorioAvaliadorService {
         t.setHorizontalAlignment(Element.ALIGN_LEFT);
 
         linhaResumo(t, "Processos avaliados (respondidos)", String.valueOf(resumo.totalAvaliados()), true);
-        linhaResumo(t, "Tempo medio de resposta",
+        linhaResumo(t, "Tempo médio de resposta",
             TempoRespostaService.formatarDias(resumo.mediaGeralDias()), true);
         linhaResumo(t, "Respostas fora do prazo (meta " + resumo.prazoDias() + " dias corridos)",
             resumo.foraDoPrazo() + " de " + resumo.totalAvaliados(), false);
@@ -220,7 +220,7 @@ public class RelatorioAvaliadorService {
         t.setWidthPercentage(100);
         t.setSpacingBefore(6);
         t.setHeaderRows(1);
-        cabecalho(t, "No/Ano", "Paciente", "Parecer", "Envio", "Resposta", "Dias", "Prazo");
+        cabecalho(t, "Nº/Ano", "Paciente", "Parecer", "Envio", "Resposta", "Dias", "Prazo");
 
         if (detalhes.isEmpty()) {
             PdfPCell vazio = new PdfPCell(new Phrase("Nenhum processo avaliado por este medico neste ano.",
@@ -238,7 +238,7 @@ public class RelatorioAvaliadorService {
             Processo p = processoPorParecer.get(par.getId());
             celula(t, p != null ? nvl(p.getNumero()) : "-");
             celula(t, p != null ? nvl(p.getPacienteNome()) : "-");
-            celula(t, par.getResultado() != null ? par.getResultado().getDescricao() : "-");
+            celula(t, par.getResultado() != null ? PdfRelatorioBuilder.descricaoResultado(par.getResultado()) : "-");
             celula(t, par.getDataEnvio().format(DATA));
             celula(t, par.getDataResposta().format(DATA));
             celula(t, String.valueOf(d.dias()));

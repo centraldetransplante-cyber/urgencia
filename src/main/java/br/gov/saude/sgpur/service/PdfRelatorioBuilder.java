@@ -2,6 +2,7 @@ package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.Anexo;
 import br.gov.saude.sgpur.domain.ResultadoParecer;
+import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.TipoAnexo;
 import com.lowagie.text.*;
 import com.lowagie.text.pdf.*;
@@ -694,6 +695,29 @@ class PdfRelatorioBuilder {
             case NAO_FAVORAVEL -> "Não favorável";
             case SOLICITA_INFORMACAO -> "Solicita informação";
             case SEM_RESPOSTA -> "Sem resposta";
+        };
+    }
+
+    /**
+     * Traduz {@link StatusProcesso} para texto acentuado, mesmo raciocinio de
+     * {@link #descricaoResultado} - {@code StatusProcesso.getDescricao()} nao
+     * e acentuado porque alimenta badges/telas onde uma mudanca teria raio de
+     * impacto maior; aqui e so o texto impresso nos relatorios PDF
+     * (Relatorio Final, Relatorio Anual, Relatorio do Avaliador). Reusado por
+     * {@link RelatorioAnualService}/{@link RelatorioAvaliadorService} desde
+     * 2026-08-07.
+     */
+    static String descricaoStatus(StatusProcesso s) {
+        if (s == null) {
+            return null;
+        }
+        return switch (s) {
+            case SOLICITADO -> "Solicitado";
+            case ENVIADO -> "Enviado";
+            case SOLICITA_INFORMACAO -> "Solicita informação";
+            case DEFERIDO -> "Deferido";
+            case INDEFERIDO -> "Indeferido";
+            case CANCELADO -> "Cancelado";
         };
     }
 
