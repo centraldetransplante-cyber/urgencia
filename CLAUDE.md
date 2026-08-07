@@ -2980,3 +2980,137 @@ e um comentário já existente em `SecurityConfig` (linha ~76, sobre a CSP)
 que já documentava essa ausência como justificativa para manter
 `'unsafe-inline'` em script/style. Nenhuma correção de código foi necessária
 — risco **inexistente**, não apenas mitigado.
+
+## PENDENTE — erro 500 em `/auditoria` (investigado, NÃO corrigido nesta sessão, 2026-08-07)
+
+**A pedido explícito do usuário, este bug foi investigado e documentado, mas
+propositalmente NÃO corrigido nesta sessão.** Quem for corrigi-lo: a causa
+raiz abaixo já foi **confirmada por log real de produção** (não é só
+hipótese de leitura de código), incluindo o parâmetro exato que quebra.
+
+**Sintoma relatado:** `/auditoria` (tela exclusiva de ADMIN) devolve erro
+500 em produção.
+
+**Causa raiz confirmada via SSH real** (`sudo journalctl -u sgpur`, dois
+stacktraces reais capturados em produção, 2026-08-07 21:41 e 21:44 UTC):
+
+```
+Caused by: org.postgresql.util.PSQLException: ERROR: could not determine data type of parameter $7
+SQLState: 42P18
+```
+
+na consulta de `AuditoriaController.listar` → `AuditoriaService.buscar` →
+`LogAuditoriaRepository.buscar` (o método `buscar` original, com paginação,
+**não tocado nesta sessão** — segue com o mesmo defeito):
+
+```java
+where (:usuario is null or :usuario = '' or lower(l.usuario) like lower(concat('%', :usuario, '%')))
+  and (:acao is null or :acao = '' or l.acao = :acao)
+  and (:de is null or l.dataHora >= :de)
+  and (:ate is null or l.dataHora <= :ate)
+```
+
+O parâmetro `$7` corresponde à ocorrência de `:de` usada **isoladamente**
+em `:de is null` — sem nenhum outro contexto de tipo na mesma posição
+(Hibernate 6 gera uma posição `?` distinta para cada ocorrência textual do
+mesmo `:param` nomeado, mesmo repetido). O PostgreSQL, via protocolo
+estendido (`Parse`/`Describe`), precisa inferir o tipo de cada `?` **antes**
+de qualquer valor chegar; um parâmetro usado só em `IS NULL`, sem nenhuma
+comparação com uma coluna tipada por perto, não tem como ter seu tipo
+inferido — e aqui, como o valor é sempre `null` quando não há filtro de
+data, ele nunca ganha tipo por outro caminho. **Isso significa que
+`/auditoria` quebra em TODA carga em produção, com ou sem filtro de data
+preenchido** — confirmado pelos dois stacktraces reais, batidos em
+horários de navegação simples, não de teste de filtro.
+
+**Por que nunca apareceu na suíte local:** o H2 (dev/test) é tolerante a
+parâmetro nulo sem tipo explícito nesse mesmo padrão SQL — o defeito só se
+manifesta contra o dialeto real do PostgreSQL. Mesma classe de armadilha já
+documentada no CLAUDE.md para CHECK constraints de enum/`@Version`: código
+que passa limpo no H2 mas quebra em produção.
+
+**Por que não foi corrigido agora:** pedido explícito do usuário
+("investigar e documentar, não corrigir"). A consulta `buscar`
+paginada — usada pela **tela** `/auditoria` — continua exatamente como
+estava antes desta sessão.
+
+**Uma consulta NOVA e SEPARADA foi escrita nesta mesma sessão para a
+exportação em CSV** (`LogAuditoriaRepository.buscarParaExportacao`, ver
+seção seguinte) que **evita esse padrão desde o início** — ela nunca passa
+`null` como parâmetro (usa string vazia / datas-sentinela em vez de
+`:param IS NULL OR ...`). Isso não é uma correção do bug relatado (a rota
+`/auditoria` continua quebrada); é só a garantia de que a feature nova não
+nasce com o mesmo defeito. Ver o javadoc de `buscarParaExportacao` no
+próprio código para o detalhe técnico completo.
+
+**Sugestão de correção para quando for autorizada** (não aplicada): reescrever
+`LogAuditoriaRepository.buscar` no mesmo padrão de `buscarParaExportacao`
+— nunca passar `null` para os parâmetros de data/string, usando sentinelas
+seguras (`AuditoriaService.DATA_MINIMA`/`DATA_MAXIMA`, já existentes) em vez
+do padrão `:param IS NULL OR ...`. Como `buscar` é usado por
+`AuditoriaController.listar` (a tela paginada), a correção teria que também
+ajustar a assinatura do método e o service para não aceitar `null` cru — ou,
+alternativamente, adotar Specifications (JPA Criteria API) para montar a
+consulta dinamicamente sem nenhum parâmetro nulo em nenhuma hipótese.
+
+## Filtros de auditoria já existiam; exportação em CSV adicionada (2026-08-07)
+
+**Filtro por usuário, ação e período em `/auditoria` já existiam** desde a
+"fase E" da vistoria de UI do operador (commit `5ba6751`, 2026-08-04) —
+`AuditoriaController.listar`/`AuditoriaService.buscar`/
+`LogAuditoriaRepository.buscar`, com os 4 parâmetros opcionais combinados
+na mesma consulta JPQL. Não havia nada a implementar nesse ponto (o pedido
+do usuário presumia que não existiam ainda).
+
+**O que faltava e foi implementado nesta sessão: exportação dos registros
+filtrados em CSV.** `GET /auditoria/exportar` (mesmos parâmetros de query
+de `/auditoria`: `usuario`, `acao`, `de`, `ate`), protegida pelo mesmo
+padrão de string simples já existente para todo `/auditoria/**`
+(`SecurityConfig`, `hasRole("ADMIN")` — nenhuma rota nova precisou de
+matcher próprio).
+
+- **Exporta exatamente as mesmas 5 colunas que a tela já mostra**
+  (data/hora, usuário, ação, detalhe, IP) — nada além disso. Não introduz
+  nenhum campo novo que pudesse vazar mais dado do que a própria tela.
+- **O termo de filtro nunca é gravado em log de auditoria nem de
+  aplicação** — mesmo padrão já documentado para as buscas de Membros/
+  Usuários/Controle de Urgências/Solicitações online.
+- CSV escolhido em vez de PDF: dado é tabular, o consumo típico
+  (abrir no Excel/planilha, filtrar/ordenar/cruzar fora do sistema) é
+  exatamente o caso de uso de CSV; gerar PDF exigiria paginação/tabela via
+  OpenPDF sem nenhum ganho real para este caso. Separador `;` (não `,`)
+  porque o Excel em `pt-BR` interpreta `;` como delimitador de coluna por
+  padrão; BOM UTF-8 no início do arquivo evita acentuação corrompida ao
+  abrir no Excel do Windows.
+- **`LogAuditoriaRepository.buscarParaExportacao`: consulta JPQL nova,
+  deliberadamente escrita para NÃO reproduzir o defeito descrito na seção
+  anterior.** Em vez do padrão `:param IS NULL OR ...` (que quebra em
+  produção — PostgreSQL não consegue inferir o tipo de um parâmetro usado
+  só em `IS NULL`), `AuditoriaService.buscarParaExportacao` sempre passa
+  valores efetivos e nunca `null`: string vazia para usuário/ação ausentes,
+  e as sentinelas `DATA_MINIMA`/`DATA_MAXIMA` (1900-01-01 / 2200-12-31) para
+  data ausente — nunca `LocalDateTime.MIN`/`MAX`.
+  **Achado real durante esta sessão, corrigido antes do commit final:**
+  a primeira versão usava `LocalDateTime.MIN`/`MAX` como sentinela "sem
+  limite", mas o ano `-999999999`/`+999999999` desses valores estoura a
+  faixa representável de `timestamp` no PostgreSQL/H2 (aprox. 4713 a.C. a
+  294276 d.C.) — a comparação `dataHora >= inicio` nunca casava com
+  NENHUM registro real, então a exportação "sem filtro de data" sempre
+  devolvia lista vazia. Pego pelo próprio teste de integração (H2 real,
+  não mock) antes de chegar a produção — trocado para sentinelas seguras
+  (`1900-01-01`/`2200-12-31 23:59:59`, bem fora de qualquer uso real do
+  sistema, mas dentro da faixa do banco).
+- Escapamento CSV: campo com `;` ou `"` é envolvido em aspas duplas (aspas
+  internas duplicadas), `\r`/`\n` do campo "detalhe" viram espaço (uma
+  mensagem de auditoria multi-linha não pode quebrar uma linha do CSV).
+- Testes: `AuditoriaControllerTest` (3 novos casos — cabeçalho + conteúdo do
+  filtro, lista vazia só com cabeçalho, escapamento de `;`/`"`) e
+  `LogAuditoriaExportacaoIntegrationTest` (novo, `@SpringBootTest` + H2 real
+  em modo PostgreSQL — mesmo raciocínio de `BuscaListasIntegrationTest`:
+  mock de repositório nunca pegaria um erro de sintaxe/tipo que só aparece
+  contra um banco de verdade, e foi exatamente isso que expôs o bug do
+  `LocalDateTime.MIN`/`MAX` acima): filtro por usuário parcial, por ação
+  exata, por período, todos combinados na mesma consulta, e a tradução de
+  `LocalDate`→limites do dia + aceitação de filtros nulos feita pelo
+  service.
+- Suíte completa validada após a mudança: **848 testes, 0 falhas** (JDK 21).

@@ -70,6 +70,40 @@ public class AuditoriaService {
         return repo.acoesDistintas();
     }
 
+    /**
+     * Limites de data usados quando "de"/"ate" nao sao informados — bem fora
+     * de qualquer registro real do sistema, mas DENTRO da faixa que uma
+     * coluna {@code timestamp} do banco realmente representa.
+     *
+     * <p>Testado e corrigido nesta sessao: usar
+     * {@link java.time.LocalDateTime#MIN}/{@link java.time.LocalDateTime#MAX}
+     * como sentinela parecia mais "correto" a primeira vista, mas o ano
+     * -999999999/+999999999 desses valores estoura a faixa representavel de
+     * {@code timestamp} no PostgreSQL/H2 (grosso modo 4713 a.C. a 294276
+     * d.C.) — a comparacao {@code dataHora >= inicio} nunca casava com
+     * NENHUM registro real, entao a exportacao "sem filtro de data" sempre
+     * devolvia lista vazia. Confirmado por teste de integracao real (H2,
+     * nao um mock) antes desta correcao.</p>
+     */
+    private static final java.time.LocalDateTime DATA_MINIMA = java.time.LocalDateTime.of(1900, 1, 1, 0, 0);
+    private static final java.time.LocalDateTime DATA_MAXIMA = java.time.LocalDateTime.of(2200, 12, 31, 23, 59, 59);
+
+    /**
+     * Registros filtrados (usuario / acao / periodo) para exportacao —
+     * mesmos filtros de {@link #buscar}, mas sem paginacao (o CSV precisa de
+     * todos os registros do filtro). Ver o javadoc de
+     * {@link br.gov.saude.sgpur.repository.LogAuditoriaRepository#buscarParaExportacao}
+     * para o motivo de nunca passar {@code null} para essa consulta.
+     */
+    public java.util.List<LogAuditoria> buscarParaExportacao(String usuario, String acao,
+                                     java.time.LocalDate de, java.time.LocalDate ate) {
+        String usuarioFiltro = (usuario != null) ? usuario : "";
+        String acaoFiltro = (acao != null) ? acao : "";
+        java.time.LocalDateTime inicio = de != null ? de.atStartOfDay() : DATA_MINIMA;
+        java.time.LocalDateTime fim = ate != null ? ate.atTime(java.time.LocalTime.MAX) : DATA_MAXIMA;
+        return repo.buscarParaExportacao(usuarioFiltro, acaoFiltro, inicio, fim);
+    }
+
     private String usuarioAtual() {
         var auth = SecurityContextHolder.getContext().getAuthentication();
         // getName() de um token com principal nulo retorna "" (nao null) - checar

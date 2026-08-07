@@ -159,4 +159,53 @@ class AuditoriaControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("203.0.113.42")));
     }
+
+    // ---------- GET /auditoria/exportar ----------
+
+    @Test
+    @WithMockUser(username = "admin", roles = "ADMIN")
+    void exportarDevolveCsvComCabecalhoEConteudoDoFiltro() throws Exception {
+        LogAuditoria log1 = new LogAuditoria("operador1", "PROCESSO_CADASTRADO", "Processo 01/2026", "203.0.113.42");
+        log1.setDataHora(LocalDateTime.of(2026, 7, 21, 9, 0));
+        when(auditoria.buscarParaExportacao(eq("operador1"), eq("PROCESSO_CADASTRADO"), any(), any()))
+                .thenReturn(List.of(log1));
+
+        mvc.perform(get("/auditoria/exportar")
+                        .param("usuario", "operador1")
+                        .param("acao", "PROCESSO_CADASTRADO"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString("attachment")))
+                .andExpect(header().string("Content-Disposition",
+                        org.hamcrest.Matchers.containsString(".csv")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Data/Hora;Usuario;Acao;Detalhe;IP")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("operador1")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("PROCESSO_CADASTRADO")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("203.0.113.42")));
+
+        verify(auditoria).buscarParaExportacao(eq("operador1"), eq("PROCESSO_CADASTRADO"), any(), any());
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = "ADMIN")
+    void exportarSemRegistrosDevolveApenasCabecalho() throws Exception {
+        when(auditoria.buscarParaExportacao(any(), any(), any(), any())).thenReturn(List.of());
+
+        mvc.perform(get("/auditoria/exportar"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("Data/Hora;Usuario;Acao;Detalhe;IP")));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = "ADMIN")
+    void exportarEscapaCampoComPontoEVirgulaEAspas() throws Exception {
+        LogAuditoria log1 = new LogAuditoria("admin", "TESTE", "detalhe; com \"aspas\" e virgula");
+        log1.setDataHora(LocalDateTime.of(2026, 8, 7, 10, 0));
+        when(auditoria.buscarParaExportacao(any(), any(), any(), any())).thenReturn(List.of(log1));
+
+        mvc.perform(get("/auditoria/exportar"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(
+                        org.hamcrest.Matchers.containsString("\"detalhe; com \"\"aspas\"\" e virgula\"")));
+    }
 }

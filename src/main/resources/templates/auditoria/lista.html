@@ -6,13 +6,22 @@
 <div th:replace="~{layout :: flash}"></div>
 
 <main id="conteudo" class="container my-4">
-    <h1 class="h3 mb-3">Auditoria</h1>
-    <p class="text-muted small">
-        Registro das ações realizadas no sistema (quem, o que e quando).
-        <span th:if="${temFiltro}">
-            &bull; <strong th:text="${totalRegistros}">0</strong> registro(s) no filtro atual
-        </span>
-    </p>
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+        <div>
+            <h1 class="h3 mb-1">Auditoria</h1>
+            <p class="text-muted small mb-0">
+                Registro das ações realizadas no sistema (quem, o que e quando).
+                <span th:if="${temFiltro}">
+                    &bull; <strong th:text="${totalRegistros}">0</strong> registro(s) no filtro atual
+                </span>
+            </p>
+        </div>
+        <a class="btn btn-outline-secondary btn-sm"
+           th:href="@{/auditoria/exportar(usuario=${usuario}, acao=${acao}, de=${de}, ate=${ate})}"
+           title="Exportar os registros do filtro atual em CSV">
+            <i class="bi bi-download me-1"></i> Exportar CSV
+        </a>
+    </div>
 
     <!-- Filtros: esta e a tela usada quando ja se sabe o que procurar ("o que
          o usuario X fez ontem", "quem excluiu este anexo"). Ate 2026-08-04 nao
