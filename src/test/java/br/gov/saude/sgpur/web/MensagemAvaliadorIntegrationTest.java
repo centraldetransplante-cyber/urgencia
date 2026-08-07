@@ -223,6 +223,47 @@ class MensagemAvaliadorIntegrationTest {
                 .andExpect(jsonPath("$.total").value(1));
     }
 
+    /**
+     * Bug real reportado em producao (2026-08-07): abrir
+     * {@code /processos/mensagens-avaliadores} com pelo menos UMA thread
+     * quebrava com "Algo deu errado" - o servidor devolvia 200 (nao 500)
+     * porque a resposta ja tinha comecado a ser escrita quando o Thymeleaf
+     * falhou, entao o status HTTP ficou preso em 200 mesmo com a excecao.
+     * Causa raiz (confirmada no log real via SSH, nao suposta): o {@code
+     * th:href} do botao "Abrir processo" em
+     * {@code mensagens-avaliadores-lista.html} tentava concatenar um
+     * fragmento de ancora direto depois do link expression -
+     * {@code @{/processos/{id}(id=${t.processoId()})}#respostas} - sintaxe
+     * invalida (o attoparser tenta interpretar {@code #respostas} como um
+     * objeto utilitario do Thymeleaf, ex. {@code #dates}, e falha o parse).
+     * So aparecia com a caixa de entrada NAO VAZIA: o teste anterior
+     * ({@code caixaDeEntradaContaMensagensNaoLidasDeAvaliador}) so batia no
+     * endpoint JSON de contagem, nunca no HTML da lista em si - por isso a
+     * suite passava "verde" com o bug em producao. Corrigido concatenando
+     * com {@code +} (sintaxe padrao do Thymeleaf para Link Expression +
+     * String literal). Renderiza o HTML de verdade, nao so o status.
+     */
+    @Test
+    @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
+    void caixaDeEntradaRenderizaListaComThreadSemQuebrarNoLinkDeAncora() throws Exception {
+        var msg = new MensagemAvaliador();
+        msg.setProcesso(processoRepo.findById(processoId).orElseThrow());
+        msg.setMembro(membroRepo.findById(membroId).orElseThrow());
+        msg.setRemetente(RemetenteMensagemAvaliador.AVALIADOR);
+        msg.setRemetenteId(1L);
+        msg.setTexto("Duvida operacional.");
+        msg.setDataEnvio(java.time.LocalDateTime.now());
+        mensagemRepo.saveAndFlush(msg);
+
+        String html = mvc.perform(get("/processos/mensagens-avaliadores"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(html)
+                .doesNotContain("Algo deu errado")
+                .contains("/processos/" + processoId + "#respostas");
+    }
+
     // ---- Lado AVALIADOR ----------------------------------------------------
 
     @Test
