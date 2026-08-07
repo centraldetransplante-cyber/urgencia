@@ -2858,3 +2858,25 @@ rótulo (bug real visto no primeiro PDF gerado).
 visualmente** (não só assertivas de texto) nos 3 casos, com duas iterações de
 ajuste a partir do que se viu (tamanho do brasão, leading do painel,
 equilíbrio vertical). Suíte completa: **844 testes, 0 falhas** (JDK 21).
+
+## Teste de integração real do scheduler de lembrete SNT (2026-08-07)
+
+`ComprovanteSntLembreteSchedulerTest` (mocks, `MockitoExtension`) cobria a
+lógica de orquestração/isolamento de falha do
+`ComprovanteSntLembreteScheduler`, mas nunca exercitava contra um banco de
+verdade a query real `ProcessoRepository.findCandidatosLembreteSnt` (prazo +
+exclusão de processo já com `COMPROVANTE_SNT` + "não reenviar antes do
+prazo") nem o `UPDATE` de linha única `registrarUltimoLembreteSnt` — a
+mesma classe de risco já documentada em "Convenções de código" para rotas
+que gravam algo irreversível. Adicionado
+`ComprovanteSntLembreteSchedulerIntegrationTest` (`@SpringBootTest`, H2
+real, `ProcessoRepository`/`ProcessoService` reais, só `EmailSenderService`
+mockado — mesmo modelo de `DecisaoAutomaticaSchedulerIntegrationTest`),
+cobrindo: processo Deferido sem comprovante SNT há mais que
+`app.snt.lembrete.prazo-dias` dispara e-mail e grava `ultimoLembreteSntEm`
+(relido do banco); processo dentro do prazo não dispara; processo já com
+`TipoAnexo.COMPROVANTE_SNT` não dispara; falha de SMTP num processo não
+impede a varredura dos demais candidatos elegíveis na mesma passada
+(isolamento de falha por item). O teste unitário com mocks foi mantido —
+continua sendo a cobertura mais rápida da lógica de orquestração em si.
+Suíte completa: **857 testes, 0 falhas** (JDK 21).
