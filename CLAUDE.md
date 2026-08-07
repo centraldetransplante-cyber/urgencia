@@ -2980,3 +2980,86 @@ e um comentário já existente em `SecurityConfig` (linha ~76, sobre a CSP)
 que já documentava essa ausência como justificativa para manter
 `'unsafe-inline'` em script/style. Nenhuma correção de código foi necessária
 — risco **inexistente**, não apenas mitigado.
+
+## Fix: botão "Enviar" do chat operador↔avaliador quebrava para a linha de
+baixo (bug real de CSS, 2026-08-07)
+
+Usuário relatou dois problemas juntos: "o CSS do chat do operador com
+membro está horrível, botão de enviar está no lado esquerdo" e um 502 ao
+tentar enviar mensagem. Investigados separadamente, com navegador de
+verdade (Playwright) contra o app local — não só releitura de código.
+
+**Causa raiz do CSS (confirmada navegando de verdade, não só lendo o CSS
+fonte):** não era bug de HTML/markup nem de JS — o form do chat por
+avaliador (card "Conversa", aba Respostas) é estruturalmente idêntico
+(`<input>` antes do `<button>`, dentro de `.input-group`) ao chat que já
+funciona corretamente (Portal do Solicitante). A diferença é que a thread
+de conversa por avaliador vive dentro de `<table><td><form>` (é uma linha
+da tabela de pareceres), e há uma regra genérica em `app.css` para
+controles soltos em célula de tabela: `.table td form .form-control {
+width: 100% }`. Essa regra tem especificidade MAIOR (2 classes + 2 tipos =
+`0,0,2,2`) que a própria regra do Bootstrap `.input-group>.form-control {
+width: 1% }` (2 classes = `0,0,2,0`) que normalmente faz o campo dividir a
+linha com o botão — e vencia mesmo vindo antes no arquivo (especificidade
+> ordem de declaração). Com o campo forçado a `width:100%` e
+`.input-group` tendo `flex-wrap: wrap` (padrão do Bootstrap), o algoritmo
+de quebra de linha do flexbox decide os cortes usando o tamanho-base
+(`flex-basis`, que herda do `width` quando `flex-basis:auto`) **antes** de
+aplicar o encolhimento — um campo cujo tamanho-base já é 100% do
+container sozinho já preenche a linha inteira, então o botão ao lado é
+empurrado para a linha seguinte, alinhado à esquerda por não sobrar espaço
+na linha de cima. Confirmado via `getComputedStyle` no navegador real:
+`flex-wrap: wrap` e o campo de texto com `width: 806px` (100% do
+container de 806px), com o botão "Enviar" caindo numa segunda linha.
+
+**Por que só esse chat e não os outros dois** (Portal do Solicitante,
+Portal do Avaliador): são os únicos dois forms de chat do sistema que
+**não** vivem dentro de uma `<table>` — a regra genérica de "controles
+soltos em célula de tabela" nunca se aplicava a eles.
+
+**Correção:** `src/main/resources/static/css/app.css` ganhou uma regra
+mais específica logo depois da genérica, restaurando explicitamente o
+`width: 1%` do Bootstrap dentro de `.input-group`:
+```css
+.table td form .input-group > .form-control { width: 1%; }
+```
+3 classes (`.table`, `.input-group`, `.form-control`) + 2 tipos (`td`,
+`form`) vence a regra genérica de 2 classes + 2 tipos. A regra genérica
+**continua existindo** — ela é legítima para os demais controles soltos em
+célula de tabela (ex.: selects/inputs de ação de parecer), só não deve
+mais vencer dentro de um `.input-group`.
+
+**Teste de regressão:** `ChatAvaliadorInputGroupCssTest` (arquivo, não
+`@WebMvcTest`/`MockMvc` — como já documentado para
+`DesignSystemFontSizeInlineTest`/`AcessibilidadeEstruturaTest`, um teste de
+controller nunca chega a calcular layout de CSS) garante que a regra
+genérica continua existindo e que a regra de correção continua presente
+**com especificidade estritamente maior** (mais classes no seletor) que a
+genérica — falha alto se alguém remover/reordenar sem perceber o efeito
+colateral. Validado com Playwright de verdade: antes da correção,
+`getComputedStyle` mostrava o botão numa segunda linha (`inputLeft: 388,
+btnLeft: 387` — sobrepostos, botão embaixo); depois, lado a lado
+(`inputLeft: 388, btnLeft: 1119`).
+
+**O 502 relatado era efeito colateral confirmado de deploys em sequência
+rápida, NÃO um bug de aplicação.** Investigado por SSH direto na VM de
+produção (`journalctl -u sgpur`, `/var/log/nginx/error.log` e
+`access.log`): no dia do relato houve 4 restarts do `sgpur.service` em
+~9 minutos (21:18, 21:22, 21:24, 21:27 UTC), cada um levando ~65s para
+voltar a escutar na porta (boot normal do Spring Boot contra o Postgres da
+VM). Todo `502` do nginx (`connect() failed (111: Unknown error) while
+connecting to upstream`) caiu **exatamente** dentro dessas janelas de
+restart, nas mesmas URLs do polling do chat (`GET /processos/{id}/
+mensagens`, `GET /processos/{id}/avaliador/{membroId}/mensagens`, `POST
+.../mensagem/ajax`) e também em `GET /login` (checado por `curl` externo
+no mesmo período) — inclusive o `/login` (sem relação nenhuma com chat)
+recebeu 502 nas mesmas janelas, provando que era o processo Java
+inteiro fora do ar, não um endpoint específico quebrado. Depois do último
+restart (21:27 + ~65s de boot), nenhum 502 novo apareceu nos logs; os
+logs de aplicação mostram logins e uso normal em seguida, sem nenhuma
+exceção nos endpoints de mensagem. **Não foi feita nenhuma alteração de
+código por causa do 502** — não havia bug de aplicação para corrigir, só a
+janela normal de indisponibilidade de um restart do systemd. Se voltar a
+acontecer FORA de uma janela de deploy, investigar de novo (memória de RAM
+apertada da VM compartilhada — ver seção "Vistoria de 2026-08-03" acima —
+é a suspeita mais provável de uma próxima causa real).

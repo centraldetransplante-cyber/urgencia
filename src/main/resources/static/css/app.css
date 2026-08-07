@@ -705,6 +705,22 @@ tr.linha-inativa > td:first-child {
 .table td form .form-select,
 .table td form .form-control { width: 100%; }
 
+/* Excecao: dentro de um .input-group (ex.: chat operador<->avaliador da
+   aba Respostas, docs/RELATORIO-CHAT-MEMBROS-OPERADORES-2026-08.md), o
+   Bootstrap ja controla a largura do campo via flex-basis (".input-group
+   > .form-control { width: 1% }", para o campo dividir a linha com o
+   botao ao lado). A regra generica acima tem especificidade MAIOR
+   (2 classes + 2 tipos vs. 2 classes do Bootstrap) e vencia mesmo vindo
+   antes no arquivo, forcando width:100% no campo de texto - com
+   flex-wrap:wrap (padrao do .input-group), isso faz o campo ocupar a
+   linha inteira sozinho e o botao "Enviar" quebrar para a linha de
+   baixo, alinhado a esquerda (bug real relatado em producao em
+   2026-08-07: "botao de enviar do lado esquerdo" no chat com o
+   avaliador). Precisa de especificidade igual ou maior que a regra
+   acima para vencer - reafirma o width:1% do Bootstrap explicitamente
+   em vez de confiar em cascata/ordem. */
+.table td form .input-group > .form-control { width: 1%; }
+
 /* Evita estouro de conteúdo em células da tabela: quebra palavras longas e permite wrap */
 .table td { overflow-wrap: break-word; white-space: normal; }
 
