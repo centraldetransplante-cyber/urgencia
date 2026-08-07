@@ -52,6 +52,19 @@ public class Anexo {
     @Column(name = "data_upload", nullable = false)
     private LocalDateTime dataUpload = LocalDateTime.now();
 
+    /**
+     * Lock otimista. Adicionado em 2026-08-07 -- {@code Anexo} era uma das
+     * poucas entidades "quentes" do sistema sem {@code @Version} (Processo,
+     * Parecer, Usuario, SolicitacaoOnline, MembroUrgenciaRenal,
+     * MensagemSolicitacao e ControleUrgencia ja tinham). Exige backfill
+     * manual em producao apos o deploy (ver CLAUDE.md, pitfall de
+     * {@code @Version} novo em entidade ja populada):
+     * {@code UPDATE anexo SET versao = 0 WHERE versao IS NULL;}
+     */
+    @Version
+    @Column(name = "versao")
+    private Long versao;
+
     public Anexo() {
     }
 
@@ -133,5 +146,13 @@ public class Anexo {
 
     public void setDataUpload(LocalDateTime dataUpload) {
         this.dataUpload = dataUpload;
+    }
+
+    public Long getVersao() {
+        return versao;
+    }
+
+    public void setVersao(Long versao) {
+        this.versao = versao;
     }
 }

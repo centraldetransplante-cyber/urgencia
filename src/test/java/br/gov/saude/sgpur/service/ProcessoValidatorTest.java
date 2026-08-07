@@ -23,6 +23,10 @@ class ProcessoValidatorTest {
     private Parecer parecer(ResultadoParecer resultado, boolean coordenador) {
         Parecer p = new Parecer(medico(coordenador));
         p.setResultado(resultado);
+        // Snapshot do papel no momento do voto (Parecer.eraCoordenadorNoVoto) --
+        // este helper simula um voto atual, entao o snapshot reflete o mesmo
+        // papel do membro no momento em que o parecer foi criado.
+        p.setEraCoordenadorNoVoto(coordenador);
         return p;
     }
 

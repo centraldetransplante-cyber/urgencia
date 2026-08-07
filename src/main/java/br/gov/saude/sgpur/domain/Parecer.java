@@ -117,6 +117,32 @@ public class Parecer {
     @Column(name = "versao")
     private Long versao;
 
+    /**
+     * Snapshot de {@code MembroUrgenciaRenal.coordenador} capturado no
+     * INSTANTE em que este voto foi registrado
+     * ({@code AvaliadorController.registrarVoto}). Existe porque
+     * {@code ProcessoValidator.temVotoCoordenadorFavoravel} lia
+     * {@code coordenador} "ao vivo" navegando {@code parecer.getMembro()} --
+     * se o cargo de coordenador mudasse de mao DEPOIS do voto (outro medico
+     * assume, ou o proprio deixa de ser) mas ANTES da decisao final, o peso
+     * do voto antigo mudava retroativamente (Achado 4 da "Vistoria de bugs de
+     * 2026-08-03", implementado em 2026-08-07 mediante aprovacao explicita do
+     * dono do produto). Com o snapshot, o voto vale o que valia no momento em
+     * que foi dado, sempre.
+     *
+     * <p><b>Nullable de proposito, SEM backfill obrigatorio</b> (mesmo padrao
+     * de {@code conviteEnviadoEm}/{@code ultimoLembreteEm}): pareceres
+     * ANTIGOS (votados antes desta mudanca) nascem com este campo {@code
+     * null}. A leitura trata {@code null} como "nao sabemos, nao conta como
+     * voto de coordenador" -- decisao conservadora deliberada: preferimos
+     * negar retroativamente o peso especial a um voto antigo (o processo cai
+     * de volta na regra padrao de maioria 2 de 3, que ainda pode decidir
+     * corretamente com os demais votos) a inferir esse peso de um dado que
+     * nunca foi de fato capturado no momento do voto.</p>
+     */
+    @Column(name = "era_coordenador_no_voto")
+    private Boolean eraCoordenadorNoVoto;
+
     public Parecer() {
     }
 
@@ -235,5 +261,13 @@ public class Parecer {
 
     public Long getVersao() {
         return versao;
+    }
+
+    public Boolean getEraCoordenadorNoVoto() {
+        return eraCoordenadorNoVoto;
+    }
+
+    public void setEraCoordenadorNoVoto(Boolean eraCoordenadorNoVoto) {
+        this.eraCoordenadorNoVoto = eraCoordenadorNoVoto;
     }
 }

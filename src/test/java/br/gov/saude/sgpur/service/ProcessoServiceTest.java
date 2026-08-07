@@ -57,6 +57,9 @@ class ProcessoServiceTest {
         coordenador.setCoordenador(true);
         Parecer p = new Parecer(coordenador);
         p.setResultado(r);
+        // Snapshot do papel no momento do voto (ver Parecer.eraCoordenadorNoVoto) --
+        // simula um voto atual, nao um parecer legado sem o dado.
+        p.setEraCoordenadorNoVoto(true);
         return p;
     }
 
