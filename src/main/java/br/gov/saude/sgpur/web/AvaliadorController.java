@@ -387,6 +387,11 @@ public class AvaliadorController {
             parecer.setDataHoraVoto(LocalDateTime.now());
             parecer.setVotadoPor(principal.getName());
             parecer.setOrigem(OrigemParecer.AVALIADOR_SISTEMA);
+            // Snapshot do papel de coordenador NO INSTANTE do voto (ver
+            // javadoc de Parecer.eraCoordenadorNoVoto) -- nao le
+            // MembroUrgenciaRenal.coordenador "ao vivo" na hora de decidir,
+            // que poderia ter mudado de mao entre o voto e a decisao.
+            parecer.setEraCoordenadorNoVoto(membro.isCoordenador());
             // Justificativa e material INTERNO do operador (nunca vaza a outros
             // avaliadores). Vazio/em-branco vira null para nao poluir o banco.
             String justificativaLimpa = (justificativa == null || justificativa.isBlank())

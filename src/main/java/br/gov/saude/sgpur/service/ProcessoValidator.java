@@ -56,11 +56,22 @@ public class ProcessoValidator {
             .count();
     }
 
-    /** True se o coordenador CET-RS votou FAVORAVEL neste processo. */
+    /**
+     * True se o coordenador CET-RS votou FAVORAVEL neste processo.
+     *
+     * <p>Le o SNAPSHOT {@code Parecer.eraCoordenadorNoVoto} (capturado no
+     * instante do voto, em {@code AvaliadorController.registrarVoto}), NAO o
+     * papel atual do membro ({@code MembroUrgenciaRenal.coordenador}). Isso
+     * evita que o cargo de coordenador mudar de mao entre o voto e a decisao
+     * final altere retroativamente o peso de um voto ja registrado (Achado 4
+     * da "Vistoria de bugs de 2026-08-03" no CLAUDE.md). Parecer ANTIGO sem o
+     * snapshot ({@code null}, votado antes desta mudanca) e tratado como
+     * "nao sabemos, nao conta" -- decisao conservadora deliberada.</p>
+     */
     public boolean temVotoCoordenadorFavoravel(Processo processo) {
         return processo.getPareceres().stream()
             .anyMatch(p -> p.getResultado() == ResultadoParecer.FAVORAVEL
-                && p.getMembro() != null && p.getMembro().isCoordenador());
+                && Boolean.TRUE.equals(p.getEraCoordenadorNoVoto()));
     }
 
     /**

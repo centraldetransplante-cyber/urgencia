@@ -2858,3 +2858,65 @@ rótulo (bug real visto no primeiro PDF gerado).
 visualmente** (não só assertivas de texto) nos 3 casos, com duas iterações de
 ajuste a partir do que se viu (tamanho do brasão, leading do painel,
 equilíbrio vertical). Suíte completa: **844 testes, 0 falhas** (JDK 21).
+
+## Achado 4 (snapshot do papel de coordenador no voto) — implementado (2026-08-07)
+
+A "Vistoria de bugs de 2026-08-03" (seção acima) tinha registrado o Achado 4
+como identificado mas **não corrigido de propósito** (exigia decisão de
+produto). **Aprovado explicitamente pelo dono do produto nesta sessão** —
+implementado.
+
+**Não confundir com a decisão registrada em "docs: registra decisão
+confirmada do achado B" (commit `91abe55`)**, que trata de um problema
+DIFERENTE apesar do nome parecido ("Achado B" ali é o item 4 da vistoria de
+2026-08 sobre `retomarAposInformacao`/decidir-na-hora-sem-esperar-o-3º-voto
+— ver a seção "Solicita informação (PAUSA)" acima). Este bloco aqui é sobre
+o Achado **4** da "Vistoria de bugs de 2026-08-03" (leitura ao vivo do papel
+de coordenador).
+
+**O problema:** `ProcessoValidator.temVotoCoordenadorFavoravel` lia
+`parecer.getMembro().isCoordenador()` **ao vivo**, navegando a associação no
+momento da decisão — não o papel que o membro tinha quando de fato votou. Se
+o cargo de coordenador mudasse de mão entre o voto e a decisão final (outro
+médico assume, ou o próprio deixa de ser coordenador), o peso do voto antigo
+mudava retroativamente: um voto Favorável dado como coordenador podia deixar
+de decidir sozinho, ou um voto dado como membro comum podia ganhar
+retroativamente o peso de coordenador.
+
+**Correção:** `Parecer.eraCoordenadorNoVoto` (`Boolean`, nullable) — snapshot
+de `MembroUrgenciaRenal.coordenador` capturado no INSTANTE do voto, em
+`AvaliadorController.registrarVoto` (junto com `setResultado`/
+`setDataHoraVoto`/etc., mesma transação). `ProcessoValidator
+.temVotoCoordenadorFavoravel` passou a ler esse snapshot em vez do papel ao
+vivo do membro.
+
+**Regra para pareceres antigos (nullable, SEM backfill obrigatório):** um
+parecer votado ANTES desta mudança nasce com `eraCoordenadorNoVoto = null`.
+A leitura trata `null` como **"não sabemos, não conta como voto de
+coordenador"** — decisão conservadora deliberada: prefere negar
+retroativamente o peso especial a um voto antigo (o processo cai de volta na
+regra padrão de maioria 2 de 3, que ainda pode decidir corretamente com os
+demais votos) a inferir esse peso de um dado que nunca foi de fato capturado
+no momento do voto. Como o campo é nullable desde a criação, **não há
+backfill manual necessário em produção** (mesmo raciocínio já documentado
+para `Parecer.ultimoLembreteEm`/`conviteEnviadoEm`).
+
+**Testes:** `SnapshotCoordenadorVotoIntegrationTest`
+(`src/test/java/br/gov/saude/sgpur/web/`, `@SpringBootTest` + MockMvc + H2
+real, mesmo modelo de `AvaliadorVotoTransacaoIntegrationTest`) cobre o
+cenário completo do achado — coordenador vota Favorável pelo Portal (via
+`POST /avaliador/{id}/votar` de verdade), o processo defere na hora, o cargo
+de coordenador muda de mão em seguida, e o processo continua Deferido (o
+snapshot do voto antigo não muda) — e o contraste: um parecer "legado"
+simulado com `eraCoordenadorNoVoto=null` não conta como voto de coordenador
+mesmo que o membro seja coordenador hoje, confirmado tanto via
+`ProcessoValidator` direto quanto rodando `DecisaoAutomaticaScheduler
+.varrer()` de verdade. Helpers de outros testes que construíam `Parecer`
+diretamente simulando um voto de coordenador (`ProcessoServiceTest`,
+`ProcessoValidatorTest`, `FluxoProcessoServiceTest`,
+`DecisaoAutomaticaSchedulerIntegrationTest`) foram ajustados para também
+setar `eraCoordenadorNoVoto`, já que representam votos "atuais" simulados,
+não pareceres legados. Suíte completa: **855 testes, 0 falhas relevantes**
+(JDK 21— a única falha vista é a flakiness de timing pré-existente e
+documentada em `ComprovanteSntPendenteQueriesIntegrationTest`, não
+relacionada).
