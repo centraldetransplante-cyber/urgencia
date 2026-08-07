@@ -2858,3 +2858,25 @@ rótulo (bug real visto no primeiro PDF gerado).
 visualmente** (não só assertivas de texto) nos 3 casos, com duas iterações de
 ajuste a partir do que se viu (tamanho do brasão, leading do painel,
 equilíbrio vertical). Suíte completa: **844 testes, 0 falhas** (JDK 21).
+
+## `@Version` em `Anexo`/`AnexoSolicitacaoOnline` (2026-08-07) — PENDENTE DE BACKFILL EM PRODUÇÃO
+
+As duas últimas entidades "quentes" sem lock otimista ganharam `@Version`
+(campo `versao`, mesmo padrão de `Processo`/`Usuario`/`MembroUrgenciaRenal`/
+`ControleUrgencia`/`SolicitacaoOnline`/`MensagemSolicitacao`). Sem isso, dois
+uploads concorrentes para o mesmo processo/solicitação podiam se sobrescrever
+silenciosamente (mesma classe de risco já corrigida nas outras entidades).
+
+**PENDÊNCIA EXPLÍCITA — backfill manual obrigatório em produção após o
+deploy** (mesmo pitfall de sempre, documentado na seção "Convenções de
+código" acima: `ddl-auto: update` cria a coluna nova com `NULL` nas linhas
+já existentes, e o primeiro `UPDATE` nelas quebra). Rodar no Postgres da VM
+logo após o deploy:
+```sql
+UPDATE anexo SET versao = 0 WHERE versao IS NULL;
+UPDATE anexo_solicitacao_online SET versao = 0 WHERE versao IS NULL;
+```
+Este backfill **não foi executado nesta sessão** — quem implementou não tem
+acesso à VM de produção. Fica registrado aqui como pendência até alguém com
+acesso confirmar a execução (mesmo padrão de "Backfill de `Usuario.versao`
+feito" documentado acima, mas para este seguinte).
