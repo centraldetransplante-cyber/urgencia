@@ -2858,3 +2858,57 @@ rótulo (bug real visto no primeiro PDF gerado).
 visualmente** (não só assertivas de texto) nos 3 casos, com duas iterações de
 ajuste a partir do que se viu (tamanho do brasão, leading do painel,
 equilíbrio vertical). Suíte completa: **844 testes, 0 falhas** (JDK 21).
+
+## Atraso progressivo no login (2026-08-07) — NÃO é bloqueio
+
+Aprovado explicitamente pelo dono do produto: algo "leve, SEM bloqueio total
+de conta" — mantém o espírito da decisão de 2026-07-28 de nunca deixar um
+usuário legítimo trancado fora do sistema (que removeu o bloqueio de 15min
+por força bruta, ver seção "Login audit trail" acima), mas dá alguma fricção
+real contra um atacante tentando adivinhar a senha de um usuário específico.
+
+**Mecanismo (`LoginAttemptService`):** após `LIMIAR_INICIAL` (2) falhas
+seguidas do **mesmo username** dentro de uma janela de
+`app.login.rate-limit.janela-minutos` (default 15min), cada falha SEGUINTE
+soma `app.login.rate-limit.atraso-por-tentativa-ms` (default 1000ms) ao
+atraso, até um teto de `app.login.rate-limit.atraso-maximo-ms` (default
+5000ms) — ex.: 3ª falha atrasa 1s, 4ª atrasa 2s, 5ª+ atrasa sempre 5s (teto).
+O atraso é aplicado com `Thread.sleep` dentro de `aoFalhar` (o listener do
+evento de FALHA de autenticação do Spring Security), **antes** de a resposta
+de erro voltar ao navegador.
+
+**Por que NÃO é bloqueio, nunca:**
+- O atraso só existe no caminho de **falha**. `aoLogarComSucesso` nunca
+  chama o cálculo de atraso nem dorme — uma senha certa autentica **na
+  mesma velocidade de sempre**, mesmo logo após várias tentativas erradas.
+  Não há nenhum estado ("bloqueado") que impeça uma tentativa de acontecer.
+- O contador do username é **zerado no sucesso**
+  (`aoLogarComSucesso`/`limparContador`) — o atraso é sobre uma sequência de
+  erros, nunca uma penalidade permanente ou cumulativa entre sessões
+  distintas de tentativa.
+- Teto de 5s (configurável): mesmo com dezenas de falhas seguidas, o atraso
+  nunca cresce sem limite — evita virar, ele próprio, uma superfície de
+  negação de serviço (segurar a thread da requisição por tempo desmedido).
+- Janela de 15min: falha antiga fora da janela não conta mais na próxima
+  tentativa — o contador reinicia, então uma tentativa isolada muito depois
+  de outra não herda atraso nenhum.
+
+**Por username, não por IP:** o cenário mitigado é alguém tentando adivinhar
+a senha de UM usuário específico (credential stuffing/senha fraca) — um IP
+corporativo atrás de NAT, com vários usuários legítimos, nunca deve ser
+penalizado pelo erro de outro colega. Mapa em memória
+(`ConcurrentHashMap<String, Contador>`), chave = username normalizado
+(minúsculo, trim) — sem infraestrutura nova (Redis etc.), mesmo padrão leve
+já usado no projeto.
+
+**Testado sem sleep real longo:** os testes usam constantes pequenas
+(1ms/tentativa, teto de 5ms) injetadas por um construtor com `@Value`
+configurável, e um gancho `usarRelogioParaTeste` (só para teste) para
+simular a expiração da janela sem esperar minutos de verdade — a mesma
+lógica de produção (`calcularAtrasoMsEContabilizarFalha`) é exercitada
+diretamente. `LoginAttemptServiceTest` cobre: primeiras falhas sem atraso;
+atraso crescendo por falha; teto nunca ultrapassado; sucesso zera o
+contador; janela expirada reinicia a contagem; e a regra central — sucesso
+nunca é atrasado, mesmo após muitas falhas seguidas (medido por tempo de
+execução real, deve ficar bem abaixo de 500ms). Suíte completa: **859
+testes, 0 falhas** (JDK 21), sem aumento perceptível de tempo total.

@@ -8,6 +8,7 @@ import jakarta.servlet.ServletResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
@@ -18,23 +19,49 @@ import org.springframework.security.web.authentication.WebAuthenticationDetails;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.Locale;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Trilha de auditoria das tentativas de login: registra em log TODA tentativa
  * de autenticacao (sucesso e falha) com o usuario informado e o IP de origem.
+ * Alem disso, aplica um ATRASO PROGRESSIVO (nao um bloqueio) apos varias
+ * falhas seguidas do mesmo usuario.
  *
- * <p><b>Nao existe mais bloqueio por forca bruta.</b> A versao anterior desta
+ * <p><b>Nao existe bloqueio por forca bruta.</b> A versao anterior desta
  * classe travava a combinacao usuario+IP por 15 minutos apos 5 senhas erradas;
- * isso foi <b>removido deliberadamente</b> (decisao de produto, nao bug - ver
- * CLAUDE.md): o log de auditoria com IP passou a ser a defesa adotada, para
- * nunca deixar um usuario legitimo trancado fora do sistema. O metodo
- * {@code estaBloqueado} (que ja so devolvia {@code false}), a contagem de
- * falhas em memoria, o {@code LockedException} lancado no
- * {@code UsuarioDetailsService}, o ramo {@code LockedException} do
- * {@code loginFailureHandler} e o alerta {@code param.bloqueado} do
- * {@code login.html} foram todos removidos junto por serem codigo inalcancavel.
- * <b>Se algum dia o bloqueio voltar</b>, sera preciso reintroduzir esses quatro
- * pontos em conjunto - nenhum deles sobrevive isolado.
+ * isso foi <b>removido deliberadamente</b> em 2026-07-28 (decisao de produto,
+ * nao bug - ver CLAUDE.md): o log de auditoria com IP passou a ser a defesa
+ * adotada, para nunca deixar um usuario legitimo trancado fora do sistema.
+ *
+ * <p><b>Atraso progressivo (2026-08-07), aprovado pelo dono do produto -
+ * "leve, SEM bloqueio total de conta":</b> apos
+ * {@link #LIMIAR_INICIAL} falhas seguidas do MESMO username numa janela de
+ * {@link #janelaMinutos} minutos, cada falha SEGUINTE adiciona
+ * {@link #atrasoPorTentativaMs} ms de atraso ANTES do usuario receber a
+ * resposta de erro, ate um teto de {@link #atrasoMaximoMs} ms (por padrao 5
+ * tentativas → 5s). O atraso mora em {@link #aoFalhar}, disparado pelo
+ * evento de FALHA de autenticacao — nunca no caminho de sucesso, entao um
+ * login com a senha certa **nunca** e atrasado, mesmo logo apos varias falhas.
+ * O login em si NUNCA e recusado por este mecanismo (diferente do bloqueio
+ * antigo): a senha certa sempre autentica, so mais devagar depois de uma
+ * sequencia de erros — o oposto de negar servico, e leve o bastante (mapa em
+ * memoria, sem infra nova) para nao abrir uma superficie de DoS por si so
+ * (teto de {@link #atrasoMaximoMs} ms por tentativa, contador por username
+ * -- nao cresce sem limite porque falha antiga fora da janela e descartada
+ * na proxima leitura, e {@link #aoLogarComSucesso} zera o contador do
+ * username assim que ele acerta).</p>
+ *
+ * <p><b>Por que por username e nao por IP:</b> um atacante tentando adivinhar
+ * a senha de UM usuario especifico e o cenario que este mecanismo mitiga
+ * (credential stuffing/senha fraca); um IP corporativo com varios usuarios
+ * legitimos atras de NAT nunca deve ser penalizado pelo erro de outro
+ * colega. O contador usa o username normalizado (minusculo, sem espacos nas
+ * pontas) como chave — nao distingue IP, entao mesmo trocando de IP a mesma
+ * tentativa contra o mesmo usuario continua sendo desacelerada.</p>
  *
  * <p><b>Como o IP chega ate aqui:</b> os eventos de autenticacao do Spring
  * Security sao publicados DENTRO da cadeia de filtros, ANTES do
@@ -58,6 +85,74 @@ public class LoginAttemptService implements Filter {
 
     /** IP da requisicao HTTP corrente nesta thread - ver javadoc da classe. */
     private static final ThreadLocal<String> IP_REQUISICAO_ATUAL = new ThreadLocal<>();
+
+    /** Falhas seguidas ANTES de comecar a atrasar (as primeiras nunca atrasam). */
+    static final int LIMIAR_INICIAL = 2;
+
+    /** Contagem de falhas por username normalizado, dentro da janela de tempo. */
+    private final ConcurrentHashMap<String, Contador> tentativas = new ConcurrentHashMap<>();
+
+    private final long atrasoPorTentativaMs;
+    private final long atrasoMaximoMs;
+    private final int janelaMinutos;
+
+    /** Permite ao teste "avancar" o relogio sem esperar minutos de verdade. */
+    private java.util.function.Supplier<Instant> relogio = Instant::now;
+
+    public LoginAttemptService(
+            @Value("${app.login.rate-limit.atraso-por-tentativa-ms:1000}") long atrasoPorTentativaMs,
+            @Value("${app.login.rate-limit.atraso-maximo-ms:5000}") long atrasoMaximoMs,
+            @Value("${app.login.rate-limit.janela-minutos:15}") int janelaMinutos) {
+        this.atrasoPorTentativaMs = atrasoPorTentativaMs;
+        this.atrasoMaximoMs = atrasoMaximoMs;
+        this.janelaMinutos = janelaMinutos;
+    }
+
+    /** Ponto de extensao usado SO por teste, para nao depender de tempo real. */
+    void usarRelogioParaTeste(java.util.function.Supplier<Instant> relogio) {
+        this.relogio = relogio;
+    }
+
+    private static final class Contador {
+        final AtomicInteger falhas = new AtomicInteger(0);
+        volatile Instant inicioJanela;
+    }
+
+    private String chave(String username) {
+        return username == null ? "" : username.trim().toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Calcula (e aplica) o atraso para a proxima falha deste username, ja
+     * contabilizando a falha atual. Publico por ser exercitado diretamente em
+     * teste (sem sleep real).
+     */
+    long calcularAtrasoMsEContabilizarFalha(String username) {
+        String k = chave(username);
+        Instant agora = relogio.get();
+        Contador c = tentativas.computeIfAbsent(k, x -> {
+            Contador novo = new Contador();
+            novo.inicioJanela = agora;
+            return novo;
+        });
+        // Janela expirada: reinicia a contagem em vez de acumular falhas
+        // antigas indefinidamente (evita o mapa crescer sem limite e evita
+        // penalizar uma tentativa isolada muito depois da anterior).
+        if (Duration.between(c.inicioJanela, agora).toMinutes() >= janelaMinutos) {
+            c.falhas.set(0);
+            c.inicioJanela = agora;
+        }
+        int n = c.falhas.incrementAndGet();
+        if (n <= LIMIAR_INICIAL) {
+            return 0L;
+        }
+        long atraso = (long) (n - LIMIAR_INICIAL) * atrasoPorTentativaMs;
+        return Math.min(atraso, atrasoMaximoMs);
+    }
+
+    private void limparContador(String username) {
+        tentativas.remove(chave(username));
+    }
 
     /**
      * Captura o IP remoto da requisicao corrente num ThreadLocal, ANTES da
@@ -83,10 +178,25 @@ public class LoginAttemptService implements Filter {
         String ip = ipDaAutenticacao(evento.getAuthentication());
         log.warn("Login falhou para usuario '{}' (ip {}): {}", username, ip,
             evento.getException().getMessage());
+
+        long atrasoMs = calcularAtrasoMsEContabilizarFalha(username);
+        if (atrasoMs > 0) {
+            log.info("Login: atraso progressivo de {} ms aplicado para usuario '{}' "
+                + "(ip {}) apos falhas seguidas - NAO e bloqueio, a proxima tentativa "
+                + "com a senha certa continua autenticando normalmente.", atrasoMs, username, ip);
+            try {
+                Thread.sleep(atrasoMs);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     @EventListener
     public void aoLogarComSucesso(AuthenticationSuccessEvent evento) {
+        // O contador de falhas do usuario e zerado no sucesso: o atraso e so
+        // sobre uma SEQUENCIA de erros, nunca uma penalidade permanente.
+        limparContador(evento.getAuthentication().getName());
         String username = evento.getAuthentication().getName();
         String ip = ipDaAutenticacao(evento.getAuthentication());
         log.info("Login bem-sucedido para usuario '{}' (ip {})", username, ip);
