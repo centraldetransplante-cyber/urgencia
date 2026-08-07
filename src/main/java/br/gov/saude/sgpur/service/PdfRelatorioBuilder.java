@@ -89,7 +89,7 @@ class PdfRelatorioBuilder {
     // Merge com anexos
     // -----------------------------------------------------------------------
 
-    byte[] mergeComAnexos(byte[] summary, List<Anexo> pdfs, List<Anexo> naoPdf, String fechoTexto)
+    byte[] mergeComAnexos(byte[] capa, byte[] summary, List<Anexo> pdfs, List<Anexo> naoPdf, String fechoTexto)
             throws DocumentException, IOException {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         Document doc = new Document();
@@ -103,6 +103,16 @@ class PdfRelatorioBuilder {
         // hoje nao ha NENHUMA marca de onde termina um anexo e comeca o
         // outro alem da folha divisoria nova (P8(a) abaixo).
         List<HashMap<String, Object>> marcadores = new ArrayList<>();
+
+        if (capa != null && capa.length > 0) {
+            marcadores.add(marcador("Capa", copier.getCurrentPageNumber()));
+            try (PdfReader capaReader = new PdfReader(capa)) {
+                for (int i = 1; i <= capaReader.getNumberOfPages(); i++) {
+                    copier.addPage(copier.getImportedPage(capaReader, i));
+                }
+            }
+        }
+
         marcadores.add(marcador("Sumário", copier.getCurrentPageNumber()));
 
         try (PdfReader summaryReader = new PdfReader(summary)) {
@@ -256,21 +266,255 @@ class PdfRelatorioBuilder {
     }
 
     // -----------------------------------------------------------------------
-    // Folha de rosto (Decisao 7 do relatorio V2 - capa separada ELIMINADA)
+    // Capa (folha de rosto dedicada) - REINTRODUZIDA em 2026-08-07
     // -----------------------------------------------------------------------
 
     /**
-     * Cabecalho institucional COMPACTO no topo da propria pagina de sumario,
-     * que agora e a folha de rosto do documento - substitui a antiga pagina
-     * de capa inteira (brasao grande + nome do orgao + titulo + tabela de
-     * dados + tabela de avaliadores). Ver Decisao 7 do relatorio V2 (§7.7):
-     * a capa antiga era subconjunto do proprio sumario (achado 6.6 do
-     * relatorio original - numero, paciente, RGCT, resultado e a tabela de
-     * avaliadores reapareciam por completo nas secoes 1/2/3) e deixava um
-     * terco de pagina em branco, com DOIS brasoes na mesma dupla de paginas
-     * (o da capa e o do carimbo do {@link PdfCabecalhoStamper}). O Oficio de
-     * Indeferimento - a regua de qualidade do sistema, estabelecida
-     * deliberadamente em 2026-08-04 - nunca teve capa propria.
+     * Dados que a capa exibe. Deliberadamente CURTO: a capa e uma folha de
+     * rosto, nao um resumo do processo - quem decide o conteudo e
+     * {@link RelatorioService}, que ja monta as secoes completas na pagina
+     * seguinte.
+     *
+     * @param titulo         "RELATÓRIO FINAL" ou "RELATÓRIO PARCIAL"
+     * @param subtitulo      linha menor sob o titulo (natureza do documento)
+     * @param numeroProcesso numero CET-RS (NN/AAAA)
+     * @param paciente       nome completo do paciente (documento interno de
+     *                       arquivo - nao e material de avaliador, entao nao
+     *                       se aplica a regra das iniciais)
+     * @param rotuloSituacao rotulo do ultimo campo ("Situação"/"Resultado")
+     * @param situacao       texto do desfecho/andamento
+     * @param corSituacao    cor semantica do desfecho (reforco, nunca o unico
+     *                       portador da informacao - o texto sozinho basta)
+     * @param emitidoEm      data/hora de emissao ja formatada
+     */
+    record DadosCapa(String titulo, String subtitulo, String numeroProcesso, String paciente,
+                     String rotuloSituacao, String situacao, Color corSituacao, String emitidoEm) {
+    }
+
+    /** Margem lateral da capa (maior que a das paginas de conteudo, de proposito). */
+    private static final float MARGEM_CAPA = 62;
+
+    /** Fundo do painel de identificacao da capa ({@code --rs-gray-50}). */
+    private static final Color FUNDO_PAINEL_CAPA = new Color(0xF8, 0xFA, 0xFC);
+
+    /**
+     * Gera a CAPA do Relatorio Final: uma pagina A4 propria, com brasao,
+     * identificacao institucional, titulo do documento e um painel enxuto
+     * com numero do processo, paciente, situacao e data de emissao.
+     *
+     * <p><b>Historico - por que a capa voltou.</b> Ate 2026-08-06 existia uma
+     * capa; o R6 do relatorio V2 (§7.7) a ELIMINOU, e o sumario passou a ser
+     * a folha de rosto. Os motivos daquela remocao eram concretos e continuam
+     * validos como criterios de projeto: a capa antiga repetia uma tabela de
+     * dados INTEIRA mais a tabela de avaliadores que o sumario, logo depois,
+     * reimprimia por completo (achado 6.6 do relatorio original); sobrava
+     * cerca de um terco de pagina em branco; e havia DOIS brasoes na mesma
+     * dupla de paginas (o da capa e o do carimbo do
+     * {@link PdfCabecalhoStamper}, que carimbava tambem a capa).
+     *
+     * <p>Em 2026-08-07 o dono do produto pediu explicitamente uma capa de
+     * volta ("o relatorio final em PDF dos processos precisa ter uma capa").
+     * Esta implementacao e um desenho NOVO, nao a restauracao do commit
+     * revertido, e cada um dos tres problemas acima foi tratado:
+     * <ul>
+     *   <li><b>Sem duplicacao de tabela:</b> a capa mostra 4 dados
+     *       (numero, paciente, situacao, emissao) em tipografia grande, nao
+     *       uma copia das secoes 1/2/3. A tabela de avaliadores nao aparece
+     *       aqui. O "Emitido em" saiu da linha de subtitulo do sumario e
+     *       passou a existir SO na capa, preservando a regra A12 do
+     *       relatorio V2 (um unico carimbo de emissao no documento).</li>
+     *   <li><b>Sem vazio esquisito:</b> o espaco livre e distribuido (respiro
+     *       generoso entre blocos + painel de identificacao com peso visual),
+     *       nao acumulado num bloco morto no rodape.</li>
+     *   <li><b>Um brasao so:</b> a capa e a UNICA pagina que nao recebe o
+     *       carimbo institucional - {@link RelatorioService} chama
+     *       {@link PdfCabecalhoStamper#estampar(byte[], String, String, int)}
+     *       comecando na primeira pagina DEPOIS da capa. Por isso esta pagina
+     *       e criada em {@link PageSize#A4} cheio, e nao em
+     *       {@link #TAMANHO_PAGINA_SISTEMA} (que ja desconta os 55pt que o
+     *       stamper devolve ao expandir o topo) - o resultado continua A4 de
+     *       verdade em todas as paginas, mantendo a correcao do R5.</li>
+     * </ul>
+     *
+     * <p>Sobre a paleta: cor so no filete/regua institucional e no texto do
+     * desfecho ({@link PaletaPdf}), sem faixa chapada de fundo a fundo - o R4
+     * reduziu de proposito a proporcao da pagina ocupada por decoracao azul, e
+     * esta capa nao regride nisso.
+     */
+    byte[] gerarCapa(DadosCapa dados) throws DocumentException {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        Document doc = new Document(PageSize.A4, MARGEM_CAPA, MARGEM_CAPA, 86, 40);
+        PdfWriter writer = PdfWriter.getInstance(doc, out);
+        doc.open();
+
+        float larguraPagina = PageSize.A4.getWidth();
+        float alturaPagina = PageSize.A4.getHeight();
+        PdfContentByte cb = writer.getDirectContent();
+
+        // Regua institucional no topo (3pt): acabamento discreto, sem virar
+        // faixa decorativa (ver R4 acima).
+        cb.setLineWidth(3f);
+        cb.setColorStroke(AZUL);
+        cb.moveTo(MARGEM_CAPA, alturaPagina - 46);
+        cb.lineTo(larguraPagina - MARGEM_CAPA, alturaPagina - 46);
+        cb.stroke();
+
+        // --- Bloco institucional (brasao + orgao + secretaria) ---
+        try {
+            byte[] logoBytes = getClass().getClassLoader()
+                .getResourceAsStream("static/brasao.png").readAllBytes();
+            Image brasao = Image.getInstance(logoBytes);
+            // Limite pela ALTURA, nao por um quadrado: static/brasao.png e
+            // 300x168 com folga transparente nas laterais, entao
+            // scaleToFit(N, N) trava na largura e o brasao sai visualmente
+            // minusculo numa capa (foi o que aconteceu na primeira versao).
+            brasao.scaleToFit(220, 92);
+            brasao.setAlignment(Element.ALIGN_CENTER);
+            brasao.setSpacingAfter(16);
+            doc.add(brasao);
+        } catch (Exception e) {
+            log.warn("Logo nao encontrado em static/brasao.png, capa sem imagem");
+        }
+
+        Paragraph orgao = new Paragraph(PdfCabecalhoStamper.NOME_INSTITUICAO,
+            FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13, Color.BLACK));
+        orgao.setAlignment(Element.ALIGN_CENTER);
+        doc.add(orgao);
+
+        Paragraph secretaria = new Paragraph(PdfCabecalhoStamper.SECRETARIA,
+            FontFactory.getFont(FontFactory.HELVETICA, 9.5f, CINZA));
+        secretaria.setAlignment(Element.ALIGN_CENTER);
+        secretaria.setSpacingBefore(3);
+        doc.add(secretaria);
+
+        doc.add(fileteCentral(16, 0));
+
+        // --- Titulo do documento ---
+        Paragraph titulo = new Paragraph(dados.titulo(),
+            FontFactory.getFont(FontFactory.HELVETICA_BOLD, 27, AZUL));
+        titulo.setAlignment(Element.ALIGN_CENTER);
+        titulo.setSpacingBefore(76);
+        doc.add(titulo);
+
+        Paragraph subtitulo = new Paragraph(dados.subtitulo(),
+            FontFactory.getFont(FontFactory.HELVETICA, 12, CINZA));
+        subtitulo.setAlignment(Element.ALIGN_CENTER);
+        subtitulo.setSpacingBefore(8);
+        doc.add(subtitulo);
+
+        // --- Painel de identificacao ---
+        doc.add(painelIdentificacao(dados));
+
+        // --- Rodape da capa (posicao fixa, para o respiro ficar entre os
+        // blocos e nao empilhado no pe da pagina) ---
+        try {
+            BaseFont bf = BaseFont.createFont(BaseFont.HELVETICA, BaseFont.WINANSI, BaseFont.NOT_EMBEDDED);
+            cb.setLineWidth(0.7f);
+            cb.setColorStroke(CINZA_BORDA);
+            cb.moveTo(MARGEM_CAPA, 104);
+            cb.lineTo(larguraPagina - MARGEM_CAPA, 104);
+            cb.stroke();
+
+            cb.beginText();
+            cb.setColorFill(CINZA);
+            cb.setFontAndSize(bf, 9);
+            cb.showTextAligned(Element.ALIGN_CENTER, "Emitido em " + dados.emitidoEm(),
+                larguraPagina / 2, 86, 0);
+            cb.setFontAndSize(bf, 8);
+            cb.showTextAligned(Element.ALIGN_CENTER, PdfCabecalhoStamper.NOME_SISTEMA,
+                larguraPagina / 2, 72, 0);
+            cb.endText();
+        } catch (IOException e) {
+            log.warn("Falha ao desenhar o rodape da capa: {}", e.getMessage());
+        }
+
+        doc.close();
+        return out.toByteArray();
+    }
+
+    /** Filete curto centralizado, em AZUL - separador tipografico da capa. */
+    private PdfPTable fileteCentral(float espacoAntes, float espacoDepois) {
+        PdfPTable filete = new PdfPTable(1);
+        filete.setWidthPercentage(14);
+        filete.setHorizontalAlignment(Element.ALIGN_CENTER);
+        filete.setSpacingBefore(espacoAntes);
+        filete.setSpacingAfter(espacoDepois);
+        PdfPCell c = new PdfPCell(new Phrase(" ", FontFactory.getFont(FontFactory.HELVETICA, 2)));
+        c.setBorderWidthBottom(2f);
+        c.setBorderWidthTop(0);
+        c.setBorderWidthLeft(0);
+        c.setBorderWidthRight(0);
+        c.setBorderColorBottom(AZUL);
+        c.setPadding(0);
+        filete.addCell(c);
+        return filete;
+    }
+
+    /**
+     * Painel central da capa: numero do processo, paciente e situacao, em
+     * tipografia grande sobre fundo claro com filete AZUL a esquerda. E o
+     * unico bloco "denso" da pagina de proposito - dar peso visual a ele e o
+     * que evita a capa parecer uma folha vazia com um titulo solto (um dos
+     * defeitos da capa antiga).
+     */
+    private PdfPTable painelIdentificacao(DadosCapa dados) {
+        Font fRotulo = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 8, CINZA);
+
+        PdfPTable painel = new PdfPTable(1);
+        painel.setWidthPercentage(74);
+        painel.setHorizontalAlignment(Element.ALIGN_CENTER);
+        painel.setSpacingBefore(78);
+
+        PdfPCell cell = new PdfPCell();
+        cell.setBackgroundColor(FUNDO_PAINEL_CAPA);
+        cell.setBorderWidthLeft(3f);
+        cell.setBorderColorLeft(AZUL);
+        cell.setBorderWidthTop(0);
+        cell.setBorderWidthRight(0);
+        cell.setBorderWidthBottom(0);
+        cell.setPadding(26);
+
+        adicionarLinhaPainel(cell, "PROCESSO CET-RS", fRotulo,
+            dados.numeroProcesso(),
+            FontFactory.getFont(FontFactory.HELVETICA_BOLD, 22, Color.BLACK), 0);
+        adicionarLinhaPainel(cell, "PACIENTE", fRotulo,
+            dados.paciente(),
+            FontFactory.getFont(FontFactory.HELVETICA, 13, Color.BLACK), 22);
+        adicionarLinhaPainel(cell, dados.rotuloSituacao().toUpperCase(), fRotulo,
+            dados.situacao(),
+            FontFactory.getFont(FontFactory.HELVETICA_BOLD, 16, dados.corSituacao()), 22);
+
+        painel.addCell(cell);
+        return painel;
+    }
+
+    /**
+     * Par "rotulo pequeno + valor destacado", centralizado, dentro do painel
+     * da capa. Sao DOIS paragrafos, e nao um so com {@code \n}: num paragrafo
+     * unico o leading e calculado a partir da fonte do PRIMEIRO chunk (o
+     * rotulo de 8pt), e o valor de 22pt subia por cima do rotulo.
+     */
+    private void adicionarLinhaPainel(PdfPCell cell, String rotulo, Font fRotulo,
+                                      String valor, Font fValor, float espacoAntes) {
+        Paragraph pRotulo = new Paragraph(rotulo, fRotulo);
+        pRotulo.setAlignment(Element.ALIGN_CENTER);
+        pRotulo.setSpacingBefore(espacoAntes);
+        pRotulo.setSpacingAfter(4);
+        cell.addElement(pRotulo);
+
+        Paragraph pValor = new Paragraph(nvl(valor), fValor);
+        pValor.setAlignment(Element.ALIGN_CENTER);
+        pValor.setLeading(fValor.getSize() * 1.25f);
+        cell.addElement(pValor);
+    }
+
+    /**
+     * Cabecalho institucional COMPACTO no topo da pagina de sumario. Nasceu na
+     * Decisao 7 do relatorio V2 (§7.7) como SUBSTITUTO da capa entao
+     * eliminada; com a capa de volta (ver {@link #gerarCapa}), ele continua
+     * util por outro motivo: o sumario e a primeira pagina CARIMBADA, e este
+     * bloco identifica o orgao no corpo da pagina sem depender do carimbo do
+     * topo. Nao repete nenhum dado do processo - so orgao e secretaria.
      */
     void cabecalhoInstitucionalCompacto(Document doc) throws DocumentException {
         Font fOrgao = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 12, Color.BLACK);
@@ -361,7 +605,7 @@ class PdfRelatorioBuilder {
      * Decisao final" do sumario). Fonte maior + negrito + CAIXA ALTA
      * garantem que a informacao sobreviva a impressao em preto-e-branco; a
      * cor semantica ({@code cor}) e reforco visual, nunca o unico portador
-     * do dado (mesmo principio ja usado na capa, {@link #adicionarCapa}).
+     * do dado (mesmo principio usado na capa, {@link #gerarCapa}).
      */
     void linhaDestaque(PdfPTable t, String rotulo, String valor, Color cor) {
         Font fr = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 10, CINZA);

@@ -320,6 +320,29 @@ final class PdfCabecalhoStamper {
      * @param linha2 segunda linha do cabecalho (identificacao do documento)
      */
     static byte[] estampar(byte[] pdf, String linha1, String linha2) {
+        return estampar(pdf, linha1, linha2, 1);
+    }
+
+    /**
+     * Igual a {@link #estampar(byte[], String, String)}, mas deixa as
+     * primeiras {@code primeiraPagina - 1} paginas SEM carimbo (sem cabecalho,
+     * sem numeracao e sem a expansao de {@link #ALTURA_CABECALHO} no topo).
+     *
+     * <p>Existe por causa da CAPA do Relatorio Final (reintroduzida em
+     * 2026-08-07, ver {@code PdfRelatorioBuilder.gerarCapa}): a capa ja tem o
+     * brasao e o nome do orgao em tamanho grande no proprio corpo, entao
+     * carimba-la produziria dois brasoes na mesma pagina - exatamente um dos
+     * defeitos que motivaram a remocao da capa antiga. Capa tambem nao leva
+     * numero de pagina, como e usual em documento oficial.
+     *
+     * <p>Como a expansao do topo tambem e pulada nessas paginas, elas devem
+     * ser criadas ja em A4 cheio (as demais nascem
+     * {@link #ALTURA_CABECALHO} mais baixas e voltam a A4 aqui) - do
+     * contrario o documento final teria paginas de dois tamanhos.
+     *
+     * @param primeiraPagina numero (base 1) da primeira pagina a carimbar
+     */
+    static byte[] estampar(byte[] pdf, String linha1, String linha2, int primeiraPagina) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (PdfReader reader = new PdfReader(pdf)) {
             PdfStamper stamper = novoStamper(reader, baos);
@@ -332,6 +355,9 @@ final class PdfCabecalhoStamper {
             int totalPaginas = reader.getNumberOfPages();
 
             for (int i = 1; i <= totalPaginas; i++) {
+                if (i < primeiraPagina) {
+                    continue;
+                }
                 AreaCarimbo area = expandirTopo(reader, i, ALTURA_CABECALHO);
                 float largura = area.largura();
                 float topo = area.altura();

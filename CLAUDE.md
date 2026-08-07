@@ -2771,7 +2771,10 @@ verdade**, 6,5% mais alto que A4 real, o que encolhia o corpo de 9pt para
 navegação); **R6** (capa eliminada — o sumário virou a folha de rosto,
 mesmo padrão do Ofício de Indeferimento — e rótulo "RELATÓRIO PARCIAL"
 quando o processo ainda não foi decidido, em vez de poder emitir um
-documento chamado "RELATÓRIO FINAL" a qualquer momento). Suíte completa
+documento chamado "RELATÓRIO FINAL" a qualquer momento). **O R6 foi
+REVERTIDO em 2026-08-07 a pedido explícito do usuário — a capa voltou, com
+desenho novo; ver a seção "Capa do Relatório Final reintroduzida" logo
+abaixo.** Suíte completa
 validada a cada bloco (a última rodada geral: 826 testes, 0 falhas, JDK
 21, contando também o item 3 acima). **Pendência:** nem o CLAUDE.md nem o
 header do doc V2 foram atualizados por aquela sessão com o status de
@@ -2785,3 +2788,73 @@ antes de assumir que um achado do V2 ainda se aplica.
 desta sessão (GitHub Actions "Deploy" verde após cada merge em `main`,
 último em 2026-08-07 03:10 UTC) — produção validada por `curl -Ik
 https://urgenciarenal.duckdns.org/login` (200) na sessão seguinte.
+
+## Capa do Relatório Final reintroduzida (2026-08-07) — reverte o R6
+
+**Pedido explícito do dono do produto**, textual: *"o relatório final em PDF
+dos processos precisa ter uma capa. Faça uma capa bonita."* Isso **reverte
+deliberadamente o item R6** do plano implementado horas antes (ver a seção
+anterior), que tinha eliminado a capa e feito o sumário virar a folha de
+rosto. Não é um retrocesso acidente/merge — é decisão de produto posterior.
+
+**Não é o `revert` do commit do R6.** Os três motivos concretos que
+justificaram aquela remoção continuam valendo como critérios de projeto, e
+o desenho novo trata cada um. Estão registrados em javadoc extenso em
+`PdfRelatorioBuilder.gerarCapa` e travados por teste
+(`RelatorioServiceTest`, bloco no fim da classe):
+
+| Defeito da capa antiga | Como a capa nova evita |
+|---|---|
+| Repetia a tabela de dados INTEIRA + a tabela de avaliadores que o sumário reimprimia logo depois (achado 6.6) | Mostra **4 dados** (número, paciente, situação, emissão) em tipografia grande. Teste `capaNaoRepeteAsTabelasDoSumario` |
+| Sobrava ~1/3 de página em branco | Respiro distribuído entre blocos + painel de identificação com peso visual (fundo `--rs-gray-50` + filete azul à esquerda) |
+| DOIS brasões na mesma dupla de páginas (o da capa e o do carimbo do `PdfCabecalhoStamper`, que carimbava também a capa) | A capa é a **única página sem carimbo**. Teste `capaNaoRecebeOCarimboInstitucionalNemNumeroDePagina` |
+
+**Mecanismo do "sem carimbo":** `PdfCabecalhoStamper.estampar` ganhou uma
+sobrecarga `estampar(pdf, linha1, linha2, primeiraPagina)` que pula
+cabeçalho, numeração **e a expansão de `ALTURA_CABECALHO` (55pt) do topo**
+nas páginas anteriores a `primeiraPagina`. A versão de 3 argumentos delega
+com `1` — `RelatorioAnualService`/`RelatorioAvaliadorService` não mudaram.
+Consequência obrigatória: **a capa nasce em `PageSize.A4` cheio**, e não em
+`PdfRelatorioBuilder.TAMANHO_PAGINA_SISTEMA` (que já desconta os 55pt que o
+stamper devolve) — senão o documento teria páginas de dois tamanhos e a
+correção do R5 (A4 de verdade) regrediria. Travado por
+`todasAsPaginasGeradasPeloSistemaContinuamEmA4InclusiveACapa`.
+`RelatorioService.gerar` **lê a contagem de páginas da capa do PDF gerado**
+(`PdfReader`) em vez de assumir 1, para o carimbo continuar começando no
+sumário se o desenho da capa um dia crescer.
+
+**"Emitido em" mudou de lugar (regra A12 preservada):** o documento continua
+com **um único** carimbo de emissão, mas ele agora vive na capa — saiu da
+linha de subtítulo do sumário (`RelatorioService.gerarSummary`). Sem isso as
+duas páginas chamariam `LocalDateTime.now()` separadamente e poderiam exibir
+horários diferentes entre si. Travado por
+`documentoTemUmUnicoCarimboDeEmissaoEEleFicaNaCapa`.
+
+**Layout da capa** (A4, margens laterais 62pt): régua institucional azul de
+3pt no topo · brasão 92pt de altura (escalado **pela altura**, não por um
+quadrado — `static/brasao.png` é 300x168 com folga transparente nas laterais,
+então `scaleToFit(N, N)` trava na largura e o brasão sai minúsculo; erro real
+cometido e corrigido na primeira iteração deste desenho) · nome do órgão +
+`SECRETARIA DE SAÚDE` · filete azul curto centralizado · título 27pt azul ·
+subtítulo · painel de identificação (74% da largura, centralizado) · rodapé
+em posição fixa com "Emitido em ..." + `PdfCabecalhoStamper.NOME_SISTEMA`.
+**Sem faixa azul chapada** — o R4 reduziu de propósito a proporção da página
+ocupada por decoração azul e esta capa não regride nisso (cor só na régua, no
+filete, na borda do painel, no título e no texto do desfecho).
+
+**Os 3 estados cobertos:** `RELATÓRIO FINAL` + `RESULTADO: DEFERIDO`
+(verde) / `INDEFERIDO` (vermelho) / `CANCELADO` (cinza); e `RELATÓRIO
+PARCIAL` + `SITUAÇÃO: Em andamento` (cinza) quando o processo ainda não foi
+decidido — a capa **nunca** anuncia um status de tramitação como se fosse
+desfecho ("RESULTADO: ENVIADO"), mesma correção já aplicada à seção "3." do
+sumário (B4+A7).
+
+**Cada rótulo do painel é um `Paragraph` separado do valor**, não um único
+parágrafo com `\n`: num parágrafo só, o leading é calculado a partir da fonte
+do PRIMEIRO chunk (o rótulo de 8pt) e o valor de 22pt subia por cima do
+rótulo (bug real visto no primeiro PDF gerado).
+
+**Validação:** os PDFs foram **gerados de verdade e inspecionados
+visualmente** (não só assertivas de texto) nos 3 casos, com duas iterações de
+ajuste a partir do que se viu (tamanho do brasão, leading do painel,
+equilíbrio vertical). Suíte completa: **844 testes, 0 falhas** (JDK 21).

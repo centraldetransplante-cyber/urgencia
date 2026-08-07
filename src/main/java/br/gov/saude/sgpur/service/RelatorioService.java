@@ -26,14 +26,17 @@ import org.springframework.transaction.annotation.Transactional;
  * {@link PdfRelatorioBuilder}.
  *
  * O relatorio final eh composto por:
- *   1. Capa + sumario executivo (dados do processo, pareceres, decisao,
- *      andamento e relacao de anexos);
- *   2. Copia integral de todos os documentos anexados ao processo (PDFs),
+ *   1. Capa (folha de rosto dedicada, reintroduzida em 2026-08-07 - ver
+ *      {@link PdfRelatorioBuilder#gerarCapa});
+ *   2. Sumario executivo (dados do processo, pareceres, decisao, andamento
+ *      e relacao de anexos);
+ *   3. Copia integral de todos os documentos anexados ao processo (PDFs),
  *      inseridos como paginas apos o sumario;
- *   3. Pagina informativa para anexos nao-PDF;
- *   4. Pagina de fecho institucional, ao final de tudo (ver A11 do relatorio
+ *   4. Pagina informativa para anexos nao-PDF;
+ *   5. Pagina de fecho institucional, ao final de tudo (ver A11 do relatorio
  *      V2 - antes ficava presa ao fim do sumario, ANTES dos anexos).
- * Todas as paginas recebem cabecalho padrao e numeracao.
+ * Todas as paginas recebem cabecalho padrao e numeracao, EXCETO a capa (ver
+ * {@code PdfCabecalhoStamper.estampar(byte[], String, String, int)}).
  *
  * <p><b>Acentuacao (R2 do relatorio V2):</b> os textos fixos deste servico e
  * de {@link PdfRelatorioBuilder} sao escritos com acentuacao correta -
@@ -72,7 +75,13 @@ public class RelatorioService {
     @Transactional(readOnly = true)
     public byte[] gerar(Processo p) {
         try {
-            // 1. Gera o sumario executivo (capa + dados + pareceres + decisao + anexos)
+            // 0. Capa (folha de rosto dedicada, reintroduzida em 2026-08-07 a
+            // pedido do dono do produto - ver PdfRelatorioBuilder.gerarCapa
+            // para o desenho e para por que ele nao repete os problemas da
+            // capa antiga, removida pelo R6 do relatorio V2).
+            byte[] capa = pdfBuilder.gerarCapa(dadosCapa(p));
+
+            // 1. Gera o sumario executivo (dados + pareceres + decisao + anexos)
             byte[] summary = gerarSummary(p);
 
             // 2. Coleta os PDFs anexados (exceto RELATORIO_FINAL — evitar ciclo/duplicacao)
@@ -94,18 +103,75 @@ public class RelatorioService {
             // 4. Monta o PDF final com todas as paginas (o fecho institucional
             // vai por ultimo, DEPOIS de todos os anexos - ver A11).
             String fecho = "Documento gerado automaticamente pelo " + PdfCabecalhoStamper.NOME_SISTEMA + ".";
-            byte[] merged = pdfBuilder.mergeComAnexos(summary, pdfs, naoPdf, fecho);
+            byte[] merged = pdfBuilder.mergeComAnexos(capa, summary, pdfs, naoPdf, fecho);
 
             // 5. Adiciona cabecalho e numeracao em todas as paginas (mesmo
-            // padrao institucional do Relatorio Anual, via PdfCabecalhoStamper).
+            // padrao institucional do Relatorio Anual, via PdfCabecalhoStamper)
+            // - EXCETO na(s) pagina(s) de capa, que ja tem o brasao e o nome
+            // do orgao em tamanho grande no proprio corpo (carimba-la
+            // repetiria o brasao na mesma pagina). A contagem de paginas da
+            // capa e lida do PDF gerado em vez de assumida como 1: se o
+            // desenho da capa um dia crescer, o carimbo continua comecando no
+            // sumario, sem carimbar meia capa.
+            int paginasCapa;
+            try (com.lowagie.text.pdf.PdfReader leitorCapa = new com.lowagie.text.pdf.PdfReader(capa)) {
+                paginasCapa = leitorCapa.getNumberOfPages();
+            }
             String iniciais = Iniciais.de(p.getPacienteNome());
             return PdfCabecalhoStamper.estampar(merged,
                 PdfCabecalhoStamper.NOME_INSTITUICAO + " - URGÊNCIA RENAL",
-                "Processo CET-RS " + p.getNumero() + " - Paciente " + iniciais);
+                "Processo CET-RS " + p.getNumero() + " - Paciente " + iniciais,
+                paginasCapa + 1);
 
         } catch (Exception e) {
             throw new IllegalStateException("Falha ao gerar o relatorio PDF completo", e);
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Capa
+    // -----------------------------------------------------------------------
+
+    /**
+     * Monta os (poucos) dados que a capa exibe. Deliberadamente NAO repete a
+     * tabela de dados da secao "1." nem a tabela de avaliadores da secao "2."
+     * - repetir o sumario inteiro na folha de rosto foi o principal motivo de
+     * a capa antiga ter sido removida pelo R6 do relatorio V2 (achado 6.6).
+     *
+     * <p>Enquanto o processo nao foi decidido, a capa nunca anuncia o status
+     * de tramitacao como se fosse um desfecho ("Resultado: ENVIADO"): o titulo
+     * vira RELATORIO PARCIAL e o campo passa a se chamar "Situação", com o
+     * texto neutro "Em andamento" - mesma correcao ja aplicada a secao "3." do
+     * sumario (B4+A7 do relatorio V2).
+     */
+    private PdfRelatorioBuilder.DadosCapa dadosCapa(Processo p) {
+        boolean finalizado = p.getStatus().isFinalizado();
+
+        String situacao;
+        Color corSituacao;
+        if (finalizado) {
+            situacao = p.getStatus().getDescricao().toUpperCase();
+            corSituacao = switch (p.getStatus()) {
+                case DEFERIDO -> PdfRelatorioBuilder.VERDE_ESCURO;
+                case INDEFERIDO -> PdfRelatorioBuilder.VERMELHO;
+                default -> CINZA;
+            };
+        } else {
+            situacao = "Em andamento";
+            corSituacao = CINZA;
+        }
+
+        return new PdfRelatorioBuilder.DadosCapa(
+            finalizado ? "RELATÓRIO FINAL" : "RELATÓRIO PARCIAL",
+            finalizado
+                ? "Processo de Urgência Renal"
+                : "Processo de Urgência Renal (ainda não decidido)",
+            PdfRelatorioBuilder.nvl(p.getNumero()),
+            PdfRelatorioBuilder.nvl(p.getPacienteNome()),
+            finalizado ? "Resultado" : "Situação",
+            situacao,
+            corSituacao,
+            java.time.LocalDateTime.now().format(DATA_HORA));
     }
 
     // -----------------------------------------------------------------------
@@ -123,19 +189,14 @@ public class RelatorioService {
         // proprio AZUL institucional, ver PdfRelatorioBuilder.secao().
         Font fSecao = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, AZUL);
 
-        // Decisao 7 do relatorio V2 (§7.7): capa separada ELIMINADA - o
-        // proprio sumario (esta pagina) vira a folha de rosto do documento.
-        // Antes havia uma pagina inteira so de capa (brasao grande + nome do
-        // orgao + titulo + tabela de dados + tabela de avaliadores), cujo
-        // conteudo era subconjunto do que as secoes 1/2/3 abaixo ja repetem
-        // por completo (achado 6.6 do relatorio original) - sobrava
-        // inclusive um terco de pagina em branco, e DOIS brasoes na mesma
-        // dupla de paginas (o da capa e o do carimbo institucional). O
-        // Oficio de Indeferimento - a regua de qualidade do sistema - nunca
-        // teve capa propria e e igualmente formal (brasao + nome do orgao +
-        // titulo + corpo, tudo numa pagina so). O cabecalho institucional
-        // compacto abaixo (brasao pequeno + nome do orgao + secretaria)
-        // substitui a capa antiga sem repetir dado nenhum.
+        // O R6 do relatorio V2 (§7.7) tinha eliminado a capa separada e feito
+        // ESTA pagina virar a folha de rosto; em 2026-08-07 o dono do produto
+        // pediu a capa de volta (ver PdfRelatorioBuilder.gerarCapa). Este
+        // cabecalho compacto continua aqui de proposito: o sumario e a
+        // primeira pagina do CORPO do documento, e identificar o orgao no
+        // corpo (nao so no carimbo do topo) e o que o Oficio de Indeferimento
+        // - a regua de qualidade do sistema - tambem faz. Ele nao repete dado
+        // nenhum do processo, so orgao e secretaria.
         pdfBuilder.cabecalhoInstitucionalCompacto(doc);
 
         // Decisao 3 do relatorio V2 (§7.3): quando o processo AINDA NAO foi
@@ -151,11 +212,13 @@ public class RelatorioService {
         titulo.setAlignment(Element.ALIGN_CENTER);
         doc.add(titulo);
 
-        // A12: este e o UNICO carimbo de emissao do documento (data+hora) -
-        // a capa nao repete um segundo "emitido em" com formato diferente.
+        // A12 do relatorio V2 continua valendo com a capa de volta: o
+        // documento tem UM UNICO carimbo de emissao (data+hora), e desde
+        // 2026-08-07 ele mora na CAPA - por isso saiu daqui, em vez de as duas
+        // paginas trazerem a mesma informacao (eventualmente com segundos de
+        // diferenca entre si, ja que cada uma chamaria LocalDateTime.now()).
         Paragraph sub = new Paragraph(
-            p.identificacao() + "  |  Situação: " + p.getStatus().getDescricao()
-                + "  |  Emitido em " + java.time.LocalDateTime.now().format(DATA_HORA), fSub);
+            p.identificacao() + "  |  Situação: " + p.getStatus().getDescricao(), fSub);
         sub.setAlignment(Element.ALIGN_CENTER);
         sub.setSpacingAfter(14);
         doc.add(sub);

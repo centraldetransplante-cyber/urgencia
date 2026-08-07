@@ -24,6 +24,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -37,7 +38,9 @@ import static org.mockito.Mockito.when;
  *
  * <p>{@code gerarCapaProcesso} (capa isolada, usada pelo antigo endpoint
  * manual de Recebimento) foi removido em 2026-07-27 junto com o endpoint -
- * ver {@code ProcessoDetalheController}.
+ * ver {@code ProcessoDetalheController}. Nao confundir com a CAPA do
+ * Relatorio Final ({@code PdfRelatorioBuilder.gerarCapa}), reintroduzida em
+ * 2026-08-07 e coberta pelo bloco de testes no fim desta classe.
  */
 @ExtendWith(MockitoExtension.class)
 class RelatorioServiceTest {
@@ -94,14 +97,16 @@ class RelatorioServiceTest {
 
         byte[] pdf = novoService().gerar(p);
 
-        PdfReader reader = new PdfReader(pdf);
-        String pagina1 = new PdfTextExtractor(reader).getTextFromPage(1);
-        reader.close();
+        // Pagina 2, e nao 1: desde 2026-08-07 a pagina 1 e a CAPA, unica
+        // pagina do documento que NAO recebe o carimbo institucional (ver
+        // PdfRelatorioBuilder.gerarCapa). O carimbo comeca no sumario.
+        String sumario = extrairTextoDaPagina(pdf, 2);
 
-        // O cabecalho estampado (rodape/topo institucional, repetido em toda
-        // pagina) usa so as iniciais - a capa em si mostra o nome completo
-        // (documento interno de arquivamento, nao enviado ao avaliador).
-        assertThat(pagina1).contains("Processo CET-RS 01/2026 - Paciente J.S.");
+        // O cabecalho estampado (topo institucional, repetido em toda pagina
+        // carimbada) usa so as iniciais - a capa e o corpo do relatorio
+        // mostram o nome completo (documento interno de arquivamento, nao
+        // enviado ao avaliador).
+        assertThat(sumario).contains("Processo CET-RS 01/2026 - Paciente J.S.");
     }
 
     @Test
@@ -201,6 +206,175 @@ class RelatorioServiceTest {
         }
         reader.close();
         return texto.toString();
+    }
+
+    /** Extrai o texto de UMA pagina do PDF (base 1). */
+    private static String extrairTextoDaPagina(byte[] pdf, int pagina) throws Exception {
+        PdfReader reader = new PdfReader(pdf);
+        String texto = new PdfTextExtractor(reader).getTextFromPage(pagina);
+        reader.close();
+        return texto;
+    }
+
+    // -----------------------------------------------------------------------
+    // Capa (folha de rosto dedicada, reintroduzida em 2026-08-07 a pedido do
+    // dono do produto - o R6 do relatorio V2 a tinha eliminado). Os testes
+    // abaixo travam os criterios que justificaram aquela remocao, para a capa
+    // nova nao recair neles: nao duplicar o sumario, nao repetir o brasao do
+    // carimbo e nao quebrar o tamanho A4 corrigido pelo R5.
+    // -----------------------------------------------------------------------
+
+    @Test
+    void gerarComecaPelaCapaComOsDadosDeIdentificacaoDoProcesso() throws Exception {
+        Processo p = processoBase(StatusProcesso.DEFERIDO);
+        when(fluxoService.montarEtapas(any())).thenReturn(List.of());
+        when(processoService.contarFavoraveis(any())).thenReturn(1L);
+
+        String capa = extrairTextoDaPagina(novoService().gerar(p), 1);
+
+        assertThat(capa)
+            .contains("RELATÓRIO FINAL")
+            .contains("Central de Transplantes do Estado do Rio Grande do Sul")
+            .contains("01/2026")
+            .contains("Joao da Silva")
+            .contains("DEFERIDO")
+            .contains("Emitido em");
+    }
+
+    @Test
+    void capaNaoRecebeOCarimboInstitucionalNemNumeroDePagina() throws Exception {
+        // Um dos motivos concretos da remocao da capa antiga (R6/§7.7) era
+        // ter DOIS brasoes na mesma dupla de paginas: o da propria capa e o
+        // do carimbo do PdfCabecalhoStamper, que carimbava tambem a capa.
+        // Aqui isso e estrutural: o carimbo comeca na pagina seguinte.
+        Processo p = processoBase(StatusProcesso.DEFERIDO);
+        when(fluxoService.montarEtapas(any())).thenReturn(List.of());
+        when(processoService.contarFavoraveis(any())).thenReturn(1L);
+
+        byte[] pdf = novoService().gerar(p);
+
+        assertThat(extrairTextoDaPagina(pdf, 1))
+            .doesNotContain("Paciente J.S.")
+            .doesNotContain("Página 1 de");
+        assertThat(extrairTextoDaPagina(pdf, 2))
+            .contains("Paciente J.S.")
+            .contains("Página 2 de");
+    }
+
+    @Test
+    void capaNaoRepeteAsTabelasDoSumario() throws Exception {
+        // Achado 6.6 do relatorio original: a capa antiga reimprimia uma
+        // tabela de dados inteira MAIS a tabela de avaliadores que o sumario,
+        // logo depois, repetia por completo. A capa nova mostra 4 dados.
+        Processo p = processoBase(StatusProcesso.DEFERIDO);
+        when(fluxoService.montarEtapas(any())).thenReturn(List.of());
+        when(processoService.contarFavoraveis(any())).thenReturn(1L);
+
+        byte[] pdf = novoService().gerar(p);
+        String capa = extrairTextoDaPagina(pdf, 1);
+
+        assertThat(capa)
+            .doesNotContain("Dr. Teste")           // tabela de avaliadores
+            .doesNotContain("Equipe solicitante")  // tabela de dados
+            .doesNotContain("RGCT")
+            .doesNotContain("equipe@hospital.com");
+        // ...e o sumario continua trazendo tudo isso.
+        assertThat(extrairTextoDaPagina(pdf, 2))
+            .contains("Dr. Teste")
+            .contains("Equipe solicitante")
+            .contains("RGCT-1");
+    }
+
+    @Test
+    void documentoTemUmUnicoCarimboDeEmissaoEEleFicaNaCapa() throws Exception {
+        // Regra A12 do relatorio V2 preservada com a capa de volta: a data de
+        // emissao existe UMA vez no documento (saiu da linha de subtitulo do
+        // sumario quando a capa passou a traze-la), para as duas paginas nao
+        // exibirem horarios diferentes entre si.
+        Processo p = processoBase(StatusProcesso.DEFERIDO);
+        when(fluxoService.montarEtapas(any())).thenReturn(List.of());
+        when(processoService.contarFavoraveis(any())).thenReturn(1L);
+
+        byte[] pdf = novoService().gerar(p);
+
+        assertThat(extrairTexto(pdf).split("Emitido em", -1)).hasSize(2);
+        assertThat(extrairTextoDaPagina(pdf, 1)).contains("Emitido em");
+    }
+
+    @Test
+    void capaAnunciaRelatorioParcialQuandoOProcessoAindaNaoFoiDecidido() throws Exception {
+        // Mesma correcao ja feita na secao "3." do sumario (B4+A7): a capa
+        // nunca pode apresentar um status de tramitacao como se fosse o
+        // desfecho ("RESULTADO: ENVIADO").
+        Processo p = processoBase(StatusProcesso.ENVIADO);
+        p.getPareceres().get(0).setResultado(null);
+        p.getPareceres().get(0).setDataResposta(null);
+        when(fluxoService.montarEtapas(any())).thenReturn(List.of());
+        when(processoService.contarFavoraveis(any())).thenReturn(0L);
+
+        String capa = extrairTextoDaPagina(novoService().gerar(p), 1);
+
+        assertThat(capa)
+            .contains("RELATÓRIO PARCIAL")
+            .contains("SITUAÇÃO")
+            .contains("Em andamento")
+            .doesNotContain("RELATÓRIO FINAL")
+            .doesNotContain("RESULTADO")
+            .doesNotContain("ENVIADO");
+    }
+
+    @Test
+    void capaMostraOResultadoDoIndeferimento() throws Exception {
+        Processo p = processoBase(StatusProcesso.INDEFERIDO);
+        p.getPareceres().get(0).setResultado(ResultadoParecer.NAO_FAVORAVEL);
+        when(fluxoService.montarEtapas(any())).thenReturn(List.of());
+        when(processoService.contarFavoraveis(any())).thenReturn(0L);
+
+        assertThat(extrairTextoDaPagina(novoService().gerar(p), 1))
+            .contains("RELATÓRIO FINAL")
+            .contains("RESULTADO")
+            .contains("INDEFERIDO");
+    }
+
+    @Test
+    void capaMostraOResultadoDoCancelamento() throws Exception {
+        // CANCELADO tambem e status final: o documento continua se chamando
+        // RELATORIO FINAL e o desfecho aparece (em cinza, sem cor semantica
+        // de deferimento/indeferimento).
+        Processo p = processoBase(StatusProcesso.CANCELADO);
+        when(fluxoService.montarEtapas(any())).thenReturn(List.of());
+        when(processoService.contarFavoraveis(any())).thenReturn(0L);
+
+        assertThat(extrairTextoDaPagina(novoService().gerar(p), 1))
+            .contains("RELATÓRIO FINAL")
+            .contains("CANCELADO");
+    }
+
+    @Test
+    void todasAsPaginasGeradasPeloSistemaContinuamEmA4InclusiveACapa() throws Exception {
+        // R5 do relatorio V2: o Relatorio Final nunca tinha sido A4 de
+        // verdade (595x897pt). A capa e a UNICA pagina que nao passa pela
+        // expansao de 55pt do stamper, entao precisa nascer em A4 cheio - se
+        // alguem trocar isso por TAMANHO_PAGINA_SISTEMA, o documento passa a
+        // ter paginas de dois tamanhos e este teste falha.
+        Processo p = processoBase(StatusProcesso.DEFERIDO);
+        when(fluxoService.montarEtapas(any())).thenReturn(List.of());
+        when(processoService.contarFavoraveis(any())).thenReturn(1L);
+
+        PdfReader reader = new PdfReader(novoService().gerar(p));
+        try {
+            assertThat(reader.getNumberOfPages()).isGreaterThanOrEqualTo(2);
+            for (int i = 1; i <= reader.getNumberOfPages(); i++) {
+                assertThat(reader.getPageSize(i).getWidth())
+                    .as("largura da pagina " + i)
+                    .isCloseTo(com.lowagie.text.PageSize.A4.getWidth(), within(0.5f));
+                assertThat(reader.getPageSize(i).getHeight())
+                    .as("altura da pagina " + i)
+                    .isCloseTo(com.lowagie.text.PageSize.A4.getHeight(), within(0.5f));
+            }
+        } finally {
+            reader.close();
+        }
     }
 
     // -----------------------------------------------------------------------
@@ -359,9 +533,8 @@ class RelatorioServiceTest {
         assertThat(texto).doesNotContain("3. Decisão final");
         assertThat(texto).doesNotContain("Data de envio ao SNT");
         assertThat(texto).doesNotContain("Número do ofício");
-        // "Data da decisao" continua aparecendo na CAPA (adicionarCapa,
-        // rotulo fixo la) - so a secao "3." em si nao repete essa linha
-        // quando o processo ainda nao foi decidido.
+        // A capa (pagina 1) tambem nao anuncia desfecho nenhum neste caso -
+        // ver capaAnunciaRelatorioParcialQuandoOProcessoAindaNaoFoiDecidido.
     }
 
     /** PDF minimo valido contendo o texto informado, para simular um anexo real no disco. */
