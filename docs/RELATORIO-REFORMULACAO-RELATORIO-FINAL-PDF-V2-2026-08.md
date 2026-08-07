@@ -87,6 +87,26 @@ inspeção textual não captura, é esperado e deve ser tratado à parte.
 o layout da coluna "Página" já foi validado no protótipo do §6, falta só o
 mecanismo de duas passagens, "só se (a) e (c) não bastarem".
 
+## STATUS FINAL: IMPLEMENTADO — com o Bloco 4 (R6) REVERTIDO em 2026-08-07
+
+**Todo o plano acima foi de fato implementado e está em produção.** Porém, o
+**Bloco 4 (R6) — eliminação da capa separada — foi deliberadamente revertido
+no dia seguinte (2026-08-07)**, a pedido explícito do dono do produto
+("o relatório final em PDF dos processos precisa ter uma capa. Faça uma capa
+bonita."). A capa **voltou**, com um desenho novo (ver CLAUDE.md, seção
+"Capa do Relatório Final reintroduzida (2026-08-07) — reverte o R6") que
+resolve, através de outro caminho, os 3 problemas concretos que a remoção
+original tinha corrigido (repetição de tabela, espaço em branco, brasão
+duplicado com o carimbo) — não é uma regressão para o estado anterior ao R6,
+e sim um terceiro desenho, feito para não reintroduzir os defeitos antigos.
+
+Os Blocos 0, 1, 2 e 3 (R0, R1b+R2, R3b+R4, R5) **continuam implementados e
+intactos**, sem reversão nenhuma. Quem for mexer no Relatório Final de novo:
+o sumário voltou a ser uma página separada da capa (não é mais a folha de
+rosto); a capa é a **primeira** página do documento e é a única página sem
+o carimbo institucional do `PdfCabecalhoStamper` (ver
+`PdfRelatorioBuilder.gerarCapa` e `PdfCabecalhoStamper.estampar(..., primeiraPagina)`).
+
 ---
 
 ## 1. Sumário executivo

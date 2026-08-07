@@ -17,6 +17,30 @@ SAUR, entre os médicos avaliadores (perfil `AVALIADOR`) e a equipe operacional
 > explicitamente **"decisão do usuário"** e apresenta uma recomendação — nunca
 > decide sozinho.
 
+## STATUS: IMPLEMENTADO (2026-08-06/07, commit `6d9b8a5`)
+
+**Este relatório deixou de ser só diagnóstico — a proposta foi aprovada e
+construída.** Numa sessão retomada à noite do mesmo dia (ver CLAUDE.md, seção
+"Sessão de 2026-08-06/07... item 3, Feature nova — chat interno Avaliador
+(Membro) ↔ Operador"), o usuário reverteu uma decisão anterior de descartar a
+feature e aprovou a implementação das Fases F1–F5 do plano abaixo (F6/F7 —
+e-mail de notificação e canal geral sem processo associado — ficaram fora de
+escopo, deliberadamente).
+
+Resumo do que foi implementado, para quem for ler este relatório como
+histórico: entidade nova e separada `domain/MensagemAvaliador.java` (não
+reaproveita `MensagemSolicitacao`, cuja CHECK constraint de enum está
+congelada em produção); `service/MensagemAvaliadorService` espelhando
+`MensagemSolicitacaoService`; proteção de imparcialidade via
+`service/VerificadorNomePaciente.java` (bloqueio determinístico de nome do
+paciente/equipe solicitante na mensagem, por palavra inteira); endpoints em
+`AvaliadorController` (lado avaliador) e `ProcessoDetalheController` (lado
+operador); caixa de entrada em `GET /processos/mensagens-avaliadores`; reuso
+integral de `chat-solicitacao.js` sem modificação; auditoria sem texto da
+mensagem nem nome do paciente. Detalhes completos na seção do CLAUDE.md
+citada acima — este documento continua valendo como registro do diagnóstico e
+da arquitetura original que guiou a implementação.
+
 ---
 
 ## 1. Sumário executivo
