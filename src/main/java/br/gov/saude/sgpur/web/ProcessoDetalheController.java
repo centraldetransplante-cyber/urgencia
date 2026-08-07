@@ -419,8 +419,22 @@ public class ProcessoDetalheController {
         // maioria simples ja calcula (ProcessoValidator), nunca reimplementa a
         // regra aqui - se um dia a regra mudar, este texto some sozinho porque
         // deriva dos mesmos numeros usados para decidir.
+        //
+        // pausaBloqueiaDecisao: MESMO calculo de FluxoProcessoService.montarEtapas
+        // (ver PR #47) - "maioria formada" NAO significa "decisao liberada"
+        // enquanto o processo estiver em SOLICITA_INFORMACAO, exceto quando o
+        // coordenador da CET-RS ja votou favoravel (excecao que defere mesmo
+        // pausado). Sem isso, este card dizia "Maioria ja formada" e o alerta
+        // "Sugestao automatica: Deferido" sem nenhuma ressalva - achado A do
+        // docs/RELATORIO-BUG-DOIS-VOTOS-DEFEREM-DURANTE-PAUSA-2026-08.md (o PR
+        // #47 so corrigiu o texto da timeline lateral, nao este card).
+        boolean pausaBloqueiaDecisao = p.getStatus() == StatusProcesso.SOLICITA_INFORMACAO
+            && !processoService.temVotoCoordenadorFavoravel(p);
+        model.addAttribute("pausaBloqueiaDecisao", pausaBloqueiaDecisao);
         String fraseMaioria;
-        if (sugestao.isPresent()) {
+        if (sugestao.isPresent() && pausaBloqueiaDecisao) {
+            fraseMaioria = "Maioria formada, mas BLOQUEADA: aguardando informacao complementar";
+        } else if (sugestao.isPresent()) {
             fraseMaioria = "Maioria ja formada";
         } else if (pendentesVoto == 0) {
             fraseMaioria = "Todos os votos recebidos";

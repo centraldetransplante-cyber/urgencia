@@ -929,7 +929,16 @@
                         </table>
                     </div>
 
-                    <div class="alert alert-info py-2 mb-0 mt-2" th:if="${sugestao != null}">
+                    <div class="alert alert-warning py-2 mb-0 mt-2"
+                         th:if="${sugestao != null and pausaBloqueiaDecisao}">
+                        <i class="bi bi-shield-exclamation"></i>
+                        Sugestão automática: <strong th:text="${sugestao.descricao}"></strong> —
+                        mas a decisão está <strong>BLOQUEADA</strong> enquanto o processo aguarda
+                        informação complementar do solicitante. Registre o recebimento e retome
+                        a análise para liberar a decisão.
+                    </div>
+                    <div class="alert alert-info py-2 mb-0 mt-2"
+                         th:if="${sugestao != null and !pausaBloqueiaDecisao}">
                         <i class="bi bi-lightbulb"></i>
                         Sugestão automática: <strong th:text="${sugestao.descricao}"></strong>
                         (maioria simples de 2 em 3 votos, tanto para deferir quanto para

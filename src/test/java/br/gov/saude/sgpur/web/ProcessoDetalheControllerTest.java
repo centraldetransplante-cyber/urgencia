@@ -474,6 +474,75 @@ class ProcessoDetalheControllerTest {
             .andExpect(model().attribute("liberadoDecisao", false));
     }
 
+    /**
+     * Achado A do docs/RELATORIO-BUG-DOIS-VOTOS-DEFEREM-DURANTE-PAUSA-2026-08.md:
+     * com o processo pausado (SOLICITA_INFORMACAO) e maioria simples ja
+     * formada por 2 avaliadores comuns (sem o coordenador da CET-RS), o card
+     * de Respostas e o alerta "Sugestao automatica" diziam que a decisao
+     * estava pronta/Deferido sem nenhuma ressalva sobre a pausa - mesmo com a
+     * Decisao de fato bloqueada (ver
+     * detalheBloqueiaDecisaoQuandoAguardandoInformacaoComplementar). Renderiza
+     * o HTML de verdade (nao so os model attributes) porque o bug era
+     * especificamente de TEXTO na tela.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void abaRespostasAvisaQueDecisaoEstaBloqueadaQuandoMaioriaFormadaDurantePausaSemCoordenador() throws Exception {
+        processo.setStatus(StatusProcesso.SOLICITA_INFORMACAO);
+        MembroUrgenciaRenal m1 = membro(1L, "HCPA", "Ana");
+        MembroUrgenciaRenal m2 = membro(2L, "HCC", "Bruno");
+        MembroUrgenciaRenal m3 = membro(3L, "HSL", "Carla");
+        processo.addParecer(parecer(processo, m1, ResultadoParecer.FAVORAVEL,
+            LocalDate.now(), OrigemParecer.AVALIADOR_SISTEMA));
+        processo.addParecer(parecer(processo, m2, ResultadoParecer.FAVORAVEL,
+            LocalDate.now(), OrigemParecer.AVALIADOR_SISTEMA));
+        processo.addParecer(parecer(processo, m3, ResultadoParecer.SOLICITA_INFORMACAO,
+            LocalDate.now(), OrigemParecer.AVALIADOR_SISTEMA));
+        when(processoService.sugerirDecisao(processo)).thenReturn(Optional.of(StatusProcesso.DEFERIDO));
+        when(processoService.contarRespondidos(processo)).thenReturn(3L);
+        // temVotoCoordenadorFavoravel nao estubado = false (default do mock):
+        // nenhum dos 2 favoraveis e o coordenador.
+
+        String html = mvc.perform(get("/processos/1"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("pausaBloqueiaDecisao", true))
+            .andExpect(model().attribute("fraseMaioria",
+                "Maioria formada, mas BLOQUEADA: aguardando informacao complementar"))
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html)
+            .contains("BLOQUEADA</strong> enquanto o processo aguarda")
+            .doesNotContain("coordenador da CET-RS defere sozinho");
+    }
+
+    /**
+     * Contraste do teste acima: quando o coordenador da CET-RS ja votou
+     * Favoravel, a decisao NAO esta de fato bloqueada pela pausa (excecao
+     * documentada em CLAUDE.md) - o texto deve continuar dizendo "pronto"/
+     * "Maioria ja formada", sem a ressalva de bloqueio.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void abaRespostasNaoAvisaBloqueioQuandoCoordenadorJaVotouFavoravelDurantePausa() throws Exception {
+        processo.setStatus(StatusProcesso.SOLICITA_INFORMACAO);
+        MembroUrgenciaRenal m1 = membro(1L, "HCPA", "Ana");
+        processo.addParecer(parecer(processo, m1, ResultadoParecer.FAVORAVEL,
+            LocalDate.now(), OrigemParecer.AVALIADOR_SISTEMA));
+        when(processoService.sugerirDecisao(processo)).thenReturn(Optional.of(StatusProcesso.DEFERIDO));
+        when(processoService.contarRespondidos(processo)).thenReturn(1L);
+        when(processoService.temVotoCoordenadorFavoravel(processo)).thenReturn(true);
+
+        String html = mvc.perform(get("/processos/1"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("pausaBloqueiaDecisao", false))
+            .andExpect(model().attribute("fraseMaioria", "Maioria ja formada"))
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html)
+            .contains("coordenador da CET-RS defere sozinho")
+            .doesNotContain("BLOQUEADA</strong> enquanto o processo aguarda");
+    }
+
     @Test
     @WithMockUser(roles = "OPERADOR")
     void detalheIdentificaPareceresVotadosPeloPortalComoImutaveis() throws Exception {
