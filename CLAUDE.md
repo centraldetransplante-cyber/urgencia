@@ -2880,3 +2880,41 @@ impede a varredura dos demais candidatos elegíveis na mesma passada
 (isolamento de falha por item). O teste unitário com mocks foi mantido —
 continua sendo a cobertura mais rápida da lógica de orquestração em si.
 Suíte completa: **857 testes, 0 falhas** (JDK 21).
+
+## `@Version` em `Anexo`/`AnexoSolicitacaoOnline` (2026-08-07) — PENDENTE DE BACKFILL EM PRODUÇÃO
+
+As duas últimas entidades "quentes" sem lock otimista ganharam `@Version`
+(campo `versao`, mesmo padrão de `Processo`/`Usuario`/`MembroUrgenciaRenal`/
+`ControleUrgencia`/`SolicitacaoOnline`/`MensagemSolicitacao`). Sem isso, dois
+uploads concorrentes para o mesmo processo/solicitação podiam se sobrescrever
+silenciosamente (mesma classe de risco já corrigida nas outras entidades).
+
+**PENDÊNCIA EXPLÍCITA — backfill manual obrigatório em produção após o
+deploy** (mesmo pitfall de sempre, documentado na seção "Convenções de
+código" acima: `ddl-auto: update` cria a coluna nova com `NULL` nas linhas
+já existentes, e o primeiro `UPDATE` nelas quebra). Rodar no Postgres da VM
+logo após o deploy:
+```sql
+UPDATE anexo SET versao = 0 WHERE versao IS NULL;
+UPDATE anexo_solicitacao_online SET versao = 0 WHERE versao IS NULL;
+```
+Este backfill **não foi executado nesta sessão** — quem implementou não tem
+acesso à VM de produção. Fica registrado aqui como pendência até alguém com
+acesso confirmar a execução (mesmo padrão de "Backfill de `Usuario.versao`
+feito" documentado acima, mas para este seguinte).
+
+## Auditoria de `th:utext` (2026-08-07) — nenhuma ocorrência no projeto
+
+Verificação pontual pedida pelo usuário: `th:utext` renderiza HTML cru sem
+escapar (ao contrário de `th:text`), então qualquer uso sobre entrada de
+usuário (nome de paciente, justificativa, texto de mensagem etc.) seria um
+risco real de XSS armazenado. Grep completo em
+`src/main/resources/templates/**/*.html` (e no repositório inteiro, por
+segurança) não encontra **nenhuma** ocorrência de `th:utext` em nenhum
+template — as duas únicas menções à string no código são a lista de
+seletores de rótulo acessível do teste `AcessibilidadeBotaoIconeTest`
+(inclui `"th:utext"` na lista de atributos aceitos, mas não usa a diretiva)
+e um comentário já existente em `SecurityConfig` (linha ~76, sobre a CSP)
+que já documentava essa ausência como justificativa para manter
+`'unsafe-inline'` em script/style. Nenhuma correção de código foi necessária
+— risco **inexistente**, não apenas mitigado.
