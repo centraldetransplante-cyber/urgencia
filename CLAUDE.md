@@ -2858,3 +2858,19 @@ rótulo (bug real visto no primeiro PDF gerado).
 visualmente** (não só assertivas de texto) nos 3 casos, com duas iterações de
 ajuste a partir do que se viu (tamanho do brasão, leading do painel,
 equilíbrio vertical). Suíte completa: **844 testes, 0 falhas** (JDK 21).
+
+## Auditoria de `th:utext` (2026-08-07) — nenhuma ocorrência no projeto
+
+Verificação pontual pedida pelo usuário: `th:utext` renderiza HTML cru sem
+escapar (ao contrário de `th:text`), então qualquer uso sobre entrada de
+usuário (nome de paciente, justificativa, texto de mensagem etc.) seria um
+risco real de XSS armazenado. Grep completo em
+`src/main/resources/templates/**/*.html` (e no repositório inteiro, por
+segurança) não encontra **nenhuma** ocorrência de `th:utext` em nenhum
+template — as duas únicas menções à string no código são a lista de
+seletores de rótulo acessível do teste `AcessibilidadeBotaoIconeTest`
+(inclui `"th:utext"` na lista de atributos aceitos, mas não usa a diretiva)
+e um comentário já existente em `SecurityConfig` (linha ~76, sobre a CSP)
+que já documentava essa ausência como justificativa para manter
+`'unsafe-inline'` em script/style. Nenhuma correção de código foi necessária
+— risco **inexistente**, não apenas mitigado.
