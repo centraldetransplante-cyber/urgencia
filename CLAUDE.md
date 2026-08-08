@@ -3906,3 +3906,31 @@ ofício, cada um verificando por `content().string(...)` que a frase de
 
 **PR:** `fix/mensagem-comprovante-snt-contraditoria` (branch dedicada a
 partir de `main`, sem outra mudança de regra de negócio).
+
+## Fix: CSV/Formula Injection na exportação de auditoria (2026-08-08)
+
+Achado de vistoria de segurança: `AuditoriaController.exportar` (CSV de
+`/auditoria`, ver seção "Busca no banco..." acima para o contexto de que o
+termo de busca nunca é logado) escapava `;`, `"` e quebra de linha via
+`csvCampo(...)`, mas **não** neutralizava campos começando com `=`, `+`,
+`-` ou `@` — o vetor clássico de **CSV/Formula Injection**: Excel/
+LibreOffice interpretam esse tipo de campo como início de fórmula ao abrir
+o CSV (ex. um `detalhe`/`usuario`/`ip` malicioso começando com
+`=HYPERLINK(...)` podia disparar navegação/exfiltração de dado no
+computador de quem abre a exportação).
+
+**Correção (mitigação padrão OWASP):** `csvCampo` agora prefixa o valor com
+um apóstrofo `'` quando ele começa com `=`, `+`, `-` ou `@`, **antes** do
+escape de `;`/`"`/quebra de linha já existente — o apóstrofo faz o
+Excel/LibreOffice exibir o valor como texto puro, sem interpretar fórmula.
+Aplicado dentro do próprio `csvCampo`, então cobre as 4 colunas exportadas
+(data/hora, usuário, ação, detalhe, IP) sem duplicar a lógica.
+
+Coberto por `AuditoriaControllerTest`: um caso por caractere perigoso
+(`=`, `+`, `-`, `@`) no campo `detalhe`, um caso combinando `usuario`+`ip`
+maliciosos na mesma linha, e um caso de regressão confirmando que um valor
+normal (sem esses caracteres no início) **não** ganha o apóstrofo extra —
+não queremos poluir todo campo exportado.
+
+**PR:** `fix/csv-formula-injection-auditoria` (branch dedicada a partir de
+`main`, sem outra mudança de regra de negócio).
