@@ -123,6 +123,17 @@ public class SecurityConfig {
                 if (dev) {
                     auth.requestMatchers("/h2-console/**").permitAll();
                 }
+                // Actuator: SOMENTE /actuator/health e publico (health-check para
+                // monitoramento/deploy, sem exigir login). management.endpoints.web.
+                // exposure.include=health (application.yml/application-prod.yml) ja
+                // faz o Spring Boot nao registrar nenhum outro endpoint (/actuator/env,
+                // /actuator/beans etc. respondem 404, nem chegam a esta cadeia de
+                // seguranca) - a regra abaixo e defesa em profundidade explicita: se
+                // algum dia mais endpoints forem expostos por engano em
+                // exposure.include, eles NAO ficam liberados por padrao aqui, exigem
+                // ADMIN.
+                auth.requestMatchers("/actuator/health", "/actuator/health/**").permitAll()
+                    .requestMatchers("/actuator/**").hasRole("ADMIN");
                 // Precisa vir ANTES da regra geral /usuarios/** (ADMIN) - senao ninguem
                 // deslogado consegue acessar a recuperacao de senha, justamente quando
                 // mais precisa (nao consegue logar).

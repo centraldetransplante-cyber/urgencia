@@ -736,9 +736,25 @@ public class SolicitanteController {
             .body(resource);
     }
 
+    /**
+     * Resolve o usuario logado pelo username gravado na sessao.
+     *
+     * <p><b>Sessao orfa (mesmo bug real ja corrigido em
+     * {@code AvaliadorController.resolverMembro}):</b> se o usuario
+     * correspondente ao username da sessao nao existir mais no banco (ex.:
+     * um ADMIN trocou o {@code username} desse solicitante em
+     * {@code /usuarios}, ou excluiu a conta, enquanto ele tinha sessao ativa
+     * — o Spring Security nao rele o {@code UserDetails} a cada requisicao),
+     * lanca {@link SessaoInvalidaException} em vez de
+     * {@code ResponseStatusException(UNAUTHORIZED)}. O
+     * {@code GlobalExceptionHandler} trata esse tipo invalidando a sessao e
+     * redirecionando para {@code /login} com mensagem clara, em vez do 401
+     * cru que o navegador exibia antes.</p>
+     */
     private Usuario resolverUsuario(Principal principal) {
         return usuarioRepo.findByUsername(principal.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+            .orElseThrow(() -> new SessaoInvalidaException(
+                "Usuario da sessao (" + principal.getName() + ") nao encontrado no banco."));
     }
 
     /** Garante que a solicitacao pertence ao usuario logado (nunca ve pedido de outra equipe). */

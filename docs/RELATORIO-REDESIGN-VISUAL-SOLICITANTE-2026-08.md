@@ -10,6 +10,37 @@
 
 > *"o visual é tão simples e feio"*
 
+---
+
+## STATUS: IMPLEMENTADO (V1–V6) — leia antes de reimplementar
+
+| Item | Status |
+|---|---|
+| §10 — as 7 decisões de produto | **Aprovadas** pelo dono do produto em 2026-08-06 (nota no próprio §10) |
+| §8 — fases V1, V2, V3, V4, V5, V6 | **Implementadas e mescladas em `main`** pelo **PR #42** (`feat/redesign-visual-solicitante`), merge em 2026-08-06 14:40 UTC, um commit por fase |
+| §5.4 — reparo do ícone de `indisponivel.html` (`bi-tools` → envelope) | **Implementado em 2026-08-08** (era o único item do relatório que tinha ficado de fora do PR #42) |
+| Tokens do Anexo B (`--saur-elev-*`, `--saur-surface-*`, `--saur-on-*`, `--saur-font-2xl`) | **No `app.css`**, os 12 |
+| Classes novas previstas no Anexo B (as 10) | **No `app.css`**: `.pagina-cabecalho`, `.pagina-titulo`, `.secao-titulo`, `.secao-rotulo`, `.estado-vazio`, `.estado-vazio-icone`, `.cartao-resultado`, `.cartao-resultado-icone`, `.chip-protocolo`, `.superficie-apoio` |
+
+**Este documento descreve, do §1 ao §7, o estado ANTERIOR à implementação** —
+é o diagnóstico que a justificou, não o código de hoje. Nenhum achado das
+seções de diagnóstico (§4, §5) continua valendo como defeito atual: o
+`<h2 class="h6 text-muted">` foi substituído por `.secao-titulo`, a faixa de
+resumo deixou de ser 60% âmbar, os estados vazios ganharam ícone e ação, o
+cartão de resultado existe, e a marca passou a aparecer dentro das telas
+(`.pc-marca`). Antes de "corrigir" qualquer coisa listada aqui, **confira o
+código real**.
+
+**Por que este bloco existe:** uma vistoria de 2026-08-08 concluiu que este
+relatório *"nunca foi implementado e está esfriando"*, porque a nota do §10
+ainda dizia que a implementação seria "um passo separado, a ser retomado
+quando solicitado" — texto verdadeiro quando escrito e falso poucas horas
+depois. O trabalho estava feito e em produção; faltava só o registro. É
+exatamente a classe de erro que o CLAUDE.md já documenta em outras vistorias
+(*"o texto do guia estava desatualizado"*).
+
+---
+
 **Natureza da queixa:** estética e percepção, **não** funcionalidade. O fluxo,
 a hierarquia de informação e a carga cognitiva do Portal já foram tratados nas
 Fases 1–10 de `RELATORIO-UI-SOLICITANTE-AVALIADOR-2026-08.md` — todas
@@ -738,9 +769,14 @@ Nenhuma linha de código deve ser escrita antes destas respostas.
 > ficam fechadas na opção recomendada de cada uma (faixa suave nas
 > listas/formulário e sólida só no detalhe; marca d'água a 6% de opacidade
 > como no mockup; mudança restrita ao Portal do Solicitante por ora; mais
-> espaço vertical aceito). Nenhuma decisão aqui foi implementada ainda —
-> este relatório continua sendo só o registro; a implementação (plano
-> faseado do §8) é um passo separado, a ser retomado quando solicitado.
+> espaço vertical aceito).
+>
+> **IMPLEMENTADO em 2026-08-06** — ver o bloco de status no topo deste
+> arquivo. As seis fases do §8 (V1–V6) foram executadas e mescladas em
+> `main` pelo PR #42 no mesmo dia. Versões anteriores deste parágrafo
+> diziam *"nenhuma decisão aqui foi implementada ainda"*, o que deixou de
+> ser verdade poucas horas depois e induziu uma vistoria posterior ao erro
+> de concluir que o relatório inteiro nunca havia saído do papel.
 
 
 

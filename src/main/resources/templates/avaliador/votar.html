@@ -78,7 +78,7 @@
                             <iframe th:id="'pdfFrame' + ${iterStat.index}"
                                     th:src="@{/avaliador/{id}/pdf/{pdfId}(id=${processo.id},pdfId=${pdf.id})}"
                                     class="w-100 rounded border pdf-avaliador-frame" loading="lazy"
-                                    th:title="${'Visualizacao do processo anonimizado: ' + pdf.nomeArquivo}">
+                                    th:title="${'Visualização do processo anonimizado: ' + pdf.nomeArquivo}">
                                 <p class="small text-muted">
                                     Seu navegador não suporta visualização embutida de PDF.
                                     <a th:href="@{/avaliador/{id}/pdf/{pdfId}(id=${processo.id},pdfId=${pdf.id})}" target="_blank">Abra o arquivo em nova aba</a>.

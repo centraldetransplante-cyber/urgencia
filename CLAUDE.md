@@ -2485,13 +2485,44 @@ login novamente"), no mesmo padrão dos alertas já existentes para
 **Por que não foi tratado como caso geral do `UsuarioRepository.
 findByUsername` em todos os controllers:** o mesmo padrão
 (`findByUsername(...).orElseThrow(() -> new ResponseStatusException
-(UNAUTHORIZED))`) existe também em `SolicitanteController`,
+(UNAUTHORIZED))`) existia também em `SolicitanteController`,
 `SolicitacaoOnlineTriagemController` e `ProcessoDetalheController` — não
-foram tocados nesta correção (escopo pedido foi só o Portal do Avaliador,
-onde o bug foi reportado e reproduzido). Se o mesmo sintoma aparecer nesses
-outros portais, o mesmo padrão (`SessaoInvalidaException` +
-`GlobalExceptionHandler.handleSessaoInvalida`, que já é genérico e reusável
-por estar no `@ControllerAdvice` global) resolve sem duplicar código.
+foram tocados nesta correção original (escopo pedido foi só o Portal do
+Avaliador, onde o bug foi reportado e reproduzido). O mesmo padrão
+(`SessaoInvalidaException` + `GlobalExceptionHandler.handleSessaoInvalida`,
+já genérico e reusável por estar no `@ControllerAdvice` global) resolve sem
+duplicar código.
+
+**`SolicitanteController.resolverUsuario` corrigido em sessão separada
+(2026-08-08, PR #72).** Mesma troca (`SessaoInvalidaException` em vez de
+`ResponseStatusException(UNAUTHORIZED)`), sem nenhuma classe nova — só
+reaproveitando a infraestrutura já existente. Teste de regressão
+`SolicitanteSessaoOrfaIntegrationTest`, no mesmo modelo de
+`AvaliadorSessaoOrfaIntegrationTest` (sessão HTTP real via login por
+formulário, username renomeado por baixo da sessão ativa, mesma sessão
+reusada confirma redirect gracioso). `SecurityIntegrationTest.
+solicitanteAcessaOProprioPortal` e `SolicitanteControllerTest.
+resolverUsuarioLancaSessaoInvalidaQuandoUsuarioAutenticadoNaoExisteNoBanco`
+(renomeado de `...Lanca401...`) atualizados para o novo comportamento.
+`SolicitacaoOnlineTriagemController` e `ProcessoDetalheController`
+continuam com o padrão antigo pendente — se o mesmo sintoma aparecer
+nesses dois, é a mesma correção.
+
+**Replicado em `SolicitacaoOnlineTriagemController` (2026-08-08).** Os 5
+pontos desse controller (`detalhe`, `enviarMensagem`, `apagarMensagem`,
+`mensagensJson`, `enviarMensagemAjax`, `apagarMensagemAjax`) que resolviam
+o operador logado com o mesmo padrão antigo passaram a lançar
+`SessaoInvalidaException` também — mesma infraestrutura reaproveitada
+(`GlobalExceptionHandler.handleSessaoInvalida`), nenhuma classe nova. As
+demais `ResponseStatusException` desse controller (`baixarAnexo`, com
+`NOT_FOUND`/`FORBIDDEN` por posse de anexo) não foram tocadas, mesma
+distinção de escopo já explicada acima. Coberto por
+`SolicitacaoOnlineTriagemSessaoOrfaIntegrationTest` (mesmo modelo de
+`AvaliadorSessaoOrfaIntegrationTest`: sessão HTTP real via login por
+formulário, renomeia o `username` do operador "por baixo" da sessão ativa,
+confirma redirect gracioso e sessão de fato invalidada). `SolicitanteController`
+e `ProcessoDetalheController` continuam com o padrão antigo — se o mesmo
+sintoma aparecer neles, é o mesmo fix a aplicar.
 
 **Teste de regressão** (`AvaliadorSessaoOrfaIntegrationTest`, `@SpringBootTest`
 + H2 real, **sessão HTTP de verdade via login por formulário — não
@@ -4010,3 +4041,363 @@ branch nova e isolada a partir de `origin/main`
 (`fix/sessao-orfa-processodetalhe-e-nplus1-mensagens`) e commitando cada
 arquivo assim que confirmado correto, em vez de acumular edições
 não-commitadas por muito tempo na mesma working copy compartilhada.
+
+## Redesign visual do Portal do Solicitante (V1–V6) — registro atrasado + reparo final (2026-08-08)
+
+**Leia isto antes de abrir `docs/RELATORIO-REDESIGN-VISUAL-SOLICITANTE-2026-08.md`:
+aquele relatório JÁ FOI IMPLEMENTADO por inteiro.** Da §1 à §7 ele descreve o
+estado **anterior**, não o código de hoje.
+
+### O que aconteceu (e por que este registro chega atrasado)
+
+O relatório (2026-08-06) respondeu a uma queixa textual do dono do produto —
+*"o visual é tão simples e feio"* — sobre o Portal do Solicitante. Diagnosticou
+seis causas verificáveis (escala tipográfica de 2 degraus, cor institucional
+ausente do conteúdo, dourado semanticamente ocupado por "atenção", um único
+nível de sombra para 9 cartões, escala de espaçamento criada e não usada,
+estados vazios sem ação), propôs seis movimentos (M1–M6) e um plano faseado
+V1–V6, com mockups em `docs/mockups/`.
+
+As 7 decisões de produto do §10 foram **aprovadas explicitamente** pelo dono do
+produto no mesmo dia (decisão 1 → opção A; decisão 2 → sem elemento
+comemorativo; decisão 3 → só bootstrap-icons; e um *"suas recomendações são
+autorizadas"* que fechou as decisões 4–7 na opção recomendada de cada uma). As
+**seis fases foram implementadas e mescladas em `main` pelo PR #42**
+(`feat/redesign-visual-solicitante`), merge em 2026-08-06 14:40 UTC, um commit
+por fase (`58ca923` V1 → `7583829` V6).
+
+**O que falhou foi só o registro:** o CLAUDE.md nunca citou o relatório, e a
+nota do §10 continuou dizendo que a implementação seria *"um passo separado, a
+ser retomado quando solicitado"* — verdadeiro quando escrito, falso poucas
+horas depois. Resultado: uma vistoria de 2026-08-08 concluiu que o relatório
+*"nunca foi implementado e está esfriando"* e uma sessão foi aberta para
+implementá-lo de novo. **Nada foi reimplementado** — a sessão verificou o
+código real (os 12 tokens do Anexo B e as 10 classes previstas estão todos no
+`app.css`; as 4 telas consomem todos eles) e corrigiu a documentação.
+
+### O que está no código hoje (V1–V6, todas em produção)
+
+- **V1** — tokens: `--saur-elev-0/1/2`, `--saur-font-2xl`, e os pares
+  `--saur-surface-{ok,danger,attention,info}` / `--saur-on-*`. Nenhum matiz
+  novo: cada um aponta para um `--rs-*` que já existia.
+- **V2** — `.estado-vazio`/`.estado-vazio-icone` nos 4 pontos que não tinham
+  tratamento; a lista vazia do primeiro acesso ganhou o botão primário
+  "Enviar minha primeira solicitação".
+- **V3** — `.pagina-cabecalho` (faixa de identidade que emenda na navbar) +
+  escala tipográfica real: `.pagina-titulo`, `.secao-titulo` (1,25rem, cor de
+  texto real — não mais `h6 text-muted` de 1rem), `.secao-rotulo`. A marca
+  Gota+Cruz passou a existir dentro do conteúdo, como marca d'água
+  (`.pc-marca`, 6% na variante suave, 10% na sólida).
+- **V4** — `.cartao-resultado`: superfície tintada em largura total no lugar
+  da borda esquerda de 4px, ícone em token circular, `.chip-protocolo` com o
+  número do processo. **Simetria estrutural com assimetria cromática**
+  (decisão 2): Deferido e Indeferido usam exatamente o mesmo layout, mudando
+  só cor e ícone — sem nenhum elemento comemorativo.
+- **V5** — faixa de resumo recalibrada: "Aguardando triagem" e "Em análise"
+  deixaram de ser âmbar (viraram azul informativo), porque não exigem ação
+  nenhuma do solicitante. Só "Devolvidas" continua âmbar — o dourado voltou a
+  significar "você precisa agir".
+- **V6** — `nova.html` com ritmo visual real no lugar dos quatro `<hr>`, e a
+  zona de upload deixando de parecer mais um campo de texto.
+
+**Contraste:** em superfície tintada o texto usa **sempre** a variante `-dark`
+(Anexo C do relatório: `--rs-gold` sobre `--rs-gold-light` dá 1,85:1 e
+`--rs-green` sobre `--rs-green-light` dá 4,11:1 — os dois reprovam em WCAG AA).
+Não trocar por conta própria a variante base numa superfície clara.
+
+### Reparo desta sessão (o único item que faltava)
+
+`solicitante/indisponivel.html` usava `bi-tools` (ferramentas), que comunica
+"sistema quebrado / em manutenção", quando a mensagem real da tela é "seu
+perfil ainda não foi habilitado, continue usando o e-mail de sempre". Trocado
+por `bi-envelope-paper` (§5.4 do relatório, o reparo de 1 linha que tinha
+ficado de fora do PR #42). Ícone conferido contra o webjar antes da troca —
+`IconesBootstrapTest` reprova ícone inexistente.
+
+### Guarda automatizado novo: `RedesignVisualSolicitanteIT`
+
+A §11 do relatório é explícita: *"as asserções da suíte e o E2E podem ficar
+inteiramente verdes com o Portal visualmente quebrado"* — os testes normais
+verificam status HTTP, model attributes e presença de texto/id, **nunca** cor,
+tamanho, espaçamento ou sombra. O redesign inteiro entrou em produção sem
+nenhum guarda: bastava trocar `.secao-titulo` de volta por `h6 text-muted`
+para o Portal voltar ao estado que gerou a queixa, sem uma única falha.
+
+`src/test/java/br/gov/saude/sgpur/e2e/RedesignVisualSolicitanteIT.java`
+(Playwright, profile `e2e`, mesmo padrão de `ChatVisualVerificacaoIT`) mede o
+**CSS computado pelo navegador**, não o texto do template, e cada asserção
+mira um achado nominal do diagnóstico: título de seção estritamente **maior**
+que o corpo de texto (§4.1), faixa de cabeçalho com fundo que de fato pinta
+nas duas variantes (§4.2), estado vazio com ícone e ação (§4.6), e a marca
+dentro do conteúdo (§4.7). Gera screenshots em `target/e2e-screenshots/`
+também em viewport de celular — **não substitui** a revisão visual humana que
+o §11 exige, só garante que ela tenha o que olhar e que o básico não regrediu.
+
+### O que continua PENDENTE DE DECISÃO do dono do produto
+
+Nada disto foi implementado, e nenhum é bug — são caminhos que o próprio
+relatório deixou explicitamente em aberto:
+
+1. **Estender o redesign ao Portal do Avaliador** (decisão 6). Foi aprovada a
+   opção A: aplicar **só** ao Solicitante e *"avaliar o Avaliador depois, com
+   o aprendizado"*. Esse "depois" nunca foi perguntado. As classes novas são
+   reaproveitáveis; o custo é dobrar a superfície de revisão visual.
+2. **Dourado como cor de marca** (decisão 1, opção B). Aprovada a opção A (o
+   dourado continua sendo "atenção"). A opção B exigiria uma cor nova na
+   paleta e revisão de **todos** os `alert-warning`/badge âmbar do sistema,
+   inclusive das telas do operador — é um projeto de identidade visual
+   próprio, não um redesenho de portal.
+3. **Ilustrações SVG próprias derivadas do logo** (decisão 3, opção b —
+   gota+relógio para "aguardando", gota+check para "deferido"). Aprovada a
+   opção (a): só bootstrap-icons ampliados em tokens circulares. A (b) exige
+   alguém com traquejo de ilustração e tem risco real de ficar amador.
+4. **Estender à área do operador** (decisão 6, opção C) — o relatório
+   **desaconselha**: ela acabou de passar por 5 fases de UI e usa densidade
+   `operacional`, com objetivos opostos aos do Portal.
+
+### Lição de processo (recaída conhecida)
+
+Esta é a **terceira** vez que uma vistoria conclui algo errado por causa de
+texto desatualizado num documento — as duas anteriores estão registradas em
+"Vistoria de 2026-07-31" (enums removidos ainda descritos como "legado, só
+leitura") e no header do relatório V2 do Relatório Final. **Ao terminar de
+implementar um relatório faseado, atualizar o header do próprio relatório e
+citar o resultado no CLAUDE.md faz parte da tarefa** — sem isso o trabalho
+some da memória do projeto e alguém propõe refazê-lo.
+
+## Actuator com /actuator/health público + acentuação no Portal do Avaliador (2026-08-08)
+
+Duas melhorias independentes, mesmo PR, branch `feat/actuator-health-e-
+acentuacao-avaliador` a partir de `main`.
+
+### 1. Acentuação faltando no `title` dinâmico de `avaliador/votar.html`
+
+`th:title="${'Visualizacao do processo anonimizado: ' + pdf.nomeArquivo}"`
+(atributo `title` do `<iframe>` que mostra o PDF anonimizado) estava sem
+acento — corrigido para "Visualização". Esse é exatamente o tipo de string
+que escapa de buscas de texto HTML plano: literal dentro de uma expressão
+Thymeleaf concatenada (`${'texto' + var}`), não texto solto entre tags.
+Varredura feita em todo `src/main/resources/templates/**/*.html` por esse
+padrão específico (`th:title="${'...'`,  `th:attr=...='...'`, concatenações
+`${'texto' + var}`/`${var + 'texto'}`) — esse era o único caso encontrado.
+
+### 2. Spring Boot Actuator — só `/actuator/health`, público, sem detalhes
+
+Adicionado `spring-boot-starter-actuator` ao `pom.xml`. Motivação: dar a um
+health-check externo (script de deploy, monitoramento, um eventual balanceador)
+um jeito padrão de perguntar "o app está de pé?" sem precisar autenticar e
+sem depender de uma rota de negócio (`/login` sempre 200 mesmo com o banco
+fora do ar, por exemplo, não serve como sinal).
+
+- `management.endpoints.web.exposure.include=health` em `application.yml`
+  (dev) **e** `application-prod.yml` (repetido explicitamente nos dois —
+  não herdado por acidente, para nunca depender de alguém lembrar de manter
+  os dois perfis em sincronia). **Nenhum outro endpoint** (`/actuator/env`,
+  `/actuator/beans`, `/actuator/mappings` etc.) é exposto.
+- `management.endpoint.health.show-details=never`: nem o único endpoint
+  liberado mostra detalhes internos (ex.: a URL do datasource) — só o status
+  agregado (`UP`/`DOWN`), suficiente para um health-check automatizado.
+- `SecurityConfig` libera `/actuator/health` e `/actuator/health/**` como
+  `permitAll()`, e adiciona `.requestMatchers("/actuator/**").hasRole("ADMIN")`
+  como defesa em profundidade explícita para qualquer outro subpath de
+  `/actuator/**`.
+- **Comportamento real confirmado por teste manual (não presumido):** como
+  o Spring Boot só registra os endpoints listados em
+  `management.endpoints.web.exposure.include`, `/actuator/env`/`/actuator/beans`/
+  `/actuator` (raiz) **não existem como bean nenhum** — mesmo autenticado
+  como ADMIN via `POST /login` de verdade (sessão HTTP real, não
+  `@WithMockUser`), a resposta é **404**, não "200 vazio" nem "403". Sem
+  login, caem no `.hasRole("ADMIN")`/`anyRequest().authenticated()` e
+  redirecionam 302 para `/login` antes mesmo de chegar a um controller —
+  então a regra explícita do `SecurityConfig` é redundante com o 404 nativo
+  do Boot, mas intencional: se um dia mais endpoints forem adicionados a
+  `exposure.include` por engano, eles não ficam liberados por padrão, viram
+  ADMIN-only em vez de público.
+- **Achado ao testar de verdade (não presumido a partir da doc):** com
+  `spring-boot-starter-mail` no classpath, o Actuator auto-registra um
+  `MailHealthIndicator` que abre uma conexão SMTP real a cada consulta —
+  em dev (sem `SGPUR_MAIL_USER`/`SGPUR_MAIL_PASS`, contra `smtp.gmail.com`)
+  isso derrubava o health inteiro para `DOWN` só por causa do SMTP, mesmo
+  com banco/disco saudáveis. Corrigido com
+  `management.health.mail.enabled=false` (nos dois perfis) — `db` e
+  `diskSpace` continuam ativos (default do Boot, não desligados). Um Gmail
+  temporariamente instável não deve derrubar o sinal de "o app está de pé".
+
+**Validação real, não só a suíte:** aplicação subida de verdade
+(`mvn spring-boot:run`, H2, porta alternativa por já haver outra instância
+rodando na 3000 nesta máquina) e testada com `curl`:
+`GET /actuator/health` → `200 {"status":"UP"}` sem cookie/login nenhum;
+`GET /actuator/env`, `/actuator/beans`, `/actuator` (raiz) → `302` para
+`/login` sem sessão, e **`404`** com uma sessão ADMIN autenticada de
+verdade (login real via `POST /login` com CSRF, não simulado).
+
+**Suíte completa: 898 testes, 0 falhas** (JDK 21). A única falha vista numa
+rodada isolada (`ComprovanteSntPendenteQueriesIntegrationTest
+.registrarUltimoLembreteSntGravaOTimestampNoBanco`) é a flakiness de
+precisão de timestamp do H2 já documentada em sessões anteriores deste
+arquivo — reproduzida e confirmada passando ao rodar essa classe sozinha
+logo em seguida, sem nenhuma mudança de código entre as duas rodadas.
+
+**Nota operacional desta sessão:** o checkout local (`c:\Users\rafae\
+projetos\urgencia`) estava sendo usado concorrentemente por outras sessões/
+agentes automatizados no momento desta tarefa (branches `worktree-agent-*`,
+trocas de branch e `git stash` de trabalho alheio acontecendo no meio da
+implementação). O trabalho desta tarefa foi isolado num `git worktree`
+próprio (`c:\Users\rafae\projetos\urgencia-actuator-wt`, mesma branch
+`feat/actuator-health-e-acentuacao-avaliador`) para não sofrer interferência
+— toda a validação (compilação, suíte, `mvn spring-boot:run` + `curl`) foi
+feita nesse worktree isolado, não no checkout principal compartilhado.
+
+## Status do relatório UI-Clareza-Operador (2026-08-05) — verificado em 2026-08-08
+
+O `docs/RELATORIO-UI-CLAREZA-OPERADOR-2026-08.md` (diagnóstico + plano sobre
+poluição visual de `processos/detalhe.html` e telas correlatas, gatilho:
+feedback do dono do produto sobre a aba Envio) nunca tinha ganhado um
+parágrafo de status neste arquivo, ao contrário de todos os outros
+relatórios de diagnóstico do projeto. Esta seção fecha essa lacuna, com
+verificação linha a linha do relatório contra o código real (não presumido).
+
+**Achado principal da vistoria: quase todo o plano (FASES 1 a 8) já estava
+implementado antes desta sessão**, espalhado por commits/PRs anteriores que
+não tinham sido registrados de volta no relatório nem citados explicitamente
+aqui como "isto resolve o RELATORIO-UI-CLAREZA". Confirmado lendo o código
+atual de `processos/detalhe.html`, `dashboard.html`, `processos/lista.html`,
+`processos/solicitacoes-online-lista.html`,
+`processos/solicitacoes-online-detalhe.html`, `controle-urgencias/lista.html`,
+`usuarios/form.html`, `FluxoProcessoService`, `service/dto/EtapaFluxo.java`:
+
+- **FASE 1 (verdade da tela)** — §4.4 (texto obsoleto de "anexo
+  comprobatório" na Decisão), §4.5 ("registre as datas" na Finalização),
+  §4.6 ("aba 1. Envio"/"lançar as respostas"), §4.9 (duplicação no
+  Recebimento — hoje nem existe mais como aba própria, fundida em Envio em
+  2026-08-05), §4.13a (acentuação residual do template) e §5.2 (manual
+  permanente na triagem): **todos corrigidos**. Confirmado por grep: nenhuma
+  ocorrência de `comprobat`/`registre as datas`/`aba <strong>1. Envio` em
+  `src/main/resources/templates`, e nenhum resíduo de
+  `concluido|concluida|concluidas|Avancar|solicitacao|decisao|oficio|
+  informacao|analise` em texto visível (fora de comentário/atributo) em
+  **nenhum** template do projeto — não só em `detalhe.html`.
+- **FASE 2 (hierarquia por classe CSS)** — §4.11 (e-mails prontos: "Copiar
+  corpo" virou `btn-outline-secondary`, "Enviar agora por e-mail" virou
+  `btn-danger` sólido) e a parte visual do §4.3 (botão "Registrar envio" em
+  `btn-lg w-100` dentro de um `d-grid`): **já implementados**. **§4.10
+  (atalhos: uma cor por significado) era o único item pendente desta fase**
+  — corrigido nesta sessão, ver abaixo.
+- **FASE 3 (`.subpasso` e conclusão visual, ⚑ raiz da queixa original)** —
+  §4.1 (componente `.subpasso*` no `app.css`, cor por ESTADO em vez de
+  posição) e §4.2 (reescrita do sub-passo 1 da aba Envio em
+  instrução/regra/`<details>`/condicional): **implementados**. A aba Envio
+  hoje usa `<section class="subpasso" th:classappend="... 'subpasso-ok' :
+  'subpasso-atual'">` com `subpasso-num`/`subpasso-head`/`subpasso-regra`/
+  `subpasso-ajuda` (`processos/detalhe.html`, em torno da linha 517).
+- **FASE 4 (confirmação do envio aos avaliadores, ⚠E2E)** — §4.3: o form de
+  `registrar-envio` já tem `data-confirm-msg` dinâmico com a lista de
+  destinatários e a promessa exata do que o clique faz; `ProcessoDetalhePage`
+  já clica em `#btnConfirmarAcaoFinal` nesse fluxo. **Implementado.**
+- **FASE 5 (abas Respostas e Decisão)** — §4.7 (placar promovido para o topo
+  do card "Respostas dos Avaliadores", com botão "Ir à Decisão" ao lado
+  quando a maioria já se formou) e a parte estrutural do §4.4 (`<details>`
+  "Quando usar o formulário abaixo" na aba Decisão): **implementados**. A
+  confirmação de "Registrar decisão" (a sugestão opcional desta fase) também
+  já existe (`data-confirm-msg` dinâmico conforme a opção do `<select>`,
+  ver seção "Confirmação antes de Registrar decisão" acima neste arquivo,
+  2026-08-05).
+- **FASE 6 (aba Finalização, ⚠)** — §4.8 (`.subpasso` aplicado a
+  Ofício/Comprovante/Resposta ao solicitante, com a pendência dita uma única
+  vez — o segundo alerta virou `title` do botão desabilitado, exposto também
+  como `<p class="subpasso-regra">` visível) e §4.12 (card "Todos os anexos"
+  colapsado por padrão, com contador no cabeçalho): **implementados**. A aba
+  Finalização caiu de 8 para 6 caixas de alerta (a meta do relatório era ≤4;
+  os 2 alertas restantes são o "ofício/comprovante ainda não anexado" e o
+  aviso informativo sobre o ofício ser sempre um anexo, não gerado —
+  considerados aceitáveis por não serem duplicação de informação, só não
+  perseguidos até o número exato porque essa aba é o "bloco mais delicado da
+  tela" citado pelo próprio relatório, ⚠ risco médio de mexer mais).
+- **FASE 7 (rótulo curto de pendência + acentuação vinda do Java, ⚠)** —
+  §4.13b (`EtapaFluxo.Chave`, casamento por código em vez de string, com o
+  `titulo` livre para ser acentuado) e §5.1 (`pendenciaAberta` devolvendo o
+  `EtapaFluxo` inteiro, com o rótulo curto na célula e o detalhe completo no
+  `title`): **implementados por completo**. `EtapaFluxo` já tem o enum
+  `Chave` (`ENVIO, RESPOSTAS, INFO_COMPLEMENTAR, DECISAO, OFICIO,
+  COMPROVANTE_SNT, RESPOSTA_SOLICITANTE`) com javadoc citando explicitamente
+  o item 4.13b como motivo da separação; os títulos em
+  `FluxoProcessoService.montarEtapas`/`montarPassosWizard` já saem
+  acentuados ("Envio aos 3 médicos", "Decisão final", "4. Finalização"
+  etc.); `dashboard.html` e `processos/lista.html` já exibem só
+  `pendencias.get(id).titulo()` na célula com `title="... + detalhe()"`.
+- **FASE 8 (higiene das demais telas)** — §5.3 (ações de
+  `solicitacoes-online-detalhe.html` promovidas para o cabeçalho, "Devolver"
+  como `btn-outline-secondary`), §5.4 (`controle-urgencias/lista.html`:
+  decisão explícita — Editar/Cancelar só ícone, Renovar com texto por ser a
+  ação mais frequente, com comentário no próprio template citando o item
+  5.4) e §5.5 (JS de `usuarios/form.html` extraído para
+  `static/js/usuario-form.js`): **todos implementados**.
+
+**O que foi implementado NESTA sessão (2026-08-08):** só o item pendente da
+FASE 2 — **§4.10, hierarquia de cor do card "Atalhos"**
+(`processos/detalhe.html`, card lateral esquerdo). Antes, "Relatório Final
+(PDF)" usava `btn-outline-danger` — a **mesma cor** de "Excluir processo",
+treinando o olho a ignorar o vermelho onde ele de fato importa (ação
+destrutiva) — e "Ofício"/"Comprovante SNT"/"ZIP"/"Editar processo" usavam
+mais três cores diferentes sem critério (`warning`, `success`, `primary`).
+Corrigido para `btn-outline-secondary` em todos os downloads/ações neutras
+(Relatório Final, Ofício, Comprovante SNT, ZIP, Editar), deixando
+`btn-outline-danger` exclusivo de "Excluir processo" — já separado por
+`<hr>` desde antes. Só classes CSS; nenhum texto de botão, `id`, `action` ou
+regra de negócio mudou (`ProcessoDetalhePage:180` localiza o botão por
+`has-text('Relatório Final (PDF)')`, preservado). Suíte completa validada
+após a mudança: **898 testes, 0 falhas reais** (1 falha vista era o flake de
+precisão de nanossegundo já documentado em
+`ComprovanteSntPendenteQueriesIntegrationTest`, reproduzido também isolado
+antes desta sessão e confirmado não-relacionado — passa isoladamente).
+
+**O que ficou pendente, e por quê** (nenhum mexido nesta sessão — todos são
+risco médio/alto ou dependem de decisão de produto explícita, conforme o
+próprio relatório já sinalizava com ⚠):
+- **§4.8, meta exata de "≤4 alertas na Finalização"** não perseguida até o
+  fim — os 6 alertas restantes (contra os 8 originais) não são duplicação;
+  reduzir mais exigiria reestruturar o bloco mais sensível da tela (duas
+  ações irreversíveis finais), fora do apetite de risco desta sessão de
+  verificação.
+- **§4.9 "fora de fase" (eliminar de vez a etapa Recebimento do wizard)** —
+  já não é mais uma pendência: o Recebimento deixou de ter aba própria desde
+  2026-08-05 (ver seção "Recebimento fundido em Envio" acima). O texto do
+  relatório sobre isso é histórico.
+- **"Fragmentar `processos/detalhe.html`"** (item 2 de "Fora de fase") —
+  **decisão de produto explícita de NÃO fazer**, herdada do relatório
+  anterior (`RELATORIO-UI-OPERADOR-SISTEMA-2026-08.md`, §10) e reafirmada
+  pelo próprio `RELATORIO-UI-CLAREZA-OPERADOR-2026-08.md`. Não implementado
+  de propósito, não é uma pendência técnica.
+
+**Conclusão:** o plano do relatório estava, na prática, **quase 100%
+concluído** antes desta sessão de verificação — só não havia registro
+consolidado disso em nenhum lugar. Esta seção supre esse registro; a única
+mudança de código desta sessão foi o item 4.10.
+
+## Fix: CSV/Formula Injection na exportação de auditoria (2026-08-08)
+
+Achado de vistoria de segurança: `AuditoriaController.exportar` (CSV de
+`/auditoria`, ver seção "Busca no banco..." acima para o contexto de que o
+termo de busca nunca é logado) escapava `;`, `"` e quebra de linha via
+`csvCampo(...)`, mas **não** neutralizava campos começando com `=`, `+`,
+`-` ou `@` — o vetor clássico de **CSV/Formula Injection**: Excel/
+LibreOffice interpretam esse tipo de campo como início de fórmula ao abrir
+o CSV (ex. um `detalhe`/`usuario`/`ip` malicioso começando com
+`=HYPERLINK(...)` podia disparar navegação/exfiltração de dado no
+computador de quem abre a exportação).
+
+**Correção (mitigação padrão OWASP):** `csvCampo` agora prefixa o valor com
+um apóstrofo `'` quando ele começa com `=`, `+`, `-` ou `@`, **antes** do
+escape de `;`/`"`/quebra de linha já existente — o apóstrofo faz o
+Excel/LibreOffice exibir o valor como texto puro, sem interpretar fórmula.
+Aplicado dentro do próprio `csvCampo`, então cobre as 4 colunas exportadas
+(data/hora, usuário, ação, detalhe, IP) sem duplicar a lógica.
+
+Coberto por `AuditoriaControllerTest`: um caso por caractere perigoso
+(`=`, `+`, `-`, `@`) no campo `detalhe`, um caso combinando `usuario`+`ip`
+maliciosos na mesma linha, e um caso de regressão confirmando que um valor
+normal (sem esses caracteres no início) **não** ganha o apóstrofo extra —
+não queremos poluir todo campo exportado.
+
+**PR:** `fix/csv-formula-injection-auditoria` (branch dedicada a partir de
+`main`, sem outra mudança de regra de negócio).
