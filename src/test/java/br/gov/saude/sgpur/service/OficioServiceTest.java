@@ -228,7 +228,7 @@ class OficioServiceTest {
 
         String texto = textoDaPagina1(service.gerar(p));
 
-        assertThat(texto).contains("(numero nao atribuido)");
+        assertThat(texto).contains("(número não atribuído)");
     }
 
     // ----- rascunho editavel (.rtf) -----
@@ -297,8 +297,50 @@ class OficioServiceTest {
 
         String rtf = rascunho(p);
 
-        assertThat(rtf).contains(OficioService.NUMERO_NAO_ATRIBUIDO);
-        assertThat(rtf).contains("(motivo nao informado)");
+        // Os fallbacks (numero e motivo) sao acentuados desde a correcao de
+        // 2026-08-08 - comparar contra o texto RTF CRU exige o mesmo escape
+        // \'hh que escaparRtf produz, entao decodifica antes de comparar.
+        assertThat(desescapaRtf(rtf)).contains(OficioService.NUMERO_NAO_ATRIBUIDO);
+        assertThat(desescapaRtf(rtf)).contains("(motivo não informado)");
         assertThat(rtf).contains(String.valueOf(LocalDate.now().getYear()));
+    }
+
+    /**
+     * Todos os literais fixos do rascunho (departamento, "Ofício nº",
+     * corpo, fecho) precisam sair acentuados - documento oficial que vai ao
+     * Word do operador. Corrigido em 2026-08-08 (achado numa simulacao real
+     * de QA: o rascunho estava sem nenhum acento, ao contrario do PDF).
+     */
+    @Test
+    void rascunhoTemAcentuacaoCorretaNosTextosFixos() {
+        String rtf = desescapaRtf(rascunho(processoCompleto()));
+
+        assertThat(rtf)
+            .contains("Departamento de Regulação Estadual")
+            .contains("Divisão de Transplantes")
+            .contains("Ofício nº 1398/2026")
+            .contains("Em referência ao Processo de Urgência Renal n.")
+            .contains("comunicamos que, após análise dos pareceres da equipe de Urgência Renal")
+            .contains("Permanecemos à disposição para os esclarecimentos que se fizerem necessários.")
+            .contains("À equipe solicitante");
+    }
+
+    /**
+     * Reverte o escape \'hh (ISO-8859-1/cp1252, ver {@link OficioService#escaparRtf})
+     * de volta para os caracteres originais, para permitir asserts com
+     * acentuacao legivel sobre o texto RTF cru gerado pelo servico.
+     */
+    private static String desescapaRtf(String rtf) {
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < rtf.length(); i++) {
+            if (rtf.charAt(i) == '\\' && i + 3 < rtf.length() && rtf.charAt(i + 1) == '\'') {
+                String hex = rtf.substring(i + 2, i + 4);
+                out.append((char) Integer.parseInt(hex, 16));
+                i += 3;
+            } else {
+                out.append(rtf.charAt(i));
+            }
+        }
+        return out.toString();
     }
 }

@@ -1924,6 +1924,49 @@ indeferimento, que vai à equipe solicitante. Esse item continua **não
 implementado**; o modelo foi usado aqui só como referência de estrutura
 (numeração, cabeçalho do departamento, bloco do destinatário).
 
+### Bug corrigido: rascunho RTF sem acentuação (2026-08-08)
+
+Achado numa simulação real de QA: `OficioService.gerarRascunhoRtf` tinha
+todos os literais Java fixos **sem nenhum acento** ("Regulacao", "Divisao",
+"Oficio n", "apos analise", "Permanecemos a disposicao" etc.) — diferente do
+PDF antigo (`OficioService.gerar`), que a seção anterior já registra como
+corrigido (acentuação correta, é documento oficial). O rascunho RTF é
+exatamente esse mesmo documento oficial, só que editável — não fazia sentido
+os dois caminhos divergirem.
+
+**Correção:** todos os literais fixos de `gerarRascunhoRtf` foram acentuados
+("Regulação", "Divisão", "Ofício nº", "após análise", "Permanecemos à
+disposição", "À equipe solicitante", etc. — inclusive o fallback do motivo,
+`"(motivo não informado)"`, que já era acentuado no PDF mas não no RTF) e o
+fallback `OficioService.NUMERO_NAO_ATRIBUIDO` (compartilhado entre PDF e RTF)
+passou de `"(numero nao atribuido)"` para `"(número não atribuído)"` — o PDF
+também ganhou a acentuação correta nesse placeholder de tabela, que tinha
+escapado da correção original por estar numa constante à parte.
+
+**Nenhuma mudança no mecanismo de escape em si.** `OficioService.escaparRtf`
+já cobria corretamente qualquer caractere fora do ASCII (`\'hh` no code page
+`\ansicpg1252` declarado no cabeçalho do RTF) — usado tanto para texto
+dinâmico (nome do paciente, motivo) quanto, através dos helpers `linha`/
+`centralizado`, para os literais fixos. Bastava acentuar as strings Java
+(`ç`, `ã`, `é`, `í`, `ú`, `à`, `À`, `º` etc.) normalmente — elas passam pelo
+mesmo `escaparRtf` de sempre e saem como `\'hh`, nunca cru. **Não colocar
+acento cru fora desse caminho**: qualquer literal novo em `gerarRascunhoRtf`
+deve continuar entrando via `linha(...)`/`centralizado(...)`, nunca
+concatenado direto no `StringBuilder` sem passar pelo escape.
+
+**Validado gerando o RTF de verdade** (não só por assertiva de texto): um
+teste escreveu `gerarRascunhoRtf(...)` em disco e o arquivo foi lido byte a
+byte — confirmado que cada acento vira a sequência `\'hh` esperada (ex.
+`Regula\'e7\'e3o` = "Regulação", `Of\'edcio n\'ba` = "Ofício nº", `\'c0
+equipe` = "À equipe") e que a estrutura RTF (chaves balanceadas, sem
+corrupção) permanece intacta. Coberto por
+`OficioServiceTest.rascunhoTemAcentuacaoCorretaNosTextosFixos` (decodifica o
+`\'hh` de volta para o caractere original via um helper de teste,
+`desescapaRtf`, e compara com os literais acentuados esperados) e pelo teste
+de fallback atualizado (`rascunhoUsaFallbacksQuandoOProcessoAindaNaoTem
+NumeroDeOficioNemMotivo`), que passou a decodificar antes de comparar — a
+string RTF crua nunca contém "número"/"não" literalmente, só o escape.
+
 ## Regra de datas: data de ato = momento do anexo, nunca digitada (2026-08-04)
 
 **Decisão de produto do usuário, vale para todo o sistema.** A data de um ato
