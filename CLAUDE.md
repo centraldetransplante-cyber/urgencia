@@ -2485,13 +2485,28 @@ login novamente"), no mesmo padrão dos alertas já existentes para
 **Por que não foi tratado como caso geral do `UsuarioRepository.
 findByUsername` em todos os controllers:** o mesmo padrão
 (`findByUsername(...).orElseThrow(() -> new ResponseStatusException
-(UNAUTHORIZED))`) existe também em `SolicitanteController`,
+(UNAUTHORIZED))`) existia também em `SolicitanteController`,
 `SolicitacaoOnlineTriagemController` e `ProcessoDetalheController` — não
-foram tocados nesta correção (escopo pedido foi só o Portal do Avaliador,
-onde o bug foi reportado e reproduzido). Se o mesmo sintoma aparecer nesses
-outros portais, o mesmo padrão (`SessaoInvalidaException` +
-`GlobalExceptionHandler.handleSessaoInvalida`, que já é genérico e reusável
-por estar no `@ControllerAdvice` global) resolve sem duplicar código.
+foram tocados nesta correção original (escopo pedido foi só o Portal do
+Avaliador, onde o bug foi reportado e reproduzido). O mesmo padrão
+(`SessaoInvalidaException` + `GlobalExceptionHandler.handleSessaoInvalida`,
+já genérico e reusável por estar no `@ControllerAdvice` global) resolve sem
+duplicar código.
+
+**`SolicitanteController.resolverUsuario` corrigido em sessão separada
+(2026-08-08, PR #72).** Mesma troca (`SessaoInvalidaException` em vez de
+`ResponseStatusException(UNAUTHORIZED)`), sem nenhuma classe nova — só
+reaproveitando a infraestrutura já existente. Teste de regressão
+`SolicitanteSessaoOrfaIntegrationTest`, no mesmo modelo de
+`AvaliadorSessaoOrfaIntegrationTest` (sessão HTTP real via login por
+formulário, username renomeado por baixo da sessão ativa, mesma sessão
+reusada confirma redirect gracioso). `SecurityIntegrationTest.
+solicitanteAcessaOProprioPortal` e `SolicitanteControllerTest.
+resolverUsuarioLancaSessaoInvalidaQuandoUsuarioAutenticadoNaoExisteNoBanco`
+(renomeado de `...Lanca401...`) atualizados para o novo comportamento.
+`SolicitacaoOnlineTriagemController` e `ProcessoDetalheController`
+continuam com o padrão antigo pendente — se o mesmo sintoma aparecer
+nesses dois, é a mesma correção.
 
 **Teste de regressão** (`AvaliadorSessaoOrfaIntegrationTest`, `@SpringBootTest`
 + H2 real, **sessão HTTP de verdade via login por formulário — não
