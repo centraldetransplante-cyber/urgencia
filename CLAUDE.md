@@ -3906,3 +3906,86 @@ ofício, cada um verificando por `content().string(...)` que a frase de
 
 **PR:** `fix/mensagem-comprovante-snt-contraditoria` (branch dedicada a
 partir de `main`, sem outra mudança de regra de negócio).
+
+## Actuator com /actuator/health público + acentuação no Portal do Avaliador (2026-08-08)
+
+Duas melhorias independentes, mesmo PR, branch `feat/actuator-health-e-
+acentuacao-avaliador` a partir de `main`.
+
+### 1. Acentuação faltando no `title` dinâmico de `avaliador/votar.html`
+
+`th:title="${'Visualizacao do processo anonimizado: ' + pdf.nomeArquivo}"`
+(atributo `title` do `<iframe>` que mostra o PDF anonimizado) estava sem
+acento — corrigido para "Visualização". Esse é exatamente o tipo de string
+que escapa de buscas de texto HTML plano: literal dentro de uma expressão
+Thymeleaf concatenada (`${'texto' + var}`), não texto solto entre tags.
+Varredura feita em todo `src/main/resources/templates/**/*.html` por esse
+padrão específico (`th:title="${'...'`,  `th:attr=...='...'`, concatenações
+`${'texto' + var}`/`${var + 'texto'}`) — esse era o único caso encontrado.
+
+### 2. Spring Boot Actuator — só `/actuator/health`, público, sem detalhes
+
+Adicionado `spring-boot-starter-actuator` ao `pom.xml`. Motivação: dar a um
+health-check externo (script de deploy, monitoramento, um eventual balanceador)
+um jeito padrão de perguntar "o app está de pé?" sem precisar autenticar e
+sem depender de uma rota de negócio (`/login` sempre 200 mesmo com o banco
+fora do ar, por exemplo, não serve como sinal).
+
+- `management.endpoints.web.exposure.include=health` em `application.yml`
+  (dev) **e** `application-prod.yml` (repetido explicitamente nos dois —
+  não herdado por acidente, para nunca depender de alguém lembrar de manter
+  os dois perfis em sincronia). **Nenhum outro endpoint** (`/actuator/env`,
+  `/actuator/beans`, `/actuator/mappings` etc.) é exposto.
+- `management.endpoint.health.show-details=never`: nem o único endpoint
+  liberado mostra detalhes internos (ex.: a URL do datasource) — só o status
+  agregado (`UP`/`DOWN`), suficiente para um health-check automatizado.
+- `SecurityConfig` libera `/actuator/health` e `/actuator/health/**` como
+  `permitAll()`, e adiciona `.requestMatchers("/actuator/**").hasRole("ADMIN")`
+  como defesa em profundidade explícita para qualquer outro subpath de
+  `/actuator/**`.
+- **Comportamento real confirmado por teste manual (não presumido):** como
+  o Spring Boot só registra os endpoints listados em
+  `management.endpoints.web.exposure.include`, `/actuator/env`/`/actuator/beans`/
+  `/actuator` (raiz) **não existem como bean nenhum** — mesmo autenticado
+  como ADMIN via `POST /login` de verdade (sessão HTTP real, não
+  `@WithMockUser`), a resposta é **404**, não "200 vazio" nem "403". Sem
+  login, caem no `.hasRole("ADMIN")`/`anyRequest().authenticated()` e
+  redirecionam 302 para `/login` antes mesmo de chegar a um controller —
+  então a regra explícita do `SecurityConfig` é redundante com o 404 nativo
+  do Boot, mas intencional: se um dia mais endpoints forem adicionados a
+  `exposure.include` por engano, eles não ficam liberados por padrão, viram
+  ADMIN-only em vez de público.
+- **Achado ao testar de verdade (não presumido a partir da doc):** com
+  `spring-boot-starter-mail` no classpath, o Actuator auto-registra um
+  `MailHealthIndicator` que abre uma conexão SMTP real a cada consulta —
+  em dev (sem `SGPUR_MAIL_USER`/`SGPUR_MAIL_PASS`, contra `smtp.gmail.com`)
+  isso derrubava o health inteiro para `DOWN` só por causa do SMTP, mesmo
+  com banco/disco saudáveis. Corrigido com
+  `management.health.mail.enabled=false` (nos dois perfis) — `db` e
+  `diskSpace` continuam ativos (default do Boot, não desligados). Um Gmail
+  temporariamente instável não deve derrubar o sinal de "o app está de pé".
+
+**Validação real, não só a suíte:** aplicação subida de verdade
+(`mvn spring-boot:run`, H2, porta alternativa por já haver outra instância
+rodando na 3000 nesta máquina) e testada com `curl`:
+`GET /actuator/health` → `200 {"status":"UP"}` sem cookie/login nenhum;
+`GET /actuator/env`, `/actuator/beans`, `/actuator` (raiz) → `302` para
+`/login` sem sessão, e **`404`** com uma sessão ADMIN autenticada de
+verdade (login real via `POST /login` com CSRF, não simulado).
+
+**Suíte completa: 898 testes, 0 falhas** (JDK 21). A única falha vista numa
+rodada isolada (`ComprovanteSntPendenteQueriesIntegrationTest
+.registrarUltimoLembreteSntGravaOTimestampNoBanco`) é a flakiness de
+precisão de timestamp do H2 já documentada em sessões anteriores deste
+arquivo — reproduzida e confirmada passando ao rodar essa classe sozinha
+logo em seguida, sem nenhuma mudança de código entre as duas rodadas.
+
+**Nota operacional desta sessão:** o checkout local (`c:\Users\rafae\
+projetos\urgencia`) estava sendo usado concorrentemente por outras sessões/
+agentes automatizados no momento desta tarefa (branches `worktree-agent-*`,
+trocas de branch e `git stash` de trabalho alheio acontecendo no meio da
+implementação). O trabalho desta tarefa foi isolado num `git worktree`
+próprio (`c:\Users\rafae\projetos\urgencia-actuator-wt`, mesma branch
+`feat/actuator-health-e-acentuacao-avaliador`) para não sofrer interferência
+— toda a validação (compilação, suíte, `mvn spring-boot:run` + `curl`) foi
+feita nesse worktree isolado, não no checkout principal compartilhado.
