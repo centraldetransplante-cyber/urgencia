@@ -244,9 +244,10 @@ public class SolicitacaoOnlineTriagemController {
         Usuario operador = usuarioRepo.findByUsername(principal.getName())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         mensagemService.marcarComoLidas(id, MensagemSolicitacao.RemetenteMensagem.SOLICITANTE, operador.getId());
+        String nomeSolicitante = service.nomeSolicitante(id);
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("mensagens", mensagemService.paraChat(
-            id, MensagemSolicitacao.RemetenteMensagem.OPERADOR, operador.getId(), "Voce", "Solicitante"));
+            id, MensagemSolicitacao.RemetenteMensagem.OPERADOR, operador.getId(), "Voce", nomeSolicitante));
         resp.put("podeEnviar", true);
         return resp;
     }

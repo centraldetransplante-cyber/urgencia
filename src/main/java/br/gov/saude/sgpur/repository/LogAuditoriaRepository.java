@@ -18,16 +18,46 @@ public interface LogAuditoriaRepository extends JpaRepository<LogAuditoria, Long
      * ontem", "quem excluiu este anexo". A unica navegacao era paginar do mais
      * recente para tras, 30 em 30.</p>
      *
-     * <p>Todos os parametros sao opcionais (null = nao filtra), entao a mesma
-     * consulta serve a listagem completa.</p>
+     * <p>Todos os parametros sao opcionais para quem chama {@link
+     * br.gov.saude.sgpur.service.AuditoriaService#buscar} (null = nao filtra),
+     * mas o {@code AuditoriaService} SEMPRE traduz {@code null} para um valor
+     * efetivo (string vazia / sentinelas de data) antes de invocar este
+     * metodo — ver o motivo abaixo.</p>
+     *
+     * <p><b>CORRIGIDO em 2026-08-07 (bug real de producao, confirmado por
+     * log): esta consulta usava o padrao {@code :param IS NULL OR ...}, que
+     * quebra no PostgreSQL com {@code PSQLException: could not determine
+     * data type of parameter} (SQLState 42P18).</b> O parametro {@code :de}
+     * aparecia SOMENTE em {@code :de is null}, sem nenhum outro contexto de
+     * tipo na mesma ocorrencia posicional (Hibernate 6 gera um {@code ?} por
+     * ocorrencia textual do parametro nomeado) — o protocolo estendido do
+     * Postgres (Parse/Describe) precisa inferir o tipo de cada {@code ?}
+     * ANTES de qualquer valor chegar, e um parametro usado so em
+     * {@code IS NULL} nao tem como ter o tipo inferido. Isso derrubava
+     * {@code /auditoria} em TODA carga, com ou sem filtro preenchido — o
+     * valor de {@code :de} era sempre {@code null} no caso "sem filtro de
+     * data", que e o caso comum. O H2 usado nos testes e tolerante a esse
+     * padrao, entao o defeito nunca apareceu na suite (mesma classe de
+     * armadilha ja documentada no CLAUDE.md para CHECK constraints de enum/
+     * {@code @Version}: limpo no H2, quebra no Postgres real).</p>
+     *
+     * <p><b>Correcao:</b> mesma tecnica ja usada em {@link
+     * #buscarParaExportacao} desde a sua criacao — nunca passar {@code null}
+     * para esta consulta. {@code AuditoriaService.buscar} converte
+     * usuario/acao ausentes para string vazia e data ausente para as
+     * sentinelas {@code DATA_MINIMA}/{@code DATA_MAXIMA} (1900-01-01 /
+     * 2200-12-31 23:59:59, bem fora de qualquer registro real, mas dentro da
+     * faixa representavel de {@code timestamp}). Com isso todo parametro
+     * aparece SEMPRE em comparacao com tipo bem definido pela coluna da
+     * entidade, nunca isolado num {@code IS NULL} — o Postgres infere o tipo
+     * sem ambiguidade.</p>
      */
     @org.springframework.data.jpa.repository.Query("""
         select l from LogAuditoria l
-        where (:usuario is null or :usuario = ''
-               or lower(l.usuario) like lower(concat('%', :usuario, '%')))
-          and (:acao is null or :acao = '' or l.acao = :acao)
-          and (:de is null or l.dataHora >= :de)
-          and (:ate is null or l.dataHora <= :ate)
+        where (:usuario = '' or lower(l.usuario) like lower(concat('%', :usuario, '%')))
+          and (:acao = '' or l.acao = :acao)
+          and l.dataHora >= :de
+          and l.dataHora <= :ate
         order by l.dataHora desc
         """)
     Page<LogAuditoria> buscar(@org.springframework.data.repository.query.Param("usuario") String usuario,
@@ -47,26 +77,18 @@ public interface LogAuditoriaRepository extends JpaRepository<LogAuditoria, Long
      * consulta (nunca filtrar em memoria uma lista grande carregada do banco
      * inteiro).
      *
-     * <p><b>Deliberadamente NAO usa o padrao {@code :param IS NULL OR ...}
-     * de {@link #buscar}.</b> Esse padrao — confirmado por SQL real de
-     * producao em 2026-08-07 (ver CLAUDE.md, secao "PENDENTE — erro 500 em
-     * /auditoria") — quebra no PostgreSQL com {@code PSQLException: could
-     * not determine data type of parameter}: o parametro de data usado
+     * <p>Deliberadamente NAO usa o padrao {@code :param IS NULL OR ...} —
+     * esse padrao quebra no PostgreSQL com {@code PSQLException: could not
+     * determine data type of parameter} quando o parametro de data e usado
      * SOMENTE em {@code :de IS NULL}, sem nenhum outro contexto de tipo na
-     * mesma ocorrencia posicional, chega ao driver sem tipo (OID
-     * indeterminado) e o Postgres nao consegue inferir. No H2 (dev/teste)
-     * isso nunca aparece — e por isso o defeito escapou da suite antes.</p>
-     *
-     * <p>Este metodo evita o problema por construcao: o service SEMPRE passa
-     * valores efetivos (nunca {@code null}) — string vazia para
-     * usuario/acao ausentes, {@link java.time.LocalDateTime#MIN}/
-     * {@link java.time.LocalDateTime#MAX} para data ausente — entao cada
-     * parametro so aparece em comparacoes com tipo bem definido pelo
-     * proprio campo da entidade (nunca um {@code IS NULL} isolado). Isto
-     * NAO "corrige" o bug de {@link #buscar} (que continua intocado por
-     * pedido explicito do usuario nesta sessao) — e so uma consulta nova,
-     * escrita desde o inicio de um jeito que nao reproduz o mesmo
-     * problema.</p>
+     * mesma ocorrencia posicional (ver o javadoc completo do bug, e da
+     * correcao espelhada, em {@link #buscar}). Esta consulta foi escrita
+     * desde o inicio (2026-08-07) do jeito que {@link #buscar} foi corrigido
+     * depois para seguir: o service SEMPRE passa valores efetivos (nunca
+     * {@code null}) — string vazia para usuario/acao ausentes, sentinelas de
+     * data para data ausente — entao cada parametro so aparece em
+     * comparacoes com tipo bem definido pelo proprio campo da entidade,
+     * nunca um {@code IS NULL} isolado.</p>
      */
     @org.springframework.data.jpa.repository.Query("""
         select l from LogAuditoria l

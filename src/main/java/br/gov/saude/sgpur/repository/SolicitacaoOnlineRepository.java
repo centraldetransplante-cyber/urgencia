@@ -130,4 +130,20 @@ public interface SolicitacaoOnlineRepository extends JpaRepository<SolicitacaoOn
         where s.processoGerado.id = :processoId
         """)
     Optional<Long> findIdByProcessoGeradoId(@Param("processoId") Long processoId);
+
+    /**
+     * Nome real de quem enviou a solicitacao (usuario SOLICITANTE), usado
+     * como rotulo do "outro lado" nos chats do operador
+     * ({@code ProcessoDetalheController}/{@code SolicitacaoOnlineTriagemController}),
+     * no lugar do literal generico "Solicitante" que era usado ate
+     * 2026-08-07. Projecao direta (nao entidade + navegacao LAZY) porque
+     * {@code spring.jpa.open-in-view} e {@code false} neste projeto -
+     * tocar {@code s.getUsuarioSolicitante().getNome()} fora da transacao
+     * do servico estouraria {@code LazyInitializationException}.
+     */
+    @Query("""
+        select s.usuarioSolicitante.nome from SolicitacaoOnline s
+        where s.id = :id
+        """)
+    Optional<String> findNomeSolicitanteById(@Param("id") Long id);
 }

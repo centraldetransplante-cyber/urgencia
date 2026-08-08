@@ -23,8 +23,11 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.containsString;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -129,6 +132,18 @@ class SolicitacaoOnlineTriagemSemTransacaoIntegrationTest {
         mensagemRepo.saveAndFlush(msgDeOutro);
         mensagemDeOutroOperadorId = msgDeOutro.getId();
 
+        // Mensagem do SOLICITANTE, usada para conferir que o polling AJAX do
+        // operador rotula o remetente com o NOME REAL dele (Usuario.nome),
+        // nao mais o literal generico "Solicitante" (corrigido em 2026-08-07).
+        MensagemSolicitacao msgDoSolicitante = new MensagemSolicitacao();
+        msgDoSolicitante.setSolicitacaoOnline(enviada);
+        msgDoSolicitante.setRemetente(RemetenteMensagem.SOLICITANTE);
+        msgDoSolicitante.setRemetenteId(solicitante.getId());
+        msgDoSolicitante.setTexto("Mensagem do solicitante de verdade");
+        msgDoSolicitante.setDataEnvio(LocalDateTime.now());
+        msgDoSolicitante.setLida(false);
+        mensagemRepo.saveAndFlush(msgDoSolicitante);
+
         // Solicitacao JA CONVERTIDA - usada no fluxo de devolver (forca
         // IllegalStateException "Esta solicitacao ja foi triada.").
         SolicitacaoOnline convertida = new SolicitacaoOnline();
@@ -228,5 +243,22 @@ class SolicitacaoOnlineTriagemSemTransacaoIntegrationTest {
         SolicitacaoOnline devolvida = solicitacaoRepo.findById(solicitacaoEnviadaId).orElseThrow();
         assertThat(devolvida.getStatus()).isEqualTo(StatusSolicitacaoOnline.DEVOLVIDA);
         assertThat(devolvida.getObservacoesTriagem()).isEqualTo("Falta documento clinico.");
+    }
+
+    /**
+     * Corrigido em 2026-08-07: o polling AJAX do chat (lado do operador, na
+     * tela de triagem) rotulava toda mensagem do solicitante com o literal
+     * generico "Solicitante", em vez do nome real de quem enviou. Confirma
+     * que o JSON devolvido por {@code GET .../mensagens} traz
+     * {@code Usuario.nome} de verdade ("Solicitante Teste") e nao o literal
+     * antigo.
+     */
+    @Test
+    @WithMockUser(username = "operador-triagem-it", roles = "OPERADOR")
+    void mensagensAjaxRotulaMensagemDoSolicitanteComONomeRealENaoComLiteralGenerico() throws Exception {
+        mvc.perform(get("/processos/solicitacoes-online/" + solicitacaoEnviadaId + "/mensagens"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Solicitante Teste")))
+                .andExpect(content().string(containsString("Mensagem do solicitante de verdade")));
     }
 }

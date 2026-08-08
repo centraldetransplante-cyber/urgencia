@@ -926,8 +926,9 @@ public class ProcessoDetalheController {
         Usuario operador = usuarioRepo.findByUsername(principal.getName())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         mensagemService.marcarComoLidas(solicitacaoOrigemId, MensagemSolicitacao.RemetenteMensagem.SOLICITANTE, operador.getId());
+        String nomeSolicitante = solicitacaoOnlineService.nomeSolicitante(solicitacaoOrigemId);
         resp.put("mensagens", mensagemService.paraChat(
-            solicitacaoOrigemId, MensagemSolicitacao.RemetenteMensagem.OPERADOR, operador.getId(), "Voce", "Solicitante"));
+            solicitacaoOrigemId, MensagemSolicitacao.RemetenteMensagem.OPERADOR, operador.getId(), "Voce", nomeSolicitante));
         resp.put("podeEnviar", true);
         return resp;
     }

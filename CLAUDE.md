@@ -3067,15 +3067,10 @@ que já documentava essa ausência como justificativa para manter
 `'unsafe-inline'` em script/style. Nenhuma correção de código foi necessária
 — risco **inexistente**, não apenas mitigado.
 
-## PENDENTE — erro 500 em `/auditoria` (investigado, NÃO corrigido nesta sessão, 2026-08-07)
+## CORRIGIDO — erro 500 em `/auditoria` (2026-08-07, corrigido em sessão posterior no mesmo dia)
 
-**A pedido explícito do usuário, este bug foi investigado e documentado, mas
-propositalmente NÃO corrigido nesta sessão.** Quem for corrigi-lo: a causa
-raiz abaixo já foi **confirmada por log real de produção** (não é só
-hipótese de leitura de código), incluindo o parâmetro exato que quebra.
-
-**Sintoma relatado:** `/auditoria` (tela exclusiva de ADMIN) devolve erro
-500 em produção.
+**Sintoma relatado:** `/auditoria` (tela exclusiva de ADMIN) devolvia erro
+500 em produção, em TODA carga (com ou sem filtro de data preenchido).
 
 **Causa raiz confirmada via SSH real** (`sudo journalctl -u sgpur`, dois
 stacktraces reais capturados em produção, 2026-08-07 21:41 e 21:44 UTC):
@@ -3086,8 +3081,8 @@ SQLState: 42P18
 ```
 
 na consulta de `AuditoriaController.listar` → `AuditoriaService.buscar` →
-`LogAuditoriaRepository.buscar` (o método `buscar` original, com paginação,
-**não tocado nesta sessão** — segue com o mesmo defeito):
+`LogAuditoriaRepository.buscar` (o método `buscar` original, com paginação),
+que usava o padrão `:param IS NULL OR ...`:
 
 ```java
 where (:usuario is null or :usuario = '' or lower(l.usuario) like lower(concat('%', :usuario, '%')))
@@ -3096,7 +3091,7 @@ where (:usuario is null or :usuario = '' or lower(l.usuario) like lower(concat('
   and (:ate is null or l.dataHora <= :ate)
 ```
 
-O parâmetro `$7` corresponde à ocorrência de `:de` usada **isoladamente**
+O parâmetro `$7` correspondia à ocorrência de `:de` usada **isoladamente**
 em `:de is null` — sem nenhum outro contexto de tipo na mesma posição
 (Hibernate 6 gera uma posição `?` distinta para cada ocorrência textual do
 mesmo `:param` nomeado, mesmo repetido). O PostgreSQL, via protocolo
@@ -3104,10 +3099,7 @@ estendido (`Parse`/`Describe`), precisa inferir o tipo de cada `?` **antes**
 de qualquer valor chegar; um parâmetro usado só em `IS NULL`, sem nenhuma
 comparação com uma coluna tipada por perto, não tem como ter seu tipo
 inferido — e aqui, como o valor é sempre `null` quando não há filtro de
-data, ele nunca ganha tipo por outro caminho. **Isso significa que
-`/auditoria` quebra em TODA carga em produção, com ou sem filtro de data
-preenchido** — confirmado pelos dois stacktraces reais, batidos em
-horários de navegação simples, não de teste de filtro.
+data, ele nunca ganhava tipo por outro caminho.
 
 **Por que nunca apareceu na suíte local:** o H2 (dev/test) é tolerante a
 parâmetro nulo sem tipo explícito nesse mesmo padrão SQL — o defeito só se
@@ -3115,29 +3107,56 @@ manifesta contra o dialeto real do PostgreSQL. Mesma classe de armadilha já
 documentada no CLAUDE.md para CHECK constraints de enum/`@Version`: código
 que passa limpo no H2 mas quebra em produção.
 
-**Por que não foi corrigido agora:** pedido explícito do usuário
-("investigar e documentar, não corrigir"). A consulta `buscar`
-paginada — usada pela **tela** `/auditoria` — continua exatamente como
-estava antes desta sessão.
+**Correção aplicada:** `LogAuditoriaRepository.buscar` foi reescrita no
+mesmo padrão já usado por `LogAuditoriaRepository.buscarParaExportacao`
+(escrita antes, na mesma sessão original, deliberadamente evitando esse
+padrão desde o início) — nunca passar `null` para a consulta. A query
+passou a exigir valores sempre efetivos:
 
-**Uma consulta NOVA e SEPARADA foi escrita nesta mesma sessão para a
-exportação em CSV** (`LogAuditoriaRepository.buscarParaExportacao`, ver
-seção seguinte) que **evita esse padrão desde o início** — ela nunca passa
-`null` como parâmetro (usa string vazia / datas-sentinela em vez de
-`:param IS NULL OR ...`). Isso não é uma correção do bug relatado (a rota
-`/auditoria` continua quebrada); é só a garantia de que a feature nova não
-nasce com o mesmo defeito. Ver o javadoc de `buscarParaExportacao` no
-próprio código para o detalhe técnico completo.
+```java
+where (:usuario = '' or lower(l.usuario) like lower(concat('%', :usuario, '%')))
+  and (:acao = '' or l.acao = :acao)
+  and l.dataHora >= :de
+  and l.dataHora <= :ate
+```
 
-**Sugestão de correção para quando for autorizada** (não aplicada): reescrever
-`LogAuditoriaRepository.buscar` no mesmo padrão de `buscarParaExportacao`
-— nunca passar `null` para os parâmetros de data/string, usando sentinelas
-seguras (`AuditoriaService.DATA_MINIMA`/`DATA_MAXIMA`, já existentes) em vez
-do padrão `:param IS NULL OR ...`. Como `buscar` é usado por
-`AuditoriaController.listar` (a tela paginada), a correção teria que também
-ajustar a assinatura do método e o service para não aceitar `null` cru — ou,
-alternativamente, adotar Specifications (JPA Criteria API) para montar a
-consulta dinamicamente sem nenhum parâmetro nulo em nenhuma hipótese.
+`AuditoriaService.buscar` converte usuário/ação ausentes para string vazia
+e data ausente para as sentinelas já existentes `DATA_MINIMA`/`DATA_MAXIMA`
+(1900-01-01 / 2200-12-31 23:59:59) **antes** de chamar o repositório — o
+mesmo tratamento que `buscarParaExportacao` já fazia. Com isso, todo
+parâmetro sempre aparece em comparação com tipo bem definido pela coluna da
+entidade, nunca isolado num `IS NULL`.
+
+**Validado contra o Postgres real da VM antes do commit (leitura, sem
+alterar nada):** como H2 não reproduz este bug (mesmo em `MODE=PostgreSQL`),
+a prova de que a correção funciona precisou ser contra Postgres de verdade.
+Um `PREPARE`/`EXECUTE` via `psql` na VM (`sudo -u postgres psql -d sgpur`),
+que força a mesma etapa de inferência de tipo sem valores (equivalente ao
+`Describe` do protocolo estendido que o driver JDBC/Hibernate dispara),
+reproduziu o erro exato `could not determine data type of parameter $1`
+com o padrão antigo, e confirmou sucesso (com e sem filtro) com o padrão
+novo. Nenhum dado foi alterado — só `SELECT`, com `PREPARE`/`EXECUTE`/
+`DEALLOCATE` de teste, removidos ao final.
+
+**Teste de regressão:** `LogAuditoriaBuscaPaginadaIntegrationTest`
+(`@SpringBootTest`, H2 real em `MODE=PostgreSQL`, mesmo padrão de
+`LogAuditoriaExportacaoIntegrationTest`) cobre filtro por usuário parcial,
+ação exata, período, paginação, e — o cenário exato do bug relatado —
+`AuditoriaService.buscar` chamado com os 4 parâmetros `null` (equivalente a
+abrir `/auditoria` sem clicar em nenhum filtro). **Limitação documentada no
+javadoc da classe de teste:** o H2 não reproduz o `42P18` mesmo com a query
+antiga (quebrada) — a suíte local não teria pego a recaída se alguém
+reintroduzir o padrão `:param IS NULL OR ...` aqui; a proteção real contra
+essa classe específica de erro só existe validando contra Postgres de
+verdade (como feito manualmente nesta correção). Se o projeto ganhar
+infraestrutura de teste contra Postgres real (Testcontainers ou similar),
+vale portar este cenário para lá.
+
+Suíte completa validada após a correção: **886 testes** (7 novos), única
+falha vista foi a flakiness de timing pré-existente e não relacionada de
+`ComprovanteSntPendenteQueriesIntegrationTest` (precisão de nanossegundos do
+H2, já documentada em outras seções deste arquivo), confirmada isolada e
+depois passando.
 
 ## Filtros de auditoria já existiam; exportação em CSV adicionada (2026-08-07)
 
@@ -3438,3 +3457,44 @@ verificação) que o parágrafo não sobrepõe nenhum outro elemento do chat
 (`.chat-box`/`.chat-form-avaliador` não têm `position` absoluta em
 `app.css`, então qualquer conteúdo em fluxo normal nunca se sobreporia).
 Suíte completa revalidada: **879 testes, 0 falhas** (JDK 21).
+
+## Chat operador↔solicitante: nome real do solicitante em vez do literal genérico (2026-08-07)
+
+**Bug relatado pelo usuário**: no chat entre OPERADOR e SOLICITANTE (as duas
+telas do lado do operador — `processos/detalhe.html` e
+`solicitacoes-online-detalhe.html`/triagem), toda mensagem do solicitante
+aparecia rotulada com o texto fixo genérico **"Solicitante"**, em vez do
+nome de verdade da pessoa. `ProcessoDetalheController.mensagensJson` e
+`SolicitacaoOnlineTriagemController.mensagensJson` passavam o literal
+`"Solicitante"` como `labelOutro` para `MensagemSolicitacaoService.paraChat(...)`.
+
+**Não é uma questão de imparcialidade** (a regra de só-iniciais do CLAUDE.md
+é sobre o **paciente**, para os avaliadores — ver seção "Identificação do
+paciente"). O solicitante é um usuário do próprio sistema conversando
+diretamente com o operador; não há motivo de negócio para esconder quem ele
+é nesse canal — o e-mail de resposta ao solicitante já usa nome completo do
+paciente, então esconder o nome de quem está do outro lado do chat não
+protegia nada.
+
+**Correção:** `SolicitacaoOnlineRepository.findNomeSolicitanteById(Long id)`
+(projeção `select s.usuarioSolicitante.nome from SolicitacaoOnline s where
+s.id = :id`, não a entidade + navegação LAZY — `spring.jpa.open-in-view` é
+`false` neste projeto, então tocar `s.getUsuarioSolicitante().getNome()`
+fora da transação do serviço estouraria `LazyInitializationException`).
+`SolicitacaoOnlineService.nomeSolicitante(Long)` expõe isso com fallback
+para o literal `"Solicitante"` se o nome vier nulo/em branco (nunca quebra a
+tela). Os dois controllers passaram a chamar esse método e usar o nome real
+como `labelOutro`.
+
+**`SolicitanteController` não foi tocado** — o rótulo do lado do
+solicitante para o "outro lado" da conversa é `"Equipe CET-RS"` (o time
+operacional, não uma pessoa específica), e isso continua correto/intencional.
+
+**Testes**: `ProcessoDetalheSemTransacaoIntegrationTest` e
+`SolicitacaoOnlineTriagemSemTransacaoIntegrationTest` (ambos `@SpringBootTest`
++ H2 real, sem `@MockitoBean` de serviço) ganharam uma mensagem do
+solicitante no fixture e um teste
+(`mensagensAjaxRotulaMensagemDoSolicitanteComONomeRealENaoComLiteralGenerico`)
+que confirma o JSON de `GET .../mensagens` contendo o nome real
+("Solicitante Detalhe Teste"/"Solicitante Teste") em vez do literal antigo.
+Suíte completa validada (JDK 21), sem regressão.
