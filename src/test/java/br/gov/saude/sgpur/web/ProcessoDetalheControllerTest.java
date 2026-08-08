@@ -172,7 +172,7 @@ class ProcessoDetalheControllerTest {
         mvc.perform(get("/processos/novo").param("origemSolicitacaoOnlineId", "5"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/processos/solicitacoes-online/5"))
-            .andExpect(flash().attribute("erro", org.hamcrest.Matchers.containsString("ja foi triada")));
+            .andExpect(flash().attribute("erro", org.hamcrest.Matchers.containsString("já foi triada")));
     }
 
     @Test
@@ -735,7 +735,7 @@ class ProcessoDetalheControllerTest {
         mvc.perform(post("/processos/1/excluir").with(csrf()))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/processos"))
-            .andExpect(flash().attribute("msg", org.hamcrest.Matchers.containsString("excluido")));
+            .andExpect(flash().attribute("msg", org.hamcrest.Matchers.containsString("excluído")));
 
         verify(processoService).excluir(1L);
         verify(anexoStorage).removerPastaProcesso(processo);
@@ -1080,7 +1080,7 @@ class ProcessoDetalheControllerTest {
                 .param("confirmo", "true").with(csrf()))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/processos/1#envio"))
-            .andExpect(flash().attribute("msg", org.hamcrest.Matchers.containsString("Anonimizacao confirmada")));
+            .andExpect(flash().attribute("msg", org.hamcrest.Matchers.containsString("Anonimização confirmada")));
 
         org.assertj.core.api.Assertions.assertThat(pendente.getTipo())
             .isEqualTo(TipoAnexo.DOCUMENTO_CLINICO_AVALIADOR);
@@ -1101,7 +1101,7 @@ class ProcessoDetalheControllerTest {
 
         mvc.perform(post("/processos/1/documento-clinico/7/confirmar-anonimizacao").with(csrf()))
             .andExpect(status().is3xxRedirection())
-            .andExpect(flash().attribute("erro", org.hamcrest.Matchers.containsString("Marque a confirmacao")));
+            .andExpect(flash().attribute("erro", org.hamcrest.Matchers.containsString("Marque a confirmação")));
 
         org.assertj.core.api.Assertions.assertThat(pendente.getTipo())
             .isEqualTo(TipoAnexo.DOCUMENTO_PORTAL_NAO_ANONIMIZADO);
@@ -1135,7 +1135,7 @@ class ProcessoDetalheControllerTest {
         mvc.perform(post("/processos/1/documento-clinico/999/confirmar-anonimizacao")
                 .param("confirmo", "true").with(csrf()))
             .andExpect(status().is3xxRedirection())
-            .andExpect(flash().attribute("erro", org.hamcrest.Matchers.containsString("nao encontrado")));
+            .andExpect(flash().attribute("erro", org.hamcrest.Matchers.containsString("não encontrado")));
 
         verify(anexoRepository, never()).save(any());
     }
@@ -1159,7 +1159,7 @@ class ProcessoDetalheControllerTest {
         mvc.perform(post("/processos/1/documento-clinico/8/confirmar-anonimizacao")
                 .param("confirmo", "true").with(csrf()))
             .andExpect(status().is3xxRedirection())
-            .andExpect(flash().attribute("erro", org.hamcrest.Matchers.containsString("nao esta pendente")));
+            .andExpect(flash().attribute("erro", org.hamcrest.Matchers.containsString("não está pendente")));
 
         verify(anexoRepository, never()).save(any());
     }

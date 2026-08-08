@@ -1769,6 +1769,22 @@ issue/branch aberta para isso, só o registro no relatório.
    templates de verdade em `HomeControllerTest`/`ProcessoListaControllerTest`
    — a correção original de detalhe não tinha nenhum teste, foi por isso que
    as outras duas telas passaram despercebidas.
+   **Correção de QA (achado posterior): `arquivo/lista.html` era a 4ª tela
+   com o mesmo status cru sem o fragment.** Ficou de fora das 3 originais
+   (`processos/detalhe.html`, `dashboard.html`, `processos/lista.html`) por
+   não ter sido lembrada na varredura da correção de 2026-08-04 — o Arquivo
+   é justamente a tela onde processos Deferido/Indeferido/Cancelado vivem
+   permanentemente, então mostrar "Indeferido" cru sem indicar se a
+   papelada pós-decisão (ofício/comprovante SNT + resposta ao solicitante)
+   já foi concluída é o mesmo bug de confusão visual, só que na tela de
+   consulta histórica. `ArquivoController.listar` já carregava `Page<Processo>`
+   com a entidade completa (não uma projeção/DTO), então nenhuma mudança de
+   controller/query foi necessária — só adicionar
+   `<span th:replace="~{layout :: badgeEncerramento(${p}, 'ms-1')}"></span>`
+   ao lado do badge de status na célula "Situação", mesmo padrão exato já
+   usado em `processos/lista.html`. `arquivo/lista.html` é agora a 4ª e
+   última tela candidata a essa regra — não sobra nenhuma tela do sistema
+   listando status final de processo sem passar por este fragment.
 2. **Atalhos da barra lateral corrigidos.** "Ofício de Indeferimento" e o
    novo atalho "Comprovante SNT" só aparecem depois que o anexo
    correspondente existe de fato, e baixam **o anexo real**
@@ -1923,6 +1939,49 @@ alteração de status de paciente) — documento diferente do ofício de
 indeferimento, que vai à equipe solicitante. Esse item continua **não
 implementado**; o modelo foi usado aqui só como referência de estrutura
 (numeração, cabeçalho do departamento, bloco do destinatário).
+
+### Bug corrigido: rascunho RTF sem acentuação (2026-08-08)
+
+Achado numa simulação real de QA: `OficioService.gerarRascunhoRtf` tinha
+todos os literais Java fixos **sem nenhum acento** ("Regulacao", "Divisao",
+"Oficio n", "apos analise", "Permanecemos a disposicao" etc.) — diferente do
+PDF antigo (`OficioService.gerar`), que a seção anterior já registra como
+corrigido (acentuação correta, é documento oficial). O rascunho RTF é
+exatamente esse mesmo documento oficial, só que editável — não fazia sentido
+os dois caminhos divergirem.
+
+**Correção:** todos os literais fixos de `gerarRascunhoRtf` foram acentuados
+("Regulação", "Divisão", "Ofício nº", "após análise", "Permanecemos à
+disposição", "À equipe solicitante", etc. — inclusive o fallback do motivo,
+`"(motivo não informado)"`, que já era acentuado no PDF mas não no RTF) e o
+fallback `OficioService.NUMERO_NAO_ATRIBUIDO` (compartilhado entre PDF e RTF)
+passou de `"(numero nao atribuido)"` para `"(número não atribuído)"` — o PDF
+também ganhou a acentuação correta nesse placeholder de tabela, que tinha
+escapado da correção original por estar numa constante à parte.
+
+**Nenhuma mudança no mecanismo de escape em si.** `OficioService.escaparRtf`
+já cobria corretamente qualquer caractere fora do ASCII (`\'hh` no code page
+`\ansicpg1252` declarado no cabeçalho do RTF) — usado tanto para texto
+dinâmico (nome do paciente, motivo) quanto, através dos helpers `linha`/
+`centralizado`, para os literais fixos. Bastava acentuar as strings Java
+(`ç`, `ã`, `é`, `í`, `ú`, `à`, `À`, `º` etc.) normalmente — elas passam pelo
+mesmo `escaparRtf` de sempre e saem como `\'hh`, nunca cru. **Não colocar
+acento cru fora desse caminho**: qualquer literal novo em `gerarRascunhoRtf`
+deve continuar entrando via `linha(...)`/`centralizado(...)`, nunca
+concatenado direto no `StringBuilder` sem passar pelo escape.
+
+**Validado gerando o RTF de verdade** (não só por assertiva de texto): um
+teste escreveu `gerarRascunhoRtf(...)` em disco e o arquivo foi lido byte a
+byte — confirmado que cada acento vira a sequência `\'hh` esperada (ex.
+`Regula\'e7\'e3o` = "Regulação", `Of\'edcio n\'ba` = "Ofício nº", `\'c0
+equipe` = "À equipe") e que a estrutura RTF (chaves balanceadas, sem
+corrupção) permanece intacta. Coberto por
+`OficioServiceTest.rascunhoTemAcentuacaoCorretaNosTextosFixos` (decodifica o
+`\'hh` de volta para o caractere original via um helper de teste,
+`desescapaRtf`, e compara com os literais acentuados esperados) e pelo teste
+de fallback atualizado (`rascunhoUsaFallbacksQuandoOProcessoAindaNaoTem
+NumeroDeOficioNemMotivo`), que passou a decodificar antes de comparar — a
+string RTF crua nunca contém "número"/"não" literalmente, só o escape.
 
 ## Regra de datas: data de ato = momento do anexo, nunca digitada (2026-08-04)
 
@@ -3497,6 +3556,55 @@ solicitante no fixture e um teste
 (`mensagensAjaxRotulaMensagemDoSolicitanteComONomeRealENaoComLiteralGenerico`)
 que confirma o JSON de `GET .../mensagens` contendo o nome real
 ("Solicitante Detalhe Teste"/"Solicitante Teste") em vez do literal antigo.
+
+## Toast do poll global clicável + acentuação de mensagens em controllers (2026-08-08)
+
+Duas correções pontuais de UX/ortografia, sem mudança de regra de negócio.
+
+**1. Toast do poll GLOBAL de mensagens (`layout.html`) virou clicável.**
+Os 4 blocos `<script>` de poll global de notificação (20s, dentro do
+fragment `navbar`: ADMIN/OPERADOR "Nova mensagem de um solicitante.",
+SOLICITANTE "Nova mensagem da equipe CET-RS.", AVALIADOR "Nova mensagem da
+equipe CET-RS sobre um dos seus processos." e ADMIN/OPERADOR "Nova mensagem
+de um médico avaliador.") chamavam `mostrarToast(mensagem, tipo)` sem o 3º
+parâmetro `onClick` (`static/js/toast.js` já suporta desde 2026-08-07, ver
+o comentário do próprio arquivo — usado por `chat-solicitacao.js` para os
+toasts *dentro* das 3 telas de chat, que já eram clicáveis). Estes 4 blocos
+diferentes (o poll global que roda em QUALQUER tela, fora das telas de chat
+— ver `chatAtivoNestaTela`) tinham ficado de fora dessa correção anterior.
+Agora cada um navega para a tela correspondente ao clicar: operador/admin
+(mensagem de solicitante) → `/processos/solicitacoes-online`; solicitante →
+`/solicitante`; avaliador → `/avaliador`; operador/admin (mensagem de
+avaliador) → `/processos/mensagens-avaliadores`. Usa
+`/*[[@{...}]]*/` (Thymeleaf inlining) com fallback para a URL literal — os 4
+`<script>` já tinham `th:inline="javascript"`, sem o qual esse padrão
+falharia silenciosamente (ver "Convenções de código").
+
+**2. Acentuação de literais Java em 4 controllers.** A "Fase 8" de
+acentuação (2026-08-03/04) cobriu só templates HTML Thymeleaf, não string
+literals dentro de código Java — mensagens de flash (`erro`/`sucesso`/
+`aviso`), corpos de `ResponseEntity`/`Map` de erro JSON e descrições de
+anexo visíveis ao usuário em `SolicitanteController`, `AvaliadorController`,
+`ProcessoDetalheController` e `ProcessoDecisaoController` estavam sem
+acento. Corrigidas todas as mensagens desses 4 arquivos (e os testes que
+faziam assert do texto exato/`containsString` do texto antigo sem acento,
+em `ProcessoDecisaoControllerTest`, `ProcessoDetalheControllerTest`,
+`SolicitanteControllerTest` e `SubstituicaoDocumentoAnonimizadoIntegrationTest`).
+**`StatusProcesso.descricao` (`getDescricao()`) foi DELIBERADAMENTE
+mantido sem acento** — mesmo padrão já documentado para
+`ResultadoParecer.descricao`: é consumido por `RelatorioService.java`
+(Relatório Final PDF) e `ExportacaoProcessoService.java` (dossiê
+exportado), então mudar o enum teria impacto direto em documentos oficiais,
+fora do escopo desta correção de UX. Prompts enviados à API do Gemini
+(`sugestaoMotivo`/`revisarEmailIa` em `ProcessoDecisaoController`) também
+não foram tocados — são instruções para a IA, não mensagens exibidas ao
+usuário.
+
+Suíte completa validada (JDK 21): 890 testes, 0 falhas atribuíveis a esta
+mudança (a única falha vista, `ComprovanteSntPendenteQueriesIntegrationTest
+.registrarUltimoLembreteSntGravaOTimestampNoBanco`, é a flakiness de
+precisão de nanossegundos do H2 já documentada em outras sessões — passa
+isolada, confirmado nesta mesma sessão).
 Suíte completa validada (JDK 21), sem regressão.
 
 ## Dois bugs de robustez achados em QA (2026-08-08): 500 cru em `/usuarios/minha-senha` e no Painel/`/processos`
@@ -3645,3 +3753,156 @@ maquina tinha multiplas sessoes/processos concorrentes mexendo no mesmo
 diretorio principal (branch trocado e edicoes nao commitadas revertidas por
 fora, no meio da investigacao), entao isolar o trabalho num worktree proprio
 evitou perder o progresso de novo.
+
+## Extração de texto em PDF: investigação do "acento corrompido" — bug NÃO reproduzido, hardening aplicada mesmo assim (2026-08-08)
+
+Investigação pedida a partir de um relato de "achado em simulação de QA":
+texto extraído (copiar/colar, Ctrl+F, leitor de tela) dos PDFs do Relatório
+Final, Relatório Anual e Relatório do Avaliador viria corrompido nos
+caracteres acentuados (`á` virando `�`/U+FFFD), apesar do render visual
+estar correto — causa alegada: `ToUnicode` CMap ausente nas fontes Helvetica
+não embutidas (`FontFactory.getFont`/`BaseFont.createFont(..., WINANSI/
+CP1252, NOT_EMBEDDED)`, usadas em `PdfCabecalhoStamper`, `PdfRelatorioBuilder`,
+`RelatorioAnualService`, `RelatorioAvaliadorService`).
+
+**Resultado da investigação: o bug alegado NÃO reproduz.** Gerados os 3 PDFs
+de verdade com o código **sem nenhuma alteração** (branch limpa a partir de
+`main`) e extraído o texto com **três** ferramentas independentes —
+`pypdf` 6.15, `PyMuPDF` 1.28 e `poppler pdftotext` — contando
+programaticamente ocorrências de `�` (não visualmente): **zero** em
+todos os casos, nos 3 documentos, nas duas bibliotecas Python, com o texto
+acentuado ("Conceição", "Urgência", "São José", "inequívoca", "Decisão")
+presente e correto. A "corrupção" observada na simulação original de QA (e
+replicada por mim na primeira tentativa) era um **artefato de encoding do
+console**: imprimir uma `string` Python corretamente decodificada
+(`Conceição`, Unicode de verdade) para um terminal Windows/git-bash sem
+`PYTHONIOENCODING=utf-8` definido produz `Concei??o`/`Concei��o`
+**na tela**, mesmo que a string em memória esteja perfeita — confirmado
+depurando `pypdf._cmap.parse_bfchar` e comparando `ord(char)` (correto, ex.
+`0xE7`) contra o texto impresso no console (garbled). Ferramentas de
+extração de PDF, incluindo as duas testadas, **já implementam corretamente**
+o fallback da especificação PDF (ISO 32000-1 §9.10.2): na ausência de
+`ToUnicode`, uma fonte simples com `/Encoding /WinAnsiEncoding` é resolvida
+via a tabela padrão código→nome de glifo→Unicode — exatamente o caso destes
+3 documentos (`get_fonts(full=True)` confirmou `/Encoding /WinAnsiEncoding`
+em toda fonte usada). O render visual nunca esteve em risco (é sempre
+correto, com ou sem `ToUnicode`) porque o desenho do glifo usa a mesma
+tabela `WinAnsiEncoding`, não o `ToUnicode`.
+
+**Mesmo sem bug confirmado, a hardening foi implementada e mesclada**, como
+correção defensiva de baixo custo/baixo risco: nem toda ferramenta do
+ecossistema PDF implementa o fallback via `/Encoding` corretamente (é um
+comportamento opcional, não obrigatório, da leitura de simples fontes sem
+`ToUnicode`) — um sistema de indexação/OCR mais rígido, um leitor de tela
+mais antigo, ou uma automação futura poderiam se comportar diferente das
+duas bibliotecas testadas aqui. `PdfCabecalhoStamper` (usado pelos 3
+geradores, sempre como último passo de pós-processamento) ganhou um SEGUNDO
+passe de leitura/gravação (`corrigirToUnicodeDeFontesSimples`, chamado por
+`estampar` depois de `carimbarPaginas`) que injeta manualmente um
+`/ToUnicode` CMap (formato padrão da especificação, §9.10.3) em toda fonte
+`/Type1` `WinAnsiEncoding` sem um já presente — cobre tanto as fontes do
+corpo original quanto as criadas pelo próprio carimbo (cabeçalho +
+numeração de página, que também tem acento: "Página X de Y"). A tabela
+byte→Unicode usada (`PdfCabecalhoStamper.WINANSI_BYTE_PARA_UNICODE`, 256
+entradas) é uma cópia literal de `com.lowagie.text.pdf.PdfEncodings
+.winansiByteToChar` (pacote-privada no OpenPDF, por isso copiada) — a MESMA
+tabela que o OpenPDF usa para converter caracteres Java em bytes na escrita,
+garantindo round-trip exato nos dois sentidos. **Zero mudança visual**: os
+bytes do conteúdo da página não são tocados, só é adicionado um objeto novo
+(`/ToUnicode`) referenciado pelo dicionário da fonte.
+
+**Cuidado real encontrado e corrigido durante a implementação:** todo
+`PdfStamper` do OpenPDF, por padrão, anexa `"; modified using OpenPDF
+X.Y.Z"` ao `/Producer` existente ao fechar — como o segundo passe usa um
+`PdfStamper` novo, isso sujava o `/Producer` institucional
+(`Central de Transplantes do Estado do Rio Grande do Sul`, gravado por
+`anonimizarMetadados` no primeiro passe) com esse sufixo técnico, quebrando
+2 testes existentes
+(`PdfCabecalhoStamperTest.estamparMantemProducerInstitucionalMesmoSemMetadadosDeOrigem`/
+`estamparRemoveNomeDoPacienteDeTodasAsChavesDoInfo`). Corrigido reafirmando
+o `/Producer` explicitamente via `stamper.setInfoDictionary(Map.of(
+"Producer", NOME_INSTITUICAO))` no segundo passe também (mesma API
+`setInfoDictionary`, não o `setMoreInfo` deprecado, já documentado acima
+para o primeiro passe).
+
+**Validação (antes/depois, com os 3 extratores, PDFs gerados de verdade —
+não simulado):**
+```
+# ANTES da correção (código de main, sem alteração):
+pypdf:    FFFD count = 0  (3 documentos)
+PyMuPDF:  FFFD count = 0  (3 documentos)
+pdftotext -enc UTF-8: "João da Silva Conceição", "URGÊNCIA RENAL" presentes e corretos
+
+# DEPOIS da correção (com /ToUnicode injetado):
+pypdf:    FFFD count = 0  (3 documentos) — sem regressão
+PyMuPDF:  FFFD count = 0  (3 documentos) — sem regressão
+pdftotext -enc UTF-8: idêntico ao antes, mais o /Producer sem sufixo "modified using"
+/Producer do PDF resultante: "Central de Transplantes do Estado do Rio Grande do Sul" (sem sufixo)
+```
+Ou seja: **antes** já não havia corrupção real (só a percebida no console),
+e **depois** a extração continua correta, agora também com `/ToUnicode`
+explícito presente (confirmado objeto a objeto via `PyMuPDF.xref_object`/
+`xref_stream`) e sem a regressão do `/Producer`.
+
+Testes novos em `PdfCabecalhoStamperTest`:
+`estamparInjetaToUnicodeEmTodasAsFontesType1WinAnsiDoDocumento` (varre todo
+objeto do PDF resultante, confirma `/ToUnicode` presente em toda fonte
+`/Type1`/`WinAnsiEncoding` — cobre corpo original + fonte do próprio
+carimbo) e `textoExtraidoDoDocumentoEstampadoMantemAAcentuacaoOriginal`
+(ponta a ponta com `PdfTextExtractor`, o próprio extrator do OpenPDF).
+Suíte completa: **890 testes, 0 falhas** (JDK 21).
+
+**Lição de metodologia, para quem for investigar relato semelhante no
+futuro:** ao extrair texto de PDF via script Python (ou qualquer linguagem)
+para comparar "antes/depois" de um bug de acentuação, **nunca confie no que
+aparece impresso no console** sem antes confirmar programaticamente (contar
+`�`, comparar `ord()`/codepoints, ou escrever em arquivo UTF-8 e reler
+com uma ferramenta que declara o encoding) — o console em si é uma fonte
+comum de falso positivo nesse tipo de investigação, inclusive para quem já
+está avisado do risco (aconteceu nesta própria investigação, na primeira
+tentativa, antes de isolar a causa).
+
+## Fix: cartão "Deferido"/"Indeferido" do Portal do Solicitante afirmava envio de e-mail que ainda não tinha ocorrido (2026-08)
+
+**Bug real achado em simulação de QA (Playwright)**, no cartão de situação
+único do detalhe do Portal do Solicitante (`SolicitanteController
+.montarSituacaoPedido`, `solicitante/detalhe.html`). Quando o processo
+estava Deferido, o cartão afirmava, ao mesmo tempo, duas coisas
+contraditórias: que "a resposta oficial foi enviada por e-mail (...)
+contendo o comprovante de inserção no Sistema Nacional de Transplantes
+(SNT) em anexo" **e**, logo abaixo, que "Comprovante SNT ainda sendo
+providenciado pela equipe" — o mesmo tipo de bug se repetia no ramo
+Indeferido, com o ofício.
+
+**Causa raiz:** o texto de `mensagem` era montado de forma incondicional em
+`montarSituacaoPedido`, ignorando se o anexo (`comprovanteSnt`/
+`oficioIndeferimento`, já calculados antes da chamada via
+`AnexoStorageService.buscarUltimoPorTipo`) de fato existia, e ignorando
+`Processo.emailEnviadoSolicitante` (só passa a `true` dentro de
+`ProcessoService.finalizarResposta`, ver seção "Fluxo em 5 passos" acima) —
+ou seja, o cartão podia anunciar "já enviado" para um processo que acabou
+de ser Deferido automaticamente por maioria simples, mas cuja etapa 6
+(Resposta ao solicitante) o operador ainda nem tinha executado. O aviso
+"ainda sendo providenciado" (mais abaixo, no `solicitante/detalhe.html`) já
+lia corretamente `situacao.anexoParaBaixar() == null` — a contradição era
+sempre entre o texto fixo de `mensagem` e essa segunda checagem correta no
+template, nunca uma lógica duplicada/divergente no HTML.
+
+**Correção:** os dois ramos (`deferido`/`indeferido`) de
+`montarSituacaoPedido` passaram a calcular `respostaJaEnviada` (anexo
+correspondente não-nulo **e** `proc.isEmailEnviadoSolicitante()`) e montar
+a `mensagem` condicionalmente: só afirma "foi enviada/enviado por e-mail"
+quando as duas condições valem; caso contrário, afirma que a equipe **está
+providenciando** o envio formal, sem mencionar um e-mail que ainda não
+saiu. `SituacaoPedidoView` continua sendo a fonte única da decisão — nada
+foi duplicado no template, que já consumia `situacao.anexoParaBaixar()`
+corretamente.
+
+**Testes** (`SolicitanteControllerTest`): 4 casos novos cobrindo Deferido
+sem/com comprovante SNT (+ `emailEnviadoSolicitante`) e Indeferido sem/com
+ofício, cada um verificando por `content().string(...)` que a frase de
+"já enviado" só aparece no cenário correto e nunca coexiste com o aviso de
+"ainda sendo providenciado".
+
+**PR:** `fix/mensagem-comprovante-snt-contraditoria` (branch dedicada a
+partir de `main`, sem outra mudança de regra de negócio).

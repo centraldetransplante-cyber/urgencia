@@ -281,7 +281,7 @@ class SubstituicaoDocumentoAnonimizadoIntegrationTest {
                         .file(pdf("laudo-anonimizado.pdf"))
                         .with(csrf()))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(flash().attribute("erro", containsString("nao encontrado")));
+                .andExpect(flash().attribute("erro", containsString("não encontrado")));
 
         assertThat(anexoRepo.findById(pendenteDoEncerradoId)).isPresent();
         assertThat(anexosDoTipo(processoId, TipoAnexo.DOCUMENTO_CLINICO_AVALIADOR)).isEmpty();
@@ -306,7 +306,7 @@ class SubstituicaoDocumentoAnonimizadoIntegrationTest {
                         .file(pdf("laudo-anonimizado.pdf"))
                         .with(csrf()))
                 .andExpect(status().is3xxRedirection())
-                .andExpect(flash().attribute("erro", containsString("nao encontrado")));
+                .andExpect(flash().attribute("erro", containsString("não encontrado")));
 
         assertThat(anexoRepo.findById(clinicoId)).isPresent();
         assertThat(anexosDoTipo(processoId, TipoAnexo.DOCUMENTO_CLINICO_AVALIADOR)).hasSize(1);

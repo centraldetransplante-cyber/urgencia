@@ -79,7 +79,7 @@ class ProcessoDecisaoControllerTest {
                 .with(csrf()))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/processos/1"))
-            .andExpect(flash().attribute("erro", org.hamcrest.Matchers.containsString("Decisao invalida")));
+            .andExpect(flash().attribute("erro", org.hamcrest.Matchers.containsString("Decisão inválida")));
 
         verify(processoService, never()).decidir(anyLong(), any(), any());
     }
@@ -159,7 +159,7 @@ class ProcessoDecisaoControllerTest {
                 .with(csrf()))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/processos/1"))
-            .andExpect(flash().attribute("msg", org.hamcrest.Matchers.containsString("Decisao registrada")));
+            .andExpect(flash().attribute("msg", org.hamcrest.Matchers.containsString("Decisão registrada")));
 
         verify(processoService).decidir(1L, StatusProcesso.DEFERIDO, null);
         // A geracao dos PDFs roda numa transacao curta e propria, com o
