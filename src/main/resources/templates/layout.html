@@ -252,7 +252,9 @@
                     var atual = data.total;
                     if (anterior !== null && atual > parseInt(anterior, 10)) {
                         if (typeof tocarNotificacao === 'function') tocarNotificacao();
-                        if (typeof mostrarToast === 'function') mostrarToast('Nova mensagem de um solicitante.', 'info');
+                        if (typeof mostrarToast === 'function') mostrarToast('Nova mensagem de um solicitante.', 'info', function () {
+                            window.location.href = /*[[@{/processos/solicitacoes-online}]]*/ '/processos/solicitacoes-online';
+                        });
                     }
                     anterior = String(atual);
                     sessionStorage.setItem(chave, anterior);
@@ -292,7 +294,9 @@
                     var atual = data.total;
                     if (anterior !== null && atual > parseInt(anterior, 10)) {
                         if (typeof tocarNotificacao === 'function') tocarNotificacao();
-                        if (typeof mostrarToast === 'function') mostrarToast('Nova mensagem da equipe CET-RS.', 'info');
+                        if (typeof mostrarToast === 'function') mostrarToast('Nova mensagem da equipe CET-RS.', 'info', function () {
+                            window.location.href = /*[[@{/solicitante}]]*/ '/solicitante';
+                        });
                     }
                     anterior = String(atual);
                     sessionStorage.setItem(chave, anterior);
@@ -331,7 +335,9 @@
                     var atual = data.total;
                     if (anterior !== null && atual > parseInt(anterior, 10)) {
                         if (typeof tocarNotificacao === 'function') tocarNotificacao();
-                        if (typeof mostrarToast === 'function') mostrarToast('Nova mensagem da equipe CET-RS sobre um dos seus processos.', 'info');
+                        if (typeof mostrarToast === 'function') mostrarToast('Nova mensagem da equipe CET-RS sobre um dos seus processos.', 'info', function () {
+                            window.location.href = /*[[@{/avaliador}]]*/ '/avaliador';
+                        });
                     }
                     anterior = String(atual);
                     sessionStorage.setItem(chave, anterior);
@@ -359,7 +365,9 @@
                     var atual = data.total;
                     if (anterior !== null && atual > parseInt(anterior, 10)) {
                         if (typeof tocarNotificacao === 'function') tocarNotificacao();
-                        if (typeof mostrarToast === 'function') mostrarToast('Nova mensagem de um médico avaliador.', 'info');
+                        if (typeof mostrarToast === 'function') mostrarToast('Nova mensagem de um médico avaliador.', 'info', function () {
+                            window.location.href = /*[[@{/processos/mensagens-avaliadores}]]*/ '/processos/mensagens-avaliadores';
+                        });
                     }
                     anterior = String(atual);
                     sessionStorage.setItem(chave, anterior);

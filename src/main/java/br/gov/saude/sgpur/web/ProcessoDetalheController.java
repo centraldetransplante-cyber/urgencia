@@ -188,13 +188,13 @@ public class ProcessoDetalheController {
         // caso - mensagem direciona para a lista de processos, nao para ela).
         if (!solicitanteHabilitado) {
             ra.addFlashAttribute("erro",
-                "O Portal do Solicitante esta desativado. Nao e possivel cadastrar processos "
-                    + "enquanto o modulo estiver desligado.");
+                "O Portal do Solicitante está desativado. Não é possível cadastrar processos "
+                    + "enquanto o módulo estiver desligado.");
             return "redirect:/processos";
         }
         if (origemSolicitacaoOnlineId == null) {
             ra.addFlashAttribute("erro",
-                "Todo processo deve ser criado a partir de uma solicitacao do Portal do Solicitante.");
+                "Todo processo deve ser criado a partir de uma solicitação do Portal do Solicitante.");
             return "redirect:/processos/solicitacoes-online";
         }
         Processo p = new Processo();
@@ -211,7 +211,7 @@ public class ProcessoDetalheController {
         // UI que ja esconde os botoes nesse caso.
         if (s.getStatus() != StatusSolicitacaoOnline.ENVIADA) {
             ra.addFlashAttribute("erro",
-                "Esta solicitacao ja foi triada e nao pode ser convertida novamente.");
+                "Esta solicitação já foi triada e não pode ser convertida novamente.");
             return "redirect:/processos/solicitacoes-online/" + origemSolicitacaoOnlineId;
         }
         p.setPacienteNome(s.getPacienteNome());
@@ -261,13 +261,13 @@ public class ProcessoDetalheController {
         // do modulo bloqueia qualquer cadastro por aqui.
         if (!solicitanteHabilitado) {
             ra.addFlashAttribute("erro",
-                "O Portal do Solicitante esta desativado. Nao e possivel cadastrar processos "
-                    + "enquanto o modulo estiver desligado.");
+                "O Portal do Solicitante está desativado. Não é possível cadastrar processos "
+                    + "enquanto o módulo estiver desligado.");
             return "redirect:/processos";
         }
         if (origemSolicitacaoOnlineId == null) {
             ra.addFlashAttribute("erro",
-                "Todo processo deve ser criado a partir de uma solicitacao do Portal do Solicitante.");
+                "Todo processo deve ser criado a partir de uma solicitação do Portal do Solicitante.");
             return "redirect:/processos/solicitacoes-online";
         }
         // Revisar e converter so pode acontecer UMA vez: se a solicitacao ja
@@ -278,7 +278,7 @@ public class ProcessoDetalheController {
         var origem = solicitacaoOnlineService.buscar(origemSolicitacaoOnlineId);
         if (origem.getStatus() != StatusSolicitacaoOnline.ENVIADA) {
             ra.addFlashAttribute("erro",
-                "Esta solicitacao ja foi triada e nao pode ser convertida novamente.");
+                "Esta solicitação já foi triada e não pode ser convertida novamente.");
             return "redirect:/processos/solicitacoes-online/" + origemSolicitacaoOnlineId;
         }
         int ano = processo.getDataSituacaoEspecial() != null
@@ -337,7 +337,7 @@ public class ProcessoDetalheController {
                 "Solicitacao " + origemSolicitacaoOnlineId + " -> Processo " + salvo.getNumero());
         } catch (IllegalStateException | IllegalArgumentException e) {
             ra.addFlashAttribute("aviso",
-                "Processo cadastrado, mas houve falha ao vincular a solicitacao online de origem: "
+                "Processo cadastrado, mas houve falha ao vincular a solicitação online de origem: "
                     + e.getMessage());
         }
         ra.addFlashAttribute("msg", "Processo " + salvo.getNumero() + " cadastrado.");
@@ -678,8 +678,8 @@ public class ProcessoDetalheController {
         }
         if (!confirmo) {
             ra.addFlashAttribute("erro",
-                "Marque a confirmacao de que o documento foi anonimizado (nome do paciente removido "
-                    + "do corpo) antes de libera-lo para os avaliadores.");
+                "Marque a confirmação de que o documento foi anonimizado (nome do paciente removido "
+                    + "do corpo) antes de liberá-lo para os avaliadores.");
             return "redirect:/processos/" + id + "#envio";
         }
         // Busca o anexo direto pelo id e confere a POSSE (mesmo padrao
@@ -690,12 +690,12 @@ public class ProcessoDetalheController {
         Anexo anexo = anexoRepo.findById(anexoId).orElse(null);
         if (anexo == null || anexo.getProcesso() == null
                 || !id.equals(anexo.getProcesso().getId())) {
-            ra.addFlashAttribute("erro", "Documento nao encontrado neste processo.");
+            ra.addFlashAttribute("erro", "Documento não encontrado neste processo.");
             return "redirect:/processos/" + id + "#envio";
         }
         if (anexo.getTipo() != TipoAnexo.DOCUMENTO_PORTAL_NAO_ANONIMIZADO) {
             ra.addFlashAttribute("erro",
-                "Este documento nao esta pendente de anonimizacao.");
+                "Este documento não está pendente de anonimização.");
             return "redirect:/processos/" + id + "#envio";
         }
         String quem = principal != null ? principal.getName() : "desconhecido";
@@ -707,7 +707,7 @@ public class ProcessoDetalheController {
         auditoria.registrar("ANONIMIZACAO_CONFIRMADA",
             "Processo " + p.getNumero() + " - anexo id " + anexoId + " (" + anexo.getNomeArquivo()
                 + ") liberado para os avaliadores por " + quem);
-        ra.addFlashAttribute("msg", "Anonimizacao confirmada: \"" + anexo.getNomeArquivo()
+        ra.addFlashAttribute("msg", "Anonimização confirmada: \"" + anexo.getNomeArquivo()
             + "\" agora entra no PDF enviado aos avaliadores.");
         return "redirect:/processos/" + id + "#envio";
     }
@@ -784,18 +784,18 @@ public class ProcessoDetalheController {
             .orElse(null);
         if (pendente == null) {
             ra.addFlashAttribute("erro",
-                "Documento nao encontrado neste processo (ou ja nao esta pendente de anonimizacao).");
+                "Documento não encontrado neste processo (ou já não está pendente de anonimização).");
             return destino;
         }
         if (arquivo == null || arquivo.isEmpty()) {
             ra.addFlashAttribute("erro",
-                "Escolha o arquivo com a versao anonimizada antes de substituir. "
+                "Escolha o arquivo com a versão anonimizada antes de substituir. "
                     + "O documento pendente foi mantido.");
             return destino;
         }
         if (!"pdf".equals(NomePadraoAnexo.extensao(arquivo.getOriginalFilename()))) {
             ra.addFlashAttribute("erro",
-                "A versao anonimizada precisa ser um arquivo PDF (so PDF entra no documento "
+                "A versão anonimizada precisa ser um arquivo PDF (só PDF entra no documento "
                     + "enviado aos avaliadores). O documento pendente foi mantido.");
             return destino;
         }
@@ -810,7 +810,7 @@ public class ProcessoDetalheController {
                     + " em substituicao ao documento do Portal do Solicitante",
                 arquivo);
         } catch (IllegalArgumentException | java.io.IOException e) {
-            ra.addFlashAttribute("erro", "Falha ao anexar a versao anonimizada: " + e.getMessage()
+            ra.addFlashAttribute("erro", "Falha ao anexar a versão anonimizada: " + e.getMessage()
                 + " O documento pendente foi mantido.");
             return destino;
         }
@@ -831,12 +831,12 @@ public class ProcessoDetalheController {
                 + (originalRemovido ? "" : " [FALHA ao remover o original - ainda no processo]"));
         if (originalRemovido) {
             ra.addFlashAttribute("msg",
-                "Versao anonimizada anexada e documento original removido do processo. "
+                "Versão anonimizada anexada e documento original removido do processo. "
                     + "O novo arquivo entra no PDF enviado aos avaliadores.");
         } else {
             ra.addFlashAttribute("aviso",
-                "Versao anonimizada anexada, mas o documento original NAO pode ser removido "
-                    + "automaticamente. Remova-o pelo botao de remover, no bloco de revisao.");
+                "Versão anonimizada anexada, mas o documento original NÃO pôde ser removido "
+                    + "automaticamente. Remova-o pelo botão de remover, no bloco de revisão.");
         }
         return destino;
     }
@@ -877,11 +877,11 @@ public class ProcessoDetalheController {
         Processo p = processoService.buscar(id);
         Long solicitacaoOrigemId = solicitacaoOnlineRepository.findIdByProcessoGeradoId(p.getId()).orElse(null);
         if (solicitacaoOrigemId == null) {
-            ra.addFlashAttribute("erro", "Este processo nao possui solicitacao de origem vinculada.");
+            ra.addFlashAttribute("erro", "Este processo não possui solicitação de origem vinculada.");
             return "redirect:/processos/" + id;
         }
         if (texto == null || texto.isBlank()) {
-            ra.addFlashAttribute("erro", "A mensagem nao pode estar em branco.");
+            ra.addFlashAttribute("erro", "A mensagem não pode estar em branco.");
             return "redirect:/processos/" + id;
         }
         SolicitacaoOnline s = solicitacaoOnlineService.buscar(solicitacaoOrigemId);
@@ -941,10 +941,10 @@ public class ProcessoDetalheController {
         Long solicitacaoOrigemId = solicitacaoOnlineRepository.findIdByProcessoGeradoId(p.getId()).orElse(null);
         if (solicitacaoOrigemId == null) {
             return ResponseEntity.badRequest().body(java.util.Map.of("erro",
-                "Este processo nao possui solicitacao de origem vinculada."));
+                "Este processo não possui solicitação de origem vinculada."));
         }
         if (texto == null || texto.isBlank()) {
-            return ResponseEntity.badRequest().body(java.util.Map.of("erro", "A mensagem nao pode estar em branco."));
+            return ResponseEntity.badRequest().body(java.util.Map.of("erro", "A mensagem não pode estar em branco."));
         }
         SolicitacaoOnline s = solicitacaoOnlineService.buscar(solicitacaoOrigemId);
         Usuario operador = usuarioRepo.findByUsername(principal.getName())
@@ -1023,25 +1023,25 @@ public class ProcessoDetalheController {
         var parecerOpt = parecerRepo.findByProcessoIdAndMembroId(id, membroId);
         if (parecerOpt.isEmpty()) {
             return ResponseEntity.badRequest().body(java.util.Map.of("erro",
-                "Este medico nao e avaliador deste processo."));
+                "Este médico não é avaliador deste processo."));
         }
         if (p.getStatus().isFinalizado()) {
             return ResponseEntity.badRequest().body(java.util.Map.of("erro",
-                "Este processo ja foi decidido; a conversa ficou somente leitura."));
+                "Este processo já foi decidido; a conversa ficou somente leitura."));
         }
         if (texto == null || texto.isBlank()) {
-            return ResponseEntity.badRequest().body(java.util.Map.of("erro", "A mensagem nao pode estar em branco."));
+            return ResponseEntity.badRequest().body(java.util.Map.of("erro", "A mensagem não pode estar em branco."));
         }
         var verificacao = verificadorNomePaciente.verificar(texto, p.getPacienteNome(), p.getSolicitanteEquipe());
         if (verificacao.nivel() != VerificadorNomePaciente.Nivel.LIVRE) {
             return ResponseEntity.badRequest().body(java.util.Map.of("erro",
-                "Esta mensagem parece citar o paciente ou a equipe solicitante (contem \""
+                "Esta mensagem parece citar o paciente ou a equipe solicitante (contém \""
                     + String.join("\", \"", verificacao.termosEncontrados())
-                    + "\"). Refira-se ao paciente apenas pelas iniciais e nao cite a equipe solicitante. "
+                    + "\"). Refira-se ao paciente apenas pelas iniciais e não cite a equipe solicitante. "
                     + "Reescreva a mensagem e envie novamente."));
         }
         MembroUrgenciaRenal membro = membroRepo.findById(membroId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Avaliador nao encontrado."));
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Avaliador não encontrado."));
         Usuario operador = usuarioRepo.findByUsername(principal.getName())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
         mensagemAvaliadorService.enviar(p, membro, texto, RemetenteMensagemAvaliador.OPERADOR, operador.getId());
@@ -1103,7 +1103,7 @@ public class ProcessoDetalheController {
         String numero = p.getNumero();
         processoService.excluir(id);
         anexoStorage.removerPastaProcesso(p);
-        ra.addFlashAttribute("msg", "Processo " + numero + " excluido.");
+        ra.addFlashAttribute("msg", "Processo " + numero + " excluído.");
         return "redirect:/processos";
     }
 

@@ -39,7 +39,7 @@ public class OficioService {
     private static final Locale PT_BR = Locale.forLanguageTag("pt-BR");
 
     /** Exibido no lugar do numero do oficio em processos anteriores a numeracao propria. */
-    static final String NUMERO_NAO_ATRIBUIDO = "(numero nao atribuido)";
+    static final String NUMERO_NAO_ATRIBUIDO = "(número não atribuído)";
 
     private final EmailProperties emailProperties;
 
@@ -160,7 +160,7 @@ public class OficioService {
         String numeroOficio = (p.getNumeroOficio() == null || p.getNumeroOficio().isBlank())
             ? NUMERO_NAO_ATRIBUIDO : p.getNumeroOficio();
         String motivo = (p.getMotivoIndeferimento() == null || p.getMotivoIndeferimento().isBlank())
-            ? "(motivo nao informado)" : p.getMotivoIndeferimento();
+            ? "(motivo não informado)" : p.getMotivoIndeferimento();
         String mes = dataEmissao.getMonth().getDisplayName(TextStyle.FULL, PT_BR);
         String dataPorExtenso = cidade() + ", " + String.format("%02d", dataEmissao.getDayOfMonth())
             + " de " + mes + " de " + dataEmissao.getYear() + ".";
@@ -169,23 +169,23 @@ public class OficioService {
         rtf.append("{\\rtf1\\ansi\\ansicpg1252\\deff0")
            .append("{\\fonttbl{\\f0\\froman\\fcharset0 Times New Roman;}}")
            .append("\\viewkind4\\uc1\\pard\\f0\\fs24\n");
-        centralizado(rtf, "Departamento de Regulacao Estadual");
-        centralizado(rtf, "Divisao de Transplantes");
+        centralizado(rtf, "Departamento de Regulação Estadual");
+        centralizado(rtf, "Divisão de Transplantes");
         linha(rtf, "");
         linha(rtf, "");
-        linha(rtf, "Oficio n " + numeroOficio);
+        linha(rtf, "Ofício nº " + numeroOficio);
         linha(rtf, dataPorExtenso);
         linha(rtf, "");
         linha(rtf, "");
         linha(rtf, "Prezado(a) Senhor(a),");
         linha(rtf, "");
-        linha(rtf, "Em referencia ao Processo de Urgencia Renal n. " + p.getNumero()
-            + ", referente ao(a) paciente " + p.getPacienteNome() + ", comunicamos que, apos "
-            + "analise dos pareceres da equipe de Urgencia Renal, o pedido foi INDEFERIDO.");
+        linha(rtf, "Em referência ao Processo de Urgência Renal n. " + p.getNumero()
+            + ", referente ao(à) paciente " + p.getPacienteNome() + ", comunicamos que, após "
+            + "análise dos pareceres da equipe de Urgência Renal, o pedido foi INDEFERIDO.");
         linha(rtf, "");
         linha(rtf, "Motivo do indeferimento: " + motivo);
         linha(rtf, "");
-        linha(rtf, "Permanecemos a disposicao para os esclarecimentos que se fizerem necessarios.");
+        linha(rtf, "Permanecemos à disposição para os esclarecimentos que se fizerem necessários.");
         linha(rtf, "");
         linha(rtf, "Atenciosamente.");
         linha(rtf, "");
@@ -193,7 +193,7 @@ public class OficioService {
         centralizado(rtf, emailProperties.getAssinatura());
         linha(rtf, "");
         linha(rtf, "");
-        linha(rtf, "A equipe solicitante");
+        linha(rtf, "À equipe solicitante");
         linha(rtf, p.getSolicitanteEquipe());
         rtf.append("}");
         return rtf.toString().getBytes(java.nio.charset.StandardCharsets.ISO_8859_1);

@@ -1769,6 +1769,22 @@ issue/branch aberta para isso, só o registro no relatório.
    templates de verdade em `HomeControllerTest`/`ProcessoListaControllerTest`
    — a correção original de detalhe não tinha nenhum teste, foi por isso que
    as outras duas telas passaram despercebidas.
+   **Correção de QA (achado posterior): `arquivo/lista.html` era a 4ª tela
+   com o mesmo status cru sem o fragment.** Ficou de fora das 3 originais
+   (`processos/detalhe.html`, `dashboard.html`, `processos/lista.html`) por
+   não ter sido lembrada na varredura da correção de 2026-08-04 — o Arquivo
+   é justamente a tela onde processos Deferido/Indeferido/Cancelado vivem
+   permanentemente, então mostrar "Indeferido" cru sem indicar se a
+   papelada pós-decisão (ofício/comprovante SNT + resposta ao solicitante)
+   já foi concluída é o mesmo bug de confusão visual, só que na tela de
+   consulta histórica. `ArquivoController.listar` já carregava `Page<Processo>`
+   com a entidade completa (não uma projeção/DTO), então nenhuma mudança de
+   controller/query foi necessária — só adicionar
+   `<span th:replace="~{layout :: badgeEncerramento(${p}, 'ms-1')}"></span>`
+   ao lado do badge de status na célula "Situação", mesmo padrão exato já
+   usado em `processos/lista.html`. `arquivo/lista.html` é agora a 4ª e
+   última tela candidata a essa regra — não sobra nenhuma tela do sistema
+   listando status final de processo sem passar por este fragment.
 2. **Atalhos da barra lateral corrigidos.** "Ofício de Indeferimento" e o
    novo atalho "Comprovante SNT" só aparecem depois que o anexo
    correspondente existe de fato, e baixam **o anexo real**
@@ -1923,6 +1939,49 @@ alteração de status de paciente) — documento diferente do ofício de
 indeferimento, que vai à equipe solicitante. Esse item continua **não
 implementado**; o modelo foi usado aqui só como referência de estrutura
 (numeração, cabeçalho do departamento, bloco do destinatário).
+
+### Bug corrigido: rascunho RTF sem acentuação (2026-08-08)
+
+Achado numa simulação real de QA: `OficioService.gerarRascunhoRtf` tinha
+todos os literais Java fixos **sem nenhum acento** ("Regulacao", "Divisao",
+"Oficio n", "apos analise", "Permanecemos a disposicao" etc.) — diferente do
+PDF antigo (`OficioService.gerar`), que a seção anterior já registra como
+corrigido (acentuação correta, é documento oficial). O rascunho RTF é
+exatamente esse mesmo documento oficial, só que editável — não fazia sentido
+os dois caminhos divergirem.
+
+**Correção:** todos os literais fixos de `gerarRascunhoRtf` foram acentuados
+("Regulação", "Divisão", "Ofício nº", "após análise", "Permanecemos à
+disposição", "À equipe solicitante", etc. — inclusive o fallback do motivo,
+`"(motivo não informado)"`, que já era acentuado no PDF mas não no RTF) e o
+fallback `OficioService.NUMERO_NAO_ATRIBUIDO` (compartilhado entre PDF e RTF)
+passou de `"(numero nao atribuido)"` para `"(número não atribuído)"` — o PDF
+também ganhou a acentuação correta nesse placeholder de tabela, que tinha
+escapado da correção original por estar numa constante à parte.
+
+**Nenhuma mudança no mecanismo de escape em si.** `OficioService.escaparRtf`
+já cobria corretamente qualquer caractere fora do ASCII (`\'hh` no code page
+`\ansicpg1252` declarado no cabeçalho do RTF) — usado tanto para texto
+dinâmico (nome do paciente, motivo) quanto, através dos helpers `linha`/
+`centralizado`, para os literais fixos. Bastava acentuar as strings Java
+(`ç`, `ã`, `é`, `í`, `ú`, `à`, `À`, `º` etc.) normalmente — elas passam pelo
+mesmo `escaparRtf` de sempre e saem como `\'hh`, nunca cru. **Não colocar
+acento cru fora desse caminho**: qualquer literal novo em `gerarRascunhoRtf`
+deve continuar entrando via `linha(...)`/`centralizado(...)`, nunca
+concatenado direto no `StringBuilder` sem passar pelo escape.
+
+**Validado gerando o RTF de verdade** (não só por assertiva de texto): um
+teste escreveu `gerarRascunhoRtf(...)` em disco e o arquivo foi lido byte a
+byte — confirmado que cada acento vira a sequência `\'hh` esperada (ex.
+`Regula\'e7\'e3o` = "Regulação", `Of\'edcio n\'ba` = "Ofício nº", `\'c0
+equipe` = "À equipe") e que a estrutura RTF (chaves balanceadas, sem
+corrupção) permanece intacta. Coberto por
+`OficioServiceTest.rascunhoTemAcentuacaoCorretaNosTextosFixos` (decodifica o
+`\'hh` de volta para o caractere original via um helper de teste,
+`desescapaRtf`, e compara com os literais acentuados esperados) e pelo teste
+de fallback atualizado (`rascunhoUsaFallbacksQuandoOProcessoAindaNaoTem
+NumeroDeOficioNemMotivo`), que passou a decodificar antes de comparar — a
+string RTF crua nunca contém "número"/"não" literalmente, só o escape.
 
 ## Regra de datas: data de ato = momento do anexo, nunca digitada (2026-08-04)
 
@@ -3497,6 +3556,55 @@ solicitante no fixture e um teste
 (`mensagensAjaxRotulaMensagemDoSolicitanteComONomeRealENaoComLiteralGenerico`)
 que confirma o JSON de `GET .../mensagens` contendo o nome real
 ("Solicitante Detalhe Teste"/"Solicitante Teste") em vez do literal antigo.
+
+## Toast do poll global clicável + acentuação de mensagens em controllers (2026-08-08)
+
+Duas correções pontuais de UX/ortografia, sem mudança de regra de negócio.
+
+**1. Toast do poll GLOBAL de mensagens (`layout.html`) virou clicável.**
+Os 4 blocos `<script>` de poll global de notificação (20s, dentro do
+fragment `navbar`: ADMIN/OPERADOR "Nova mensagem de um solicitante.",
+SOLICITANTE "Nova mensagem da equipe CET-RS.", AVALIADOR "Nova mensagem da
+equipe CET-RS sobre um dos seus processos." e ADMIN/OPERADOR "Nova mensagem
+de um médico avaliador.") chamavam `mostrarToast(mensagem, tipo)` sem o 3º
+parâmetro `onClick` (`static/js/toast.js` já suporta desde 2026-08-07, ver
+o comentário do próprio arquivo — usado por `chat-solicitacao.js` para os
+toasts *dentro* das 3 telas de chat, que já eram clicáveis). Estes 4 blocos
+diferentes (o poll global que roda em QUALQUER tela, fora das telas de chat
+— ver `chatAtivoNestaTela`) tinham ficado de fora dessa correção anterior.
+Agora cada um navega para a tela correspondente ao clicar: operador/admin
+(mensagem de solicitante) → `/processos/solicitacoes-online`; solicitante →
+`/solicitante`; avaliador → `/avaliador`; operador/admin (mensagem de
+avaliador) → `/processos/mensagens-avaliadores`. Usa
+`/*[[@{...}]]*/` (Thymeleaf inlining) com fallback para a URL literal — os 4
+`<script>` já tinham `th:inline="javascript"`, sem o qual esse padrão
+falharia silenciosamente (ver "Convenções de código").
+
+**2. Acentuação de literais Java em 4 controllers.** A "Fase 8" de
+acentuação (2026-08-03/04) cobriu só templates HTML Thymeleaf, não string
+literals dentro de código Java — mensagens de flash (`erro`/`sucesso`/
+`aviso`), corpos de `ResponseEntity`/`Map` de erro JSON e descrições de
+anexo visíveis ao usuário em `SolicitanteController`, `AvaliadorController`,
+`ProcessoDetalheController` e `ProcessoDecisaoController` estavam sem
+acento. Corrigidas todas as mensagens desses 4 arquivos (e os testes que
+faziam assert do texto exato/`containsString` do texto antigo sem acento,
+em `ProcessoDecisaoControllerTest`, `ProcessoDetalheControllerTest`,
+`SolicitanteControllerTest` e `SubstituicaoDocumentoAnonimizadoIntegrationTest`).
+**`StatusProcesso.descricao` (`getDescricao()`) foi DELIBERADAMENTE
+mantido sem acento** — mesmo padrão já documentado para
+`ResultadoParecer.descricao`: é consumido por `RelatorioService.java`
+(Relatório Final PDF) e `ExportacaoProcessoService.java` (dossiê
+exportado), então mudar o enum teria impacto direto em documentos oficiais,
+fora do escopo desta correção de UX. Prompts enviados à API do Gemini
+(`sugestaoMotivo`/`revisarEmailIa` em `ProcessoDecisaoController`) também
+não foram tocados — são instruções para a IA, não mensagens exibidas ao
+usuário.
+
+Suíte completa validada (JDK 21): 890 testes, 0 falhas atribuíveis a esta
+mudança (a única falha vista, `ComprovanteSntPendenteQueriesIntegrationTest
+.registrarUltimoLembreteSntGravaOTimestampNoBanco`, é a flakiness de
+precisão de nanossegundos do H2 já documentada em outras sessões — passa
+isolada, confirmado nesta mesma sessão).
 Suíte completa validada (JDK 21), sem regressão.
 
 ## Extração de texto em PDF: investigação do "acento corrompido" — bug NÃO reproduzido, hardening aplicada mesmo assim (2026-08-08)
@@ -3606,3 +3714,48 @@ com uma ferramenta que declara o encoding) — o console em si é uma fonte
 comum de falso positivo nesse tipo de investigação, inclusive para quem já
 está avisado do risco (aconteceu nesta própria investigação, na primeira
 tentativa, antes de isolar a causa).
+
+## Fix: cartão "Deferido"/"Indeferido" do Portal do Solicitante afirmava envio de e-mail que ainda não tinha ocorrido (2026-08)
+
+**Bug real achado em simulação de QA (Playwright)**, no cartão de situação
+único do detalhe do Portal do Solicitante (`SolicitanteController
+.montarSituacaoPedido`, `solicitante/detalhe.html`). Quando o processo
+estava Deferido, o cartão afirmava, ao mesmo tempo, duas coisas
+contraditórias: que "a resposta oficial foi enviada por e-mail (...)
+contendo o comprovante de inserção no Sistema Nacional de Transplantes
+(SNT) em anexo" **e**, logo abaixo, que "Comprovante SNT ainda sendo
+providenciado pela equipe" — o mesmo tipo de bug se repetia no ramo
+Indeferido, com o ofício.
+
+**Causa raiz:** o texto de `mensagem` era montado de forma incondicional em
+`montarSituacaoPedido`, ignorando se o anexo (`comprovanteSnt`/
+`oficioIndeferimento`, já calculados antes da chamada via
+`AnexoStorageService.buscarUltimoPorTipo`) de fato existia, e ignorando
+`Processo.emailEnviadoSolicitante` (só passa a `true` dentro de
+`ProcessoService.finalizarResposta`, ver seção "Fluxo em 5 passos" acima) —
+ou seja, o cartão podia anunciar "já enviado" para um processo que acabou
+de ser Deferido automaticamente por maioria simples, mas cuja etapa 6
+(Resposta ao solicitante) o operador ainda nem tinha executado. O aviso
+"ainda sendo providenciado" (mais abaixo, no `solicitante/detalhe.html`) já
+lia corretamente `situacao.anexoParaBaixar() == null` — a contradição era
+sempre entre o texto fixo de `mensagem` e essa segunda checagem correta no
+template, nunca uma lógica duplicada/divergente no HTML.
+
+**Correção:** os dois ramos (`deferido`/`indeferido`) de
+`montarSituacaoPedido` passaram a calcular `respostaJaEnviada` (anexo
+correspondente não-nulo **e** `proc.isEmailEnviadoSolicitante()`) e montar
+a `mensagem` condicionalmente: só afirma "foi enviada/enviado por e-mail"
+quando as duas condições valem; caso contrário, afirma que a equipe **está
+providenciando** o envio formal, sem mencionar um e-mail que ainda não
+saiu. `SituacaoPedidoView` continua sendo a fonte única da decisão — nada
+foi duplicado no template, que já consumia `situacao.anexoParaBaixar()`
+corretamente.
+
+**Testes** (`SolicitanteControllerTest`): 4 casos novos cobrindo Deferido
+sem/com comprovante SNT (+ `emailEnviadoSolicitante`) e Indeferido sem/com
+ofício, cada um verificando por `content().string(...)` que a frase de
+"já enviado" só aparece no cenário correto e nunca coexiste com o aviso de
+"ainda sendo providenciado".
+
+**PR:** `fix/mensagem-comprovante-snt-contraditoria` (branch dedicada a
+partir de `main`, sem outra mudança de regra de negócio).

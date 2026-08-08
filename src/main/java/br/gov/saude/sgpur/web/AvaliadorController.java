@@ -361,7 +361,7 @@ public class AvaliadorController {
                                 HttpServletRequest request,
                                 RedirectAttributes ra) {
         if (!resultado.isVotoValido()) {
-            ra.addFlashAttribute("erro", "Parecer invalido: " + resultado);
+            ra.addFlashAttribute("erro", "Parecer inválido: " + resultado);
             return "redirect:/avaliador/" + processoId;
         }
         // Justificativa OBRIGATORIA para voto desfavoravel ou pedido de
@@ -377,8 +377,8 @@ public class AvaliadorController {
             || resultado == ResultadoParecer.SOLICITA_INFORMACAO;
         if (justificativaObrigatoria && (justificativa == null || justificativa.isBlank())) {
             ra.addFlashAttribute("erro",
-                "Justificativa obrigatoria para parecer " + resultado.getDescricao()
-                + ": o operador depende desse texto para o oficio/pedido de informacao.");
+                "Justificativa obrigatória para parecer " + resultado.getDescricao()
+                + ": o operador depende desse texto para o ofício/pedido de informação.");
             return "redirect:/avaliador/" + processoId;
         }
         // ---- TX 1: o voto. Unica escrita critica; commitada aqui e ponto. ----
@@ -467,7 +467,7 @@ public class AvaliadorController {
             pDecidido = processoService.tentarDecisaoAutomatica(processoId);
         } catch (IllegalStateException e) {
             ra.addFlashAttribute("aviso",
-                "Voto registrado, mas nao foi possivel decidir automaticamente: "
+                "Voto registrado, mas não foi possível decidir automaticamente: "
                 + e.getMessage());
             return "redirect:/avaliador";
         }
@@ -491,7 +491,7 @@ public class AvaliadorController {
         }
 
         ra.addFlashAttribute("msg",
-            "Voto registrado: " + resultado.getDescricao() + ". Obrigado pela avaliacao.");
+            "Voto registrado: " + resultado.getDescricao() + ". Obrigado pela avaliação.");
         // Oferece ir direto para o proximo pendente (Fase 10): quem tem varios
         // atrasados nao precisa reabrir a lista e escanear de novo a cada voto.
         // So dados do PROPRIO membro (nunca do processo que acabou de votar).
@@ -534,12 +534,12 @@ public class AvaliadorController {
         MembroUrgenciaRenal membro = resolverMembro(principal);
         if (parecerRepo.findByProcessoIdAndMembroId(processoId, membro.getId()).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Voce nao e avaliador deste processo.");
+                "Você não é avaliador deste processo.");
         }
         List<Anexo> pdfs = anexoRepo.findByProcessoIdAndTipo(processoId, TipoAnexo.SOLICITACAO_AVALIADOR);
         Anexo anexo = pdfs.stream().filter(a -> a.getId().equals(anexoId)).findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Anexo nao pertence ao material de avaliacao deste processo."));
+                "Anexo não pertence ao material de avaliação deste processo."));
         Path arquivo = anexoStorage.resolverArquivo(anexo);
         Resource resource = new UrlResource(arquivo.toUri());
         if (!resource.exists() || !resource.isReadable()) {
@@ -590,10 +590,10 @@ public class AvaliadorController {
         Parecer parecer = resolverParecerDoMembro(processoId, membro);
         if (parecer.getProcesso().getStatus().isFinalizado()) {
             return ResponseEntity.badRequest().body(Map.of("erro",
-                "Este processo ja foi decidido; a conversa ficou somente leitura."));
+                "Este processo já foi decidido; a conversa ficou somente leitura."));
         }
         if (texto == null || texto.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("erro", "A mensagem nao pode estar em branco."));
+            return ResponseEntity.badRequest().body(Map.of("erro", "A mensagem não pode estar em branco."));
         }
         Usuario usuario = usuarioLogado(principal);
         mensagemAvaliadorService.enviar(parecer.getProcesso(), membro, texto,
@@ -642,7 +642,7 @@ public class AvaliadorController {
     private Parecer resolverParecerDoMembro(Long processoId, MembroUrgenciaRenal membro) {
         return parecerRepo.findByProcessoIdAndMembroIdComProcesso(processoId, membro.getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Voce nao e avaliador deste processo."));
+                "Você não é avaliador deste processo."));
     }
 
     private Usuario usuarioLogado(Principal principal) {
@@ -709,7 +709,7 @@ public class AvaliadorController {
         MembroUrgenciaRenal vinculo = usuario.getMembro();
         if (vinculo == null) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Usuario avaliador sem membro vinculado. Contate o administrador.");
+                "Usuário avaliador sem membro vinculado. Contate o administrador.");
         }
         // usuario.getMembro() devolve um proxy Hibernate (Usuario.membro e
         // LAZY), ja sem sessao aberta neste ponto (open-in-view=false, sem
@@ -723,7 +723,7 @@ public class AvaliadorController {
         // UsuarioRepository nem abrir transacao aqui.
         return membroRepo.findById(vinculo.getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Membro vinculado nao encontrado."));
+                "Membro vinculado não encontrado."));
     }
 
     /**
@@ -739,17 +739,17 @@ public class AvaliadorController {
         // um proxy LAZY inutil fora de uma transacao aberta.
         Parecer parecer = parecerRepo.findByProcessoIdAndMembroIdComProcesso(processoId, membro.getId())
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Voce nao e avaliador deste processo."));
+                "Você não é avaliador deste processo."));
 
         if (parecer.getResultado() != null) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Voce ja emitiu seu parecer para este processo.");
+                "Você já emitiu seu parecer para este processo.");
         }
 
         StatusProcesso status = parecer.getProcesso().getStatus();
         if (!status.aceitaVotoAvaliador()) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
-                "Este processo nao esta disponivel para avaliacao (status: "
+                "Este processo não está disponível para avaliação (status: "
                     + status.getDescricao() + ").");
         }
 
