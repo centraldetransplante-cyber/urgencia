@@ -290,11 +290,15 @@ class SolicitanteControllerTest {
 
     @Test
     @WithMockUser(username = "usuarioSemCadastro", roles = "SOLICITANTE")
-    void resolverUsuarioLanca401QuandoUsuarioAutenticadoNaoExisteNoBanco() throws Exception {
+    void resolverUsuarioLancaSessaoInvalidaQuandoUsuarioAutenticadoNaoExisteNoBanco() throws Exception {
+        // Mesmo bug/correcao ja aplicados a AvaliadorController.resolverMembro: username
+        // sem Usuario correspondente no banco (sessao "orfa") cai num redirect gracioso
+        // para /login, nunca num 401 cru (SessaoInvalidaException + GlobalExceptionHandler).
         when(usuarioRepo.findByUsername("usuarioSemCadastro")).thenReturn(Optional.empty());
 
         mvc.perform(get("/solicitante"))
-            .andExpect(status().isUnauthorized());
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login?erro=sessao-invalida"));
     }
 
     @Test
