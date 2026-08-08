@@ -17,9 +17,10 @@ spring:
       enabled: false
 
 # Actuator em producao: mesma politica minima do application.yml (so
-# /actuator/health, sem detalhes) - repetido aqui explicitamente (nao
-# herdado por acidente) para nunca depender de alguem lembrar de manter os
-# dois perfis em sincronia.
+# /actuator/health, sem detalhes, sem checar SMTP - ver comentario em
+# application.yml) - repetido aqui explicitamente (nao herdado por
+# acidente) para nunca depender de alguem lembrar de manter os dois perfis
+# em sincronia.
 management:
   endpoints:
     web:
@@ -28,6 +29,9 @@ management:
   endpoint:
     health:
       show-details: never
+  health:
+    mail:
+      enabled: false
 
 # Roda atras do nginx com TLS (ver deploy/) - exige HTTPS para o cookie de
 # sessao trafegar, evitando roubo de sessao em rede insegura.

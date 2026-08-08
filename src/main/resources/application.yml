@@ -72,6 +72,14 @@ spring:
 # vazio"). show-details=never evita expor detalhes internos (ex.: a URL do
 # datasource) mesmo no unico endpoint liberado - so o status agregado
 # (UP/DOWN) aparece, o suficiente para um health-check automatizado.
+# health.mail.enabled=false: com spring-boot-starter-mail no classpath, o
+# Actuator auto-registra um MailHealthIndicator que tenta abrir uma conexao
+# SMTP de verdade a cada consulta - descoberto rodando de verdade contra
+# smtp.gmail.com sem credenciais (dev): o health inteiro virava DOWN so por
+# causa do SMTP, mesmo com banco/disco saudaveis. Isso tornaria o
+# health-check fragil demais para health-check de deploy/monitoramento (um
+# Gmail temporariamente instavel derrubaria o /actuator/health mesmo com o
+# app funcionando). db/diskSpace continuam habilitados (default do Boot).
 management:
   endpoints:
     web:
@@ -80,6 +88,9 @@ management:
   endpoint:
     health:
       show-details: never
+  health:
+    mail:
+      enabled: false
 
 server:
   port: ${SERVER_PORT:3000}
