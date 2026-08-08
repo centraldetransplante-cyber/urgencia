@@ -3498,3 +3498,111 @@ solicitante no fixture e um teste
 que confirma o JSON de `GET .../mensagens` contendo o nome real
 ("Solicitante Detalhe Teste"/"Solicitante Teste") em vez do literal antigo.
 Suíte completa validada (JDK 21), sem regressão.
+
+## Extração de texto em PDF: investigação do "acento corrompido" — bug NÃO reproduzido, hardening aplicada mesmo assim (2026-08-08)
+
+Investigação pedida a partir de um relato de "achado em simulação de QA":
+texto extraído (copiar/colar, Ctrl+F, leitor de tela) dos PDFs do Relatório
+Final, Relatório Anual e Relatório do Avaliador viria corrompido nos
+caracteres acentuados (`á` virando `�`/U+FFFD), apesar do render visual
+estar correto — causa alegada: `ToUnicode` CMap ausente nas fontes Helvetica
+não embutidas (`FontFactory.getFont`/`BaseFont.createFont(..., WINANSI/
+CP1252, NOT_EMBEDDED)`, usadas em `PdfCabecalhoStamper`, `PdfRelatorioBuilder`,
+`RelatorioAnualService`, `RelatorioAvaliadorService`).
+
+**Resultado da investigação: o bug alegado NÃO reproduz.** Gerados os 3 PDFs
+de verdade com o código **sem nenhuma alteração** (branch limpa a partir de
+`main`) e extraído o texto com **três** ferramentas independentes —
+`pypdf` 6.15, `PyMuPDF` 1.28 e `poppler pdftotext` — contando
+programaticamente ocorrências de `�` (não visualmente): **zero** em
+todos os casos, nos 3 documentos, nas duas bibliotecas Python, com o texto
+acentuado ("Conceição", "Urgência", "São José", "inequívoca", "Decisão")
+presente e correto. A "corrupção" observada na simulação original de QA (e
+replicada por mim na primeira tentativa) era um **artefato de encoding do
+console**: imprimir uma `string` Python corretamente decodificada
+(`Conceição`, Unicode de verdade) para um terminal Windows/git-bash sem
+`PYTHONIOENCODING=utf-8` definido produz `Concei??o`/`Concei��o`
+**na tela**, mesmo que a string em memória esteja perfeita — confirmado
+depurando `pypdf._cmap.parse_bfchar` e comparando `ord(char)` (correto, ex.
+`0xE7`) contra o texto impresso no console (garbled). Ferramentas de
+extração de PDF, incluindo as duas testadas, **já implementam corretamente**
+o fallback da especificação PDF (ISO 32000-1 §9.10.2): na ausência de
+`ToUnicode`, uma fonte simples com `/Encoding /WinAnsiEncoding` é resolvida
+via a tabela padrão código→nome de glifo→Unicode — exatamente o caso destes
+3 documentos (`get_fonts(full=True)` confirmou `/Encoding /WinAnsiEncoding`
+em toda fonte usada). O render visual nunca esteve em risco (é sempre
+correto, com ou sem `ToUnicode`) porque o desenho do glifo usa a mesma
+tabela `WinAnsiEncoding`, não o `ToUnicode`.
+
+**Mesmo sem bug confirmado, a hardening foi implementada e mesclada**, como
+correção defensiva de baixo custo/baixo risco: nem toda ferramenta do
+ecossistema PDF implementa o fallback via `/Encoding` corretamente (é um
+comportamento opcional, não obrigatório, da leitura de simples fontes sem
+`ToUnicode`) — um sistema de indexação/OCR mais rígido, um leitor de tela
+mais antigo, ou uma automação futura poderiam se comportar diferente das
+duas bibliotecas testadas aqui. `PdfCabecalhoStamper` (usado pelos 3
+geradores, sempre como último passo de pós-processamento) ganhou um SEGUNDO
+passe de leitura/gravação (`corrigirToUnicodeDeFontesSimples`, chamado por
+`estampar` depois de `carimbarPaginas`) que injeta manualmente um
+`/ToUnicode` CMap (formato padrão da especificação, §9.10.3) em toda fonte
+`/Type1` `WinAnsiEncoding` sem um já presente — cobre tanto as fontes do
+corpo original quanto as criadas pelo próprio carimbo (cabeçalho +
+numeração de página, que também tem acento: "Página X de Y"). A tabela
+byte→Unicode usada (`PdfCabecalhoStamper.WINANSI_BYTE_PARA_UNICODE`, 256
+entradas) é uma cópia literal de `com.lowagie.text.pdf.PdfEncodings
+.winansiByteToChar` (pacote-privada no OpenPDF, por isso copiada) — a MESMA
+tabela que o OpenPDF usa para converter caracteres Java em bytes na escrita,
+garantindo round-trip exato nos dois sentidos. **Zero mudança visual**: os
+bytes do conteúdo da página não são tocados, só é adicionado um objeto novo
+(`/ToUnicode`) referenciado pelo dicionário da fonte.
+
+**Cuidado real encontrado e corrigido durante a implementação:** todo
+`PdfStamper` do OpenPDF, por padrão, anexa `"; modified using OpenPDF
+X.Y.Z"` ao `/Producer` existente ao fechar — como o segundo passe usa um
+`PdfStamper` novo, isso sujava o `/Producer` institucional
+(`Central de Transplantes do Estado do Rio Grande do Sul`, gravado por
+`anonimizarMetadados` no primeiro passe) com esse sufixo técnico, quebrando
+2 testes existentes
+(`PdfCabecalhoStamperTest.estamparMantemProducerInstitucionalMesmoSemMetadadosDeOrigem`/
+`estamparRemoveNomeDoPacienteDeTodasAsChavesDoInfo`). Corrigido reafirmando
+o `/Producer` explicitamente via `stamper.setInfoDictionary(Map.of(
+"Producer", NOME_INSTITUICAO))` no segundo passe também (mesma API
+`setInfoDictionary`, não o `setMoreInfo` deprecado, já documentado acima
+para o primeiro passe).
+
+**Validação (antes/depois, com os 3 extratores, PDFs gerados de verdade —
+não simulado):**
+```
+# ANTES da correção (código de main, sem alteração):
+pypdf:    FFFD count = 0  (3 documentos)
+PyMuPDF:  FFFD count = 0  (3 documentos)
+pdftotext -enc UTF-8: "João da Silva Conceição", "URGÊNCIA RENAL" presentes e corretos
+
+# DEPOIS da correção (com /ToUnicode injetado):
+pypdf:    FFFD count = 0  (3 documentos) — sem regressão
+PyMuPDF:  FFFD count = 0  (3 documentos) — sem regressão
+pdftotext -enc UTF-8: idêntico ao antes, mais o /Producer sem sufixo "modified using"
+/Producer do PDF resultante: "Central de Transplantes do Estado do Rio Grande do Sul" (sem sufixo)
+```
+Ou seja: **antes** já não havia corrupção real (só a percebida no console),
+e **depois** a extração continua correta, agora também com `/ToUnicode`
+explícito presente (confirmado objeto a objeto via `PyMuPDF.xref_object`/
+`xref_stream`) e sem a regressão do `/Producer`.
+
+Testes novos em `PdfCabecalhoStamperTest`:
+`estamparInjetaToUnicodeEmTodasAsFontesType1WinAnsiDoDocumento` (varre todo
+objeto do PDF resultante, confirma `/ToUnicode` presente em toda fonte
+`/Type1`/`WinAnsiEncoding` — cobre corpo original + fonte do próprio
+carimbo) e `textoExtraidoDoDocumentoEstampadoMantemAAcentuacaoOriginal`
+(ponta a ponta com `PdfTextExtractor`, o próprio extrator do OpenPDF).
+Suíte completa: **890 testes, 0 falhas** (JDK 21).
+
+**Lição de metodologia, para quem for investigar relato semelhante no
+futuro:** ao extrair texto de PDF via script Python (ou qualquer linguagem)
+para comparar "antes/depois" de um bug de acentuação, **nunca confie no que
+aparece impresso no console** sem antes confirmar programaticamente (contar
+`�`, comparar `ord()`/codepoints, ou escrever em arquivo UTF-8 e reler
+com uma ferramenta que declara o encoding) — o console em si é uma fonte
+comum de falso positivo nesse tipo de investigação, inclusive para quem já
+está avisado do risco (aconteceu nesta própria investigação, na primeira
+tentativa, antes de isolar a causa).

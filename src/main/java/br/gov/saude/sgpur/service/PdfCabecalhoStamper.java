@@ -6,10 +6,13 @@ import com.lowagie.text.Rectangle;
 import com.lowagie.text.pdf.BaseFont;
 import com.lowagie.text.pdf.PdfContentByte;
 import com.lowagie.text.pdf.PdfDictionary;
+import com.lowagie.text.pdf.PdfIndirectReference;
 import com.lowagie.text.pdf.PdfName;
+import com.lowagie.text.pdf.PdfObject;
 import com.lowagie.text.pdf.PdfReader;
 import com.lowagie.text.pdf.PdfRectangle;
 import com.lowagie.text.pdf.PdfStamper;
+import com.lowagie.text.pdf.PdfStream;
 import com.lowagie.text.pdf.PdfString;
 import com.lowagie.text.pdf.PdfWriter;
 import org.slf4j.Logger;
@@ -343,6 +346,18 @@ final class PdfCabecalhoStamper {
      * @param primeiraPagina numero (base 1) da primeira pagina a carimbar
      */
     static byte[] estampar(byte[] pdf, String linha1, String linha2, int primeiraPagina) {
+        byte[] carimbado = carimbarPaginas(pdf, linha1, linha2, primeiraPagina);
+        return corrigirToUnicodeDeFontesSimples(carimbado);
+    }
+
+    /**
+     * Faz o trabalho visual de {@link #estampar} (logo, 2 linhas, regua,
+     * numeracao de pagina) - extraido para um metodo proprio para que
+     * {@link #estampar} possa aplicar {@link #corrigirToUnicodeDeFontesSimples}
+     * como ultimo passo, depois que TODAS as fontes do documento (as do corpo
+     * original e as novas criadas aqui para o carimbo) ja existem no PDF.
+     */
+    private static byte[] carimbarPaginas(byte[] pdf, String linha1, String linha2, int primeiraPagina) {
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         try (PdfReader reader = new PdfReader(pdf)) {
             PdfStamper stamper = novoStamper(reader, baos);
@@ -409,5 +424,183 @@ final class PdfCabecalhoStamper {
         } catch (Exception e) {
             throw new IllegalStateException("Falha ao estampar cabecalho do PDF", e);
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // Correcao de extracao de texto (ToUnicode CMap ausente) - 2026-08-08
+    // -----------------------------------------------------------------------
+
+    /**
+     * Tabela byte -&gt; Unicode IDENTICA a {@code com.lowagie.text.pdf.PdfEncodings
+     * .winansiByteToChar} (pacote-privada, por isso copiada aqui, e nao
+     * importada). E a tabela que o proprio OpenPDF usa para CONVERTER os
+     * caracteres Java para bytes ao escrever o conteudo de qualquer fonte
+     * criada com {@code BaseFont.WINANSI} ou {@code BaseFont.CP1252} - as duas
+     * constantes sao, na pratica, a MESMA string {@code "Cp1252"}
+     * ({@code BaseFont.java}, OpenPDF 1.3.34) - e tambem o encoding padrao de
+     * {@code com.lowagie.text.FontFactory} ({@code defaultEncoding =
+     * BaseFont.WINANSI}), usado em toda chamada {@code FontFactory.getFont(...)}
+     * deste sistema. Usar a mesma tabela nos dois sentidos (Java-&gt;byte na
+     * escrita, byte-&gt;Unicode aqui) garante round-trip exato: o byte que o
+     * sistema grava para 'ç' (0xE7) volta a ser lido como 'ç', nunca uma
+     * aproximacao. O valor 65533 (0xFFFD) marca posicoes sem glifo definido no
+     * WinAnsiEncoding (Anexo D da especificacao PDF) - ficam de fora do CMap.
+     */
+    private static final char[] WINANSI_BYTE_PARA_UNICODE = {
+        0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,
+        11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27,
+        28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44,
+        45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61,
+        62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78,
+        79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95,
+        96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109,
+        110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122,
+        123, 124, 125, 126, 127, 8364, 65533, 8218, 402, 8222, 8230, 8224,
+        8225, 710, 8240, 352, 8249, 338, 65533, 381, 65533, 65533, 8216,
+        8217, 8220, 8221, 8226, 8211, 8212, 732, 8482, 353, 8250, 339,
+        65533, 382, 376, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169,
+        170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182,
+        183, 184, 185, 186, 187, 188, 189, 190, 191, 192, 193, 194, 195,
+        196, 197, 198, 199, 200, 201, 202, 203, 204, 205, 206, 207, 208,
+        209, 210, 211, 212, 213, 214, 215, 216, 217, 218, 219, 220, 221,
+        222, 223, 224, 225, 226, 227, 228, 229, 230, 231, 232, 233, 234,
+        235, 236, 237, 238, 239, 240, 241, 242, 243, 244, 245, 246, 247,
+        248, 249, 250, 251, 252, 253, 254, 255
+    };
+
+    /** Marca de "sem glifo definido" na tabela acima (nunca vira entrada do CMap). */
+    private static final char WINANSI_INDEFINIDO = 65533;
+
+    /**
+     * Corrige um defeito real do OpenPDF/iText: uma fonte Type1 padrao
+     * (Helvetica, a unica familia usada nos documentos deste sistema) NAO
+     * embutida nunca ganha um {@code /ToUnicode} CMap, porque o proprio
+     * renderizador de PDF nao precisa dele para desenhar o glifo certo (a
+     * codificacao {@code WinAnsiEncoding} basta). Isso e invisivel a olho nu -
+     * o RENDER VISUAL do PDF fica perfeito - mas quebra a EXTRACAO de texto
+     * (copiar/colar, Ctrl+F, leitor de tela e qualquer ferramenta que
+     * dependa do {@code ToUnicode} em vez de reconstruir o mapeamento a
+     * partir do nome do glifo): confirmado gerando os 3 relatorios do sistema
+     * e extraindo o texto com {@code pypdf}/{@code PyMuPDF} antes desta
+     * correcao - toda letra acentuada saia como {@code U+FFFD}
+     * ("Concei��o" no lugar de "Conceição"). Ver CLAUDE.md
+     * ("Extracao de texto em PDF" / 2026-08-08) para o antes/depois completo.
+     *
+     * <p>A correcao injeta manualmente um {@code /ToUnicode} CMap (formato
+     * padrao da secao 9.10.3 da especificacao PDF) em toda fonte
+     * {@code /Type1} simples do documento JA CARIMBADO (corpo original +
+     * cabecalho/numeracao desenhados por {@link #carimbarPaginas}) que ainda
+     * nao tenha um, usando {@link #WINANSI_BYTE_PARA_UNICODE} - a MESMA
+     * tabela que o OpenPDF usa para escrever os bytes originalmente, ver seu
+     * javadoc para o porque disso garantir round-trip exato. So mexe em
+     * fontes {@code WinAnsiEncoding} (as unicas que este sistema cria) - PDFs
+     * de terceiros com fontes embutidas/estrutura diferente (documentos
+     * clinicos anexados, por exemplo) nao entram aqui: essa funcao roda
+     * DEPOIS que o corpo do documento ja foi fundido/carimbado, mas o padrao
+     * de fonte que ela procura (Type1 nao-embutida, WinAnsiEncoding, sem
+     * ToUnicode) so bate com o que o PROPRIO sistema gera - uma fonte
+     * embutida de terceiro tem {@code /FontFile}/{@code /FontFile2} e
+     * normalmente ja chega com seu proprio {@code ToUnicode} ou uma estrutura
+     * de fonte composta (Type0/CID), nenhuma das duas casando com o filtro
+     * abaixo.
+     *
+     * <p>Roda como um SEGUNDO passe de leitura/gravacao (reader+stamper
+     * novos, sobre os bytes ja carimbados) de proposito: as fontes do
+     * cabecalho/numeracao de pagina so passam a existir como objetos do PDF
+     * depois que {@link #carimbarPaginas} fecha o primeiro {@code PdfStamper}
+     * - rodar a correcao ANTES disso deixaria "Página X de Y" (que tem
+     * acento) de fora.
+     *
+     * <p>Reafirma o {@code /Producer} explicitamente (mesmo valor que
+     * {@link #anonimizarMetadados} ja tinha gravado no primeiro passe) porque
+     * TODO {@code PdfStamper} do OpenPDF, por padrao, ANEXA
+     * {@code "; modified using OpenPDF X.Y.Z"} ao {@code /Producer} existente
+     * ao fechar - util para rastrear que um PDF foi alterado por uma
+     * ferramenta externa, mas nao faz sentido aqui: da perspectiva de quem
+     * abre o documento este SEGUNDO passe nao e uma alteracao de terceiro, e
+     * a mesma geracao do sistema. Sem isso o texto institucional do
+     * {@code /Producer} (usado por
+     * {@code PdfCabecalhoStamperTest.estamparRemoveNomeDoPacienteDeTodasAsChavesDoInfo}/
+     * {@code estamparMantemProducerInstitucionalMesmoSemMetadadosDeOrigem})
+     * ficaria com esse sufixo tecnico grudado.
+     */
+    private static byte[] corrigirToUnicodeDeFontesSimples(byte[] pdf) {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        try (PdfReader reader = new PdfReader(pdf)) {
+            PdfStamper stamper = new PdfStamper(reader, baos);
+            stamper.setInfoDictionary(java.util.Map.of("Producer", NOME_INSTITUICAO));
+            int totalObjetos = reader.getXrefSize();
+            for (int i = 1; i < totalObjetos; i++) {
+                PdfObject obj = reader.getPdfObject(i);
+                if (!(obj instanceof PdfDictionary dict)) {
+                    continue;
+                }
+                if (!PdfName.FONT.equals(dict.get(PdfName.TYPE))
+                        || !PdfName.TYPE1.equals(dict.get(PdfName.SUBTYPE))
+                        || dict.get(PdfName.TOUNICODE) != null) {
+                    continue;
+                }
+                PdfObject encoding = dict.get(PdfName.ENCODING);
+                if (!(encoding instanceof PdfName) || !PdfName.WIN_ANSI_ENCODING.equals(encoding)) {
+                    continue;
+                }
+                PdfIndirectReference toUnicodeRef = reader.addPdfObject(construirCMapWinAnsi());
+                dict.put(PdfName.TOUNICODE, toUnicodeRef);
+                stamper.markUsed(dict);
+            }
+            stamper.close();
+            return baos.toByteArray();
+        } catch (Exception e) {
+            // Best-effort: uma falha aqui nao pode derrubar a geracao do
+            // relatorio - o pior caso e devolver o PDF sem a correcao
+            // (mesmo defeito de extracao de antes desta mudanca), nao um erro
+            // 500 para quem so queria baixar o documento.
+            log.warn("Falha ao corrigir o ToUnicode das fontes do PDF - a extracao de texto "
+                + "pode ficar sem acentuacao: {}", e.getMessage());
+            return pdf;
+        }
+    }
+
+    /**
+     * Monta o stream do {@code /ToUnicode} CMap (formato da secao 9.10.3 da
+     * especificacao PDF) cobrindo os 256 bytes de {@link #WINANSI_BYTE_PARA_UNICODE}
+     * (exceto os marcados {@link #WINANSI_INDEFINIDO}), em blocos de no
+     * maximo 100 entradas por secao {@code beginbfchar}/{@code endbfchar} -
+     * limite da propria especificacao (9.7.5.2).
+     */
+    private static PdfStream construirCMapWinAnsi() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("/CIDInit /ProcSet findresource begin\n")
+          .append("12 dict begin\n")
+          .append("begincmap\n")
+          .append("/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n")
+          .append("/CMapName /Adobe-Identity-UCS def\n")
+          .append("/CMapType 2 def\n")
+          .append("1 begincodespacerange\n<00> <FF>\nendcodespacerange\n");
+
+        final int tamanhoBloco = 100;
+        for (int inicio = 0; inicio < WINANSI_BYTE_PARA_UNICODE.length; inicio += tamanhoBloco) {
+            int fim = Math.min(inicio + tamanhoBloco, WINANSI_BYTE_PARA_UNICODE.length);
+            StringBuilder bloco = new StringBuilder();
+            int entradas = 0;
+            for (int b = inicio; b < fim; b++) {
+                char unicode = WINANSI_BYTE_PARA_UNICODE[b];
+                if (unicode == WINANSI_INDEFINIDO) {
+                    continue;
+                }
+                bloco.append(String.format("<%02X> <%04X>\n", b, (int) unicode));
+                entradas++;
+            }
+            if (entradas > 0) {
+                sb.append(entradas).append(" beginbfchar\n").append(bloco).append("endbfchar\n");
+            }
+        }
+
+        sb.append("endcmap\n")
+          .append("CMapName currentdict /CMap defineresource pop\n")
+          .append("end\n")
+          .append("end\n");
+
+        return new PdfStream(sb.toString().getBytes(StandardCharsets.US_ASCII));
     }
 }

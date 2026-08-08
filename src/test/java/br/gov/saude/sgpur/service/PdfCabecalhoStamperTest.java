@@ -1,9 +1,14 @@
 package br.gov.saude.sgpur.service;
 
 import com.lowagie.text.Document;
+import com.lowagie.text.Font;
+import com.lowagie.text.FontFactory;
 import com.lowagie.text.Paragraph;
+import com.lowagie.text.pdf.PdfDictionary;
+import com.lowagie.text.pdf.PdfName;
 import com.lowagie.text.pdf.PdfReader;
 import com.lowagie.text.pdf.PdfWriter;
+import com.lowagie.text.pdf.parser.PdfTextExtractor;
 import org.junit.jupiter.api.Test;
 
 import java.io.ByteArrayOutputStream;
@@ -131,6 +136,90 @@ class PdfCabecalhoStamperTest {
             assertThat(reader.getInfo().get("Title")).isEqualTo("Titulo seguro");
         } finally {
             reader.close();
+        }
+    }
+
+    // -------------------------------------------------------------------
+    // ToUnicode CMap (2026-08-08) - ver CLAUDE.md "Extracao de texto em PDF"
+    // -------------------------------------------------------------------
+
+    /** PDF minimo com um paragrafo Helvetica (FontFactory, WinAnsiEncoding) com acentuacao. */
+    private byte[] pdfComTextoAcentuado(String texto) throws Exception {
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        Document doc = new Document();
+        PdfWriter.getInstance(doc, baos);
+        doc.open();
+        doc.add(new Paragraph(texto, FontFactory.getFont(FontFactory.HELVETICA, 12)));
+        doc.close();
+        return baos.toByteArray();
+    }
+
+    /**
+     * Toda fonte {@code /Type1}/{@code WinAnsiEncoding} do documento
+     * estampado ganha um {@code /ToUnicode} - tanto a fonte do corpo original
+     * quanto a fonte nova que o proprio carimbo (cabecalho/numeracao de
+     * pagina) cria. Sem isso, ferramentas que dependem do ToUnicode em vez de
+     * reconstruir o mapeamento a partir do {@code /Encoding} (nem toda
+     * biblioteca de extracao faz esse fallback) devolveriam caracteres
+     * substitutos para toda letra acentuada.
+     */
+    @Test
+    void estamparInjetaToUnicodeEmTodasAsFontesType1WinAnsiDoDocumento() throws Exception {
+        byte[] original = pdfComTextoAcentuado("Situação de urgência confirmada, indicação inequívoca.");
+
+        byte[] resultado = PdfCabecalhoStamper.estampar(original,
+            "Central de Transplantes do Estado do Rio Grande do Sul - URGÊNCIA RENAL",
+            "Processo CET-RS 01/2026 - Paciente J.S.P.");
+
+        try (PdfReader reader = new PdfReader(resultado)) {
+            int totalObjetos = reader.getXrefSize();
+            int fontesType1WinAnsi = 0;
+            for (int i = 1; i < totalObjetos; i++) {
+                var obj = reader.getPdfObject(i);
+                if (!(obj instanceof PdfDictionary dict)) {
+                    continue;
+                }
+                if (!PdfName.FONT.equals(dict.get(PdfName.TYPE))
+                        || !PdfName.TYPE1.equals(dict.get(PdfName.SUBTYPE))) {
+                    continue;
+                }
+                var encoding = dict.get(PdfName.ENCODING);
+                if (!(encoding instanceof PdfName) || !PdfName.WIN_ANSI_ENCODING.equals(encoding)) {
+                    continue;
+                }
+                fontesType1WinAnsi++;
+                assertThat(dict.get(PdfName.TOUNICODE))
+                    .as("fonte %s deveria ter ganho um /ToUnicode", dict)
+                    .isNotNull();
+            }
+            // Confirma que o teste realmente encontrou fontes para checar (o
+            // corpo do documento + o carimbo do cabecalho/numeracao) - senao
+            // as asserções acima passariam vazias sem provar nada.
+            assertThat(fontesType1WinAnsi).isGreaterThanOrEqualTo(2);
+        }
+    }
+
+    /**
+     * Prova de ponta a ponta com o PROPRIO extrator do OpenPDF
+     * ({@code PdfTextExtractor}): o texto extraido do documento estampado
+     * bate exatamente com o texto acentuado original, incluindo o cabecalho
+     * carimbado (que tambem tem acento - "URGÊNCIA").
+     */
+    @Test
+    void textoExtraidoDoDocumentoEstampadoMantemAAcentuacaoOriginal() throws Exception {
+        String corpo = "Situação de urgência confirmada, indicação inequívoca.";
+        byte[] original = pdfComTextoAcentuado(corpo);
+
+        byte[] resultado = PdfCabecalhoStamper.estampar(original,
+            "Central de Transplantes do Estado do Rio Grande do Sul - URGÊNCIA RENAL",
+            "Processo CET-RS 01/2026 - Paciente J.S.P.");
+
+        try (PdfReader reader = new PdfReader(resultado)) {
+            PdfTextExtractor extractor = new PdfTextExtractor(reader);
+            String texto = extractor.getTextFromPage(1);
+
+            assertThat(texto).contains(corpo);
+            assertThat(texto).contains("URGÊNCIA RENAL");
         }
     }
 }
