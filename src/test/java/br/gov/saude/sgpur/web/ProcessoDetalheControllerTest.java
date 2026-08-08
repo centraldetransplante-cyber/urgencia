@@ -116,6 +116,14 @@ class ProcessoDetalheControllerTest {
             return !p.getPareceres().isEmpty()
                 && p.getPareceres().stream().allMatch(par -> par.getDataEnvio() != null);
         });
+        // Versao em lote do card "Respostas dos Avaliadores" (CLAUDE.md,
+        // correcao de N+1 de 2026-08-08): como o servico e mockado aqui, o
+        // default do Mockito para um metodo que devolve um record e null -
+        // sem este stub, detalhe() lanca NPE em resumoConversas.naoLidasPorMembro().
+        // Mapas vazios (sem conversa) e o default seguro para os testes que
+        // nao mexem com o chat do avaliador.
+        when(mensagemAvaliadorService.resumoConversasDoProcesso(anyLong()))
+            .thenReturn(new MensagemAvaliadorService.ResumoConversasProcesso(java.util.Map.of(), java.util.Map.of()));
     }
 
     /** SolicitacaoOnline valida (status ENVIADA, ainda nao triada) para os testes de novo/salvar. */

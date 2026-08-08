@@ -3906,3 +3906,107 @@ ofício, cada um verificando por `content().string(...)` que a frase de
 
 **PR:** `fix/mensagem-comprovante-snt-contraditoria` (branch dedicada a
 partir de `main`, sem outra mudança de regra de negócio).
+
+## Sessão orfã em ProcessoDetalheController + N+1 no card "Respostas dos Avaliadores" (2026-08-08)
+
+Duas correções pontuais achadas em vistoria, no mesmo arquivo
+(`ProcessoDetalheController.java`), aplicadas juntas na branch
+`fix/sessao-orfa-processodetalhe-e-nplus1-mensagens`.
+
+**1. 401 cru vira redirect gracioso para `/login`.** O controller tinha 8
+ocorrências do padrão `usuarioRepo.findByUsername(principal.getName())
+.orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED))`
+— exatamente o mesmo bug já corrigido em `AvaliadorController.resolverMembro`
+(ver seção "Fix: 401 cru no Portal do Avaliador com sessão órfã" acima):
+se um ADMIN renomeia o `username` de um operador (ou exclui a conta)
+enquanto ele tem sessão ativa, o Spring Security não relê o `UserDetails` a
+cada requisição — a sessão continua "autenticada" com o username antigo, que
+já não existe mais no banco, e `usuarioRepo.findByUsername` devolve vazio.
+O `ResponseStatusException(UNAUTHORIZED)` cru é tratado pelo Spring
+diretamente (`GlobalExceptionHandler.handleResponseStatus` só repropaga),
+resultando num 401 técnico sem nenhuma chance de o usuário simplesmente
+logar de novo — inclusive nos 6 endpoints `@ResponseBody`/JSON do chat
+(operador↔solicitante e operador↔avaliador), onde o sintoma seria um erro
+JS silencioso no polling em vez de qualquer mensagem visível.
+
+Corrigido reaproveitando a MESMA infraestrutura já existente (nenhuma classe
+nova): um método privado `resolverOperador(Principal)`, adicionado a
+`ProcessoDetalheController`, lança `SessaoInvalidaException` em vez do
+`ResponseStatusException` cru — tratada globalmente por
+`GlobalExceptionHandler.handleSessaoInvalida` (invalida a sessão via
+`SecurityContextLogoutHandler` e redireciona para
+`/login?erro=sessao-invalida`), o mesmo tratamento que já existe desde a
+correção no Portal do Avaliador. As 8 ocorrências (`enviarMensagem`,
+`apagarMensagem`, `mensagensJson`, `enviarMensagemAjax`,
+`apagarMensagemAjax`, `mensagensAvaliadorJson`,
+`enviarMensagemAvaliadorAjax`, `apagarMensagemAvaliadorAjax`) foram trocadas
+para chamar `resolverOperador(principal)`. As demais
+`ResponseStatusException` do controller (`NOT_FOUND` para avaliador
+inexistente) não foram tocadas — são erros de negócio genuínos, não sessão
+órfã.
+
+Teste de regressão (`ProcessoDetalheSessaoOrfaIntegrationTest`, seguindo o
+modelo de `AvaliadorSessaoOrfaIntegrationTest` já documentado acima): sessão
+HTTP real via `POST /login` (não `@WithMockUser` — o bug é sobre o estado da
+`HttpSession` entre duas requisições, que `@WithMockUser` recria do zero a
+cada teste), renomeia o `username` no banco por baixo da sessão ativa, e
+confirma que `POST /processos/{id}/mensagem/{id}/apagar/ajax` com essa MESMA
+sessão devolve `302` para `/login?erro=sessao-invalida` (nunca 401/500 cru)
+e que a sessão fica `isInvalid()==true` depois — prova que foi de fato
+invalidada, não só ignorada.
+
+**2. N+1 no card "Respostas dos Avaliadores": até 6 queries extras por
+render viraram 2.** `ProcessoDetalheController.detalhe` chamava, dentro de
+um loop sobre os 3 pareceres do processo (`ProcessoService
+.AVALIADORES_POR_PROCESSO`, regra fixa), `mensagemAvaliadorService
+.contarNaoLidasPorThreadParaOperador(...)` e `mensagemAvaliadorService
+.existeConversa(...)` — até 2 SELECTs por avaliador, 6 no total, toda vez
+que a tela de detalhe é aberta. Baixa prioridade (N é sempre 3, não escala),
+mas corrigido no mesmo arquivo por já estar sob vistoria.
+
+Solução: `MensagemAvaliadorRepository` ganhou 2 queries em lote, ambas
+escopadas por `processoId` (não por parecer individual):
+`contarNaoLidasPorMembroAgrupado` (`SELECT membro.id, COUNT(m) ... GROUP BY
+membro.id`, filtrada por `remetente=AVALIADOR` e `lida=false`) e
+`membrosComConversa` (`SELECT DISTINCT membro.id ...`, qualquer mensagem,
+lida ou não). `MensagemAvaliadorService.resumoConversasDoProcesso(processoId)`
+(novo, `@Transactional(readOnly = true)`) roda as duas e monta um record
+`ResumoConversasProcesso(Map<Long, Long> naoLidasPorMembro, Map<Long,
+Boolean> existeConversaPorMembro)`, **chaveado por `membro.id`** — essa
+camada de serviço não conhece `Parecer`. O controller chama esse método UMA
+vez antes do loop e remapeia para a chave que o template espera
+(`parecer.id`) dentro do mesmo loop, sem nenhuma consulta nova ali.
+
+**Achado ao rodar a suíte completa (não um bug de produção):**
+`ProcessoDetalheControllerTest` (`@WebMvcTest` com `@MockitoBean
+MensagemAvaliadorService`) quebrou com `NullPointerException` em 13 testes
+— o Mockito devolve `null` por padrão para um método que retorna um record,
+e `resumoConversas.naoLidasPorMembro()` estourava NPE antes mesmo de
+qualquer asserção rodar. Corrigido com um stub default no `@BeforeEach`
+(`when(mensagemAvaliadorService.resumoConversasDoProcesso(anyLong()))
+.thenReturn(new ResumoConversasProcesso(Map.of(), Map.of()))`), mesmo padrão
+já usado para os demais mocks "default seguro" da classe.
+
+Teste de integração dedicado (`MensagemAvaliadorResumoConversasBatchTest`,
+H2 real, sem mock) confere que o resultado da versão em lote é idêntico ao
+que os métodos antigos (`contarNaoLidasPorThreadParaOperador`/
+`existeConversa`, chamados um a um) devolveriam, em 4 cenários: membro com
+não lidas, membro só com mensagem já lida (existe conversa, mas zero não
+lidas), membro sem nenhuma mensagem (ausente dos dois mapas — o chamador
+trata como 0/`false`) e processo inteiro sem nenhuma mensagem (mapas
+vazios). Os testes já existentes de `MensagemAvaliadorIntegrationTest`
+(`telaDeDetalheDoProcessoNascecomThreadDoAvaliadorEXPANDIDAQuandoJaExisteConversa`)
+continuam cobrindo a integração ponta a ponta pelo HTML renderizado.
+
+**Validação:** suíte completa — **881 testes, 0 falhas, 0 erros** (JDK 21,
+`mvn clean test`).
+
+**Nota de processo desta sessão:** o repositório teve outra sessão/agente
+trabalhando concorrentemente na mesma working copy durante parte desta
+tarefa (evidenciado por branches e stashes alheios, ex. `stash@{5}:
+wip-ProcessoDetalheController-sessao-orfa-nao-relacionado`), causando
+reversões intermitentes de edições em progresso. Resolvido criando uma
+branch nova e isolada a partir de `origin/main`
+(`fix/sessao-orfa-processodetalhe-e-nplus1-mensagens`) e commitando cada
+arquivo assim que confirmado correto, em vez de acumular edições
+não-commitadas por muito tempo na mesma working copy compartilhada.
