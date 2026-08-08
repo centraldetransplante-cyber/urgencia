@@ -1769,6 +1769,22 @@ issue/branch aberta para isso, só o registro no relatório.
    templates de verdade em `HomeControllerTest`/`ProcessoListaControllerTest`
    — a correção original de detalhe não tinha nenhum teste, foi por isso que
    as outras duas telas passaram despercebidas.
+   **Correção de QA (achado posterior): `arquivo/lista.html` era a 4ª tela
+   com o mesmo status cru sem o fragment.** Ficou de fora das 3 originais
+   (`processos/detalhe.html`, `dashboard.html`, `processos/lista.html`) por
+   não ter sido lembrada na varredura da correção de 2026-08-04 — o Arquivo
+   é justamente a tela onde processos Deferido/Indeferido/Cancelado vivem
+   permanentemente, então mostrar "Indeferido" cru sem indicar se a
+   papelada pós-decisão (ofício/comprovante SNT + resposta ao solicitante)
+   já foi concluída é o mesmo bug de confusão visual, só que na tela de
+   consulta histórica. `ArquivoController.listar` já carregava `Page<Processo>`
+   com a entidade completa (não uma projeção/DTO), então nenhuma mudança de
+   controller/query foi necessária — só adicionar
+   `<span th:replace="~{layout :: badgeEncerramento(${p}, 'ms-1')}"></span>`
+   ao lado do badge de status na célula "Situação", mesmo padrão exato já
+   usado em `processos/lista.html`. `arquivo/lista.html` é agora a 4ª e
+   última tela candidata a essa regra — não sobra nenhuma tela do sistema
+   listando status final de processo sem passar por este fragment.
 2. **Atalhos da barra lateral corrigidos.** "Ofício de Indeferimento" e o
    novo atalho "Comprovante SNT" só aparecem depois que o anexo
    correspondente existe de fato, e baixam **o anexo real**
