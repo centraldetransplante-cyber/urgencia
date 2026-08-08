@@ -53,6 +53,19 @@ public class AuditoriaService {
      * Listagem filtrada da trilha (usuario / acao / periodo). Qualquer
      * parametro nulo ou vazio simplesmente nao filtra, entao esta chamada
      * cobre tambem o caso "sem filtro nenhum".
+     *
+     * <p><b>CORRIGIDO em 2026-08-07 (bug real de producao — 500 em
+     * {@code /auditoria} em toda carga, ver javadoc de {@link
+     * LogAuditoriaRepository#buscar}):</b> antes desta correcao, usuario/acao/
+     * datas ausentes eram repassados como {@code null} direto para a
+     * consulta JPQL, que testava {@code :de is null}/{@code :ate is null}
+     * isoladamente — o PostgreSQL nao consegue inferir o tipo de um
+     * parametro usado so em {@code IS NULL} (protocolo estendido), e a
+     * consulta quebrava com {@code PSQLException 42P18 could not determine
+     * data type of parameter}. O H2 dos testes tolera esse padrao, entao o
+     * bug nunca apareceu na suite. Corrigido convertendo cada ausencia para
+     * um valor efetivo ANTES de chamar o repositorio — mesma tecnica ja
+     * usada em {@link #buscarParaExportacao} desde a criacao dela.</p>
      */
     public Page<LogAuditoria> buscar(String usuario, String acao,
                                      java.time.LocalDate de, java.time.LocalDate ate,
@@ -60,9 +73,11 @@ public class AuditoriaService {
         // O periodo e informado em DATA, mas o campo gravado e data+hora: o dia
         // final precisa ir ate 23:59:59, senao "ate = hoje" esconderia tudo o
         // que aconteceu hoje depois da meia-noite (ou seja, o dia inteiro).
-        java.time.LocalDateTime inicio = de != null ? de.atStartOfDay() : null;
-        java.time.LocalDateTime fim = ate != null ? ate.atTime(java.time.LocalTime.MAX) : null;
-        return repo.buscar(usuario, acao, inicio, fim, pageable);
+        String usuarioFiltro = (usuario != null) ? usuario : "";
+        String acaoFiltro = (acao != null) ? acao : "";
+        java.time.LocalDateTime inicio = de != null ? de.atStartOfDay() : DATA_MINIMA;
+        java.time.LocalDateTime fim = ate != null ? ate.atTime(java.time.LocalTime.MAX) : DATA_MAXIMA;
+        return repo.buscar(usuarioFiltro, acaoFiltro, inicio, fim, pageable);
     }
 
     /** Acoes distintas ja registradas, para o select do filtro. */
