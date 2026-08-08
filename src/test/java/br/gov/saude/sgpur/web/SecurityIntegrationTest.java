@@ -163,12 +163,16 @@ class SecurityIntegrationTest {
     @Test
     @WithMockUser(roles = "SOLICITANTE")
     void solicitanteAcessaOProprioPortal() throws Exception {
-        // O controller lanca ResponseStatusException(UNAUTHORIZED) ao nao encontrar
-        // o usuario "user" (ficticio do @WithMockUser) no banco - o ponto testado
-        // aqui e que a rota NAO retorna 403 (proibido por role), mesmo padrao ja
-        // usado para avaliadorAcessaPortalProprio() acima.
+        // MockMvc usa um usuario ficticio ("user") sem registro real no banco - o mesmo
+        // cenario, na pratica, de uma sessao "orfa" (username sem Usuario correspondente).
+        // SolicitanteController.resolverUsuario lanca SessaoInvalidaException (mesmo fix ja
+        // aplicado a AvaliadorController.resolverMembro, ver avaliadorAcessaPortalProprio()
+        // acima), tratada por GlobalExceptionHandler.handleSessaoInvalida, que invalida a
+        // sessao e redireciona para /login - o ponto testado aqui e que a rota NAO retorna
+        // 403 (proibido por role) nem um 401/500 cru.
         mvc.perform(get("/solicitante"))
-            .andExpect(status().is4xxClientError());
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login?erro=sessao-invalida"));
     }
 
     @Test

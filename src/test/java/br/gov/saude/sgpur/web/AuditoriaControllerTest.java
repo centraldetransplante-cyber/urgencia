@@ -208,4 +208,68 @@ class AuditoriaControllerTest {
                 .andExpect(content().string(
                         org.hamcrest.Matchers.containsString("\"detalhe; com \"\"aspas\"\" e virgula\"")));
     }
+
+    // ---------- Protecao contra CSV/Formula Injection (OWASP) ----------
+
+    @Test
+    @WithMockUser(username = "admin", roles = "ADMIN")
+    void exportarNeutralizaCampoDetalheComecandoComIgual() throws Exception {
+        LogAuditoria log1 = new LogAuditoria("admin", "TESTE", "=HYPERLINK(\"http://evil\")");
+        log1.setDataHora(LocalDateTime.of(2026, 8, 7, 10, 0));
+        when(auditoria.buscarParaExportacao(any(), any(), any(), any())).thenReturn(List.of(log1));
+
+        mvc.perform(get("/auditoria/exportar"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(
+                        org.hamcrest.Matchers.containsString("'=HYPERLINK")));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = "ADMIN")
+    void exportarNeutralizaCampoDetalheComecandoComMaisMenosArroba() throws Exception {
+        LogAuditoria logMais = new LogAuditoria("admin", "TESTE", "+1+1");
+        logMais.setDataHora(LocalDateTime.of(2026, 8, 7, 10, 0));
+        LogAuditoria logMenos = new LogAuditoria("admin", "TESTE", "-1+1");
+        logMenos.setDataHora(LocalDateTime.of(2026, 8, 7, 10, 1));
+        LogAuditoria logArroba = new LogAuditoria("admin", "TESTE", "@SUM(1,1)");
+        logArroba.setDataHora(LocalDateTime.of(2026, 8, 7, 10, 2));
+        when(auditoria.buscarParaExportacao(any(), any(), any(), any()))
+                .thenReturn(List.of(logMais, logMenos, logArroba));
+
+        mvc.perform(get("/auditoria/exportar"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("'+1+1")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("'-1+1")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("'@SUM(1,1)")));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = "ADMIN")
+    void exportarNeutralizaCampoUsuarioOuIpComecandoComCaracterePerigoso() throws Exception {
+        LogAuditoria log1 = new LogAuditoria("=cmd|calc", "TESTE", "detalhe normal", "=1+1");
+        log1.setDataHora(LocalDateTime.of(2026, 8, 7, 10, 0));
+        when(auditoria.buscarParaExportacao(any(), any(), any(), any())).thenReturn(List.of(log1));
+
+        mvc.perform(get("/auditoria/exportar"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("'=cmd|calc")))
+                .andExpect(content().string(org.hamcrest.Matchers.containsString("'=1+1")));
+    }
+
+    @Test
+    @WithMockUser(username = "admin", roles = "ADMIN")
+    void exportarNaoAdicionaApostrofoEmCampoNormalSemCaractereDeFormula() throws Exception {
+        LogAuditoria log1 = new LogAuditoria("operador1", "PROCESSO_CADASTRADO", "Processo 01/2026 - Paciente A.B.");
+        log1.setDataHora(LocalDateTime.of(2026, 8, 7, 10, 0));
+        when(auditoria.buscarParaExportacao(any(), any(), any(), any())).thenReturn(List.of(log1));
+
+        mvc.perform(get("/auditoria/exportar"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                        ";operador1;PROCESSO_CADASTRADO;Processo 01/2026 - Paciente A.B.;")))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("'operador1"))))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("'Processo"))));
+    }
 }
