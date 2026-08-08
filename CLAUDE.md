@@ -3388,3 +3388,44 @@ clicável de verdade, que depende de JS rodando no navegador). Suíte
 completa após esses 3 testes novos: **864 testes** (861 + 3), única falha
 é a flakiness de precisão de timestamp já documentada em
 `LembreteAvaliadorTimestampIntegrationTest` (não relacionada).
+
+## Chat operador↔solicitante: nome real do solicitante em vez do literal genérico (2026-08-07)
+
+**Bug relatado pelo usuário**: no chat entre OPERADOR e SOLICITANTE (as duas
+telas do lado do operador — `processos/detalhe.html` e
+`solicitacoes-online-detalhe.html`/triagem), toda mensagem do solicitante
+aparecia rotulada com o texto fixo genérico **"Solicitante"**, em vez do
+nome de verdade da pessoa. `ProcessoDetalheController.mensagensJson` e
+`SolicitacaoOnlineTriagemController.mensagensJson` passavam o literal
+`"Solicitante"` como `labelOutro` para `MensagemSolicitacaoService.paraChat(...)`.
+
+**Não é uma questão de imparcialidade** (a regra de só-iniciais do CLAUDE.md
+é sobre o **paciente**, para os avaliadores — ver seção "Identificação do
+paciente"). O solicitante é um usuário do próprio sistema conversando
+diretamente com o operador; não há motivo de negócio para esconder quem ele
+é nesse canal — o e-mail de resposta ao solicitante já usa nome completo do
+paciente, então esconder o nome de quem está do outro lado do chat não
+protegia nada.
+
+**Correção:** `SolicitacaoOnlineRepository.findNomeSolicitanteById(Long id)`
+(projeção `select s.usuarioSolicitante.nome from SolicitacaoOnline s where
+s.id = :id`, não a entidade + navegação LAZY — `spring.jpa.open-in-view` é
+`false` neste projeto, então tocar `s.getUsuarioSolicitante().getNome()`
+fora da transação do serviço estouraria `LazyInitializationException`).
+`SolicitacaoOnlineService.nomeSolicitante(Long)` expõe isso com fallback
+para o literal `"Solicitante"` se o nome vier nulo/em branco (nunca quebra a
+tela). Os dois controllers passaram a chamar esse método e usar o nome real
+como `labelOutro`.
+
+**`SolicitanteController` não foi tocado** — o rótulo do lado do
+solicitante para o "outro lado" da conversa é `"Equipe CET-RS"` (o time
+operacional, não uma pessoa específica), e isso continua correto/intencional.
+
+**Testes**: `ProcessoDetalheSemTransacaoIntegrationTest` e
+`SolicitacaoOnlineTriagemSemTransacaoIntegrationTest` (ambos `@SpringBootTest`
++ H2 real, sem `@MockitoBean` de serviço) ganharam uma mensagem do
+solicitante no fixture e um teste
+(`mensagensAjaxRotulaMensagemDoSolicitanteComONomeRealENaoComLiteralGenerico`)
+que confirma o JSON de `GET .../mensagens` contendo o nome real
+("Solicitante Detalhe Teste"/"Solicitante Teste") em vez do literal antigo.
+Suíte completa validada (JDK 21), sem regressão.
