@@ -2493,6 +2493,22 @@ outros portais, o mesmo padrão (`SessaoInvalidaException` +
 `GlobalExceptionHandler.handleSessaoInvalida`, que já é genérico e reusável
 por estar no `@ControllerAdvice` global) resolve sem duplicar código.
 
+**Replicado em `SolicitacaoOnlineTriagemController` (2026-08-08).** Os 5
+pontos desse controller (`detalhe`, `enviarMensagem`, `apagarMensagem`,
+`mensagensJson`, `enviarMensagemAjax`, `apagarMensagemAjax`) que resolviam
+o operador logado com o mesmo padrão antigo passaram a lançar
+`SessaoInvalidaException` também — mesma infraestrutura reaproveitada
+(`GlobalExceptionHandler.handleSessaoInvalida`), nenhuma classe nova. As
+demais `ResponseStatusException` desse controller (`baixarAnexo`, com
+`NOT_FOUND`/`FORBIDDEN` por posse de anexo) não foram tocadas, mesma
+distinção de escopo já explicada acima. Coberto por
+`SolicitacaoOnlineTriagemSessaoOrfaIntegrationTest` (mesmo modelo de
+`AvaliadorSessaoOrfaIntegrationTest`: sessão HTTP real via login por
+formulário, renomeia o `username` do operador "por baixo" da sessão ativa,
+confirma redirect gracioso e sessão de fato invalidada). `SolicitanteController`
+e `ProcessoDetalheController` continuam com o padrão antigo — se o mesmo
+sintoma aparecer neles, é o mesmo fix a aplicar.
+
 **Teste de regressão** (`AvaliadorSessaoOrfaIntegrationTest`, `@SpringBootTest`
 + H2 real, **sessão HTTP de verdade via login por formulário — não
 `@WithMockUser`**, porque o bug é sobre o estado da `HttpSession` entre
