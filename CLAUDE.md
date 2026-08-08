@@ -3497,4 +3497,53 @@ solicitante no fixture e um teste
 (`mensagensAjaxRotulaMensagemDoSolicitanteComONomeRealENaoComLiteralGenerico`)
 que confirma o JSON de `GET .../mensagens` contendo o nome real
 ("Solicitante Detalhe Teste"/"Solicitante Teste") em vez do literal antigo.
+
+## Toast do poll global clicável + acentuação de mensagens em controllers (2026-08-08)
+
+Duas correções pontuais de UX/ortografia, sem mudança de regra de negócio.
+
+**1. Toast do poll GLOBAL de mensagens (`layout.html`) virou clicável.**
+Os 4 blocos `<script>` de poll global de notificação (20s, dentro do
+fragment `navbar`: ADMIN/OPERADOR "Nova mensagem de um solicitante.",
+SOLICITANTE "Nova mensagem da equipe CET-RS.", AVALIADOR "Nova mensagem da
+equipe CET-RS sobre um dos seus processos." e ADMIN/OPERADOR "Nova mensagem
+de um médico avaliador.") chamavam `mostrarToast(mensagem, tipo)` sem o 3º
+parâmetro `onClick` (`static/js/toast.js` já suporta desde 2026-08-07, ver
+o comentário do próprio arquivo — usado por `chat-solicitacao.js` para os
+toasts *dentro* das 3 telas de chat, que já eram clicáveis). Estes 4 blocos
+diferentes (o poll global que roda em QUALQUER tela, fora das telas de chat
+— ver `chatAtivoNestaTela`) tinham ficado de fora dessa correção anterior.
+Agora cada um navega para a tela correspondente ao clicar: operador/admin
+(mensagem de solicitante) → `/processos/solicitacoes-online`; solicitante →
+`/solicitante`; avaliador → `/avaliador`; operador/admin (mensagem de
+avaliador) → `/processos/mensagens-avaliadores`. Usa
+`/*[[@{...}]]*/` (Thymeleaf inlining) com fallback para a URL literal — os 4
+`<script>` já tinham `th:inline="javascript"`, sem o qual esse padrão
+falharia silenciosamente (ver "Convenções de código").
+
+**2. Acentuação de literais Java em 4 controllers.** A "Fase 8" de
+acentuação (2026-08-03/04) cobriu só templates HTML Thymeleaf, não string
+literals dentro de código Java — mensagens de flash (`erro`/`sucesso`/
+`aviso`), corpos de `ResponseEntity`/`Map` de erro JSON e descrições de
+anexo visíveis ao usuário em `SolicitanteController`, `AvaliadorController`,
+`ProcessoDetalheController` e `ProcessoDecisaoController` estavam sem
+acento. Corrigidas todas as mensagens desses 4 arquivos (e os testes que
+faziam assert do texto exato/`containsString` do texto antigo sem acento,
+em `ProcessoDecisaoControllerTest`, `ProcessoDetalheControllerTest`,
+`SolicitanteControllerTest` e `SubstituicaoDocumentoAnonimizadoIntegrationTest`).
+**`StatusProcesso.descricao` (`getDescricao()`) foi DELIBERADAMENTE
+mantido sem acento** — mesmo padrão já documentado para
+`ResultadoParecer.descricao`: é consumido por `RelatorioService.java`
+(Relatório Final PDF) e `ExportacaoProcessoService.java` (dossiê
+exportado), então mudar o enum teria impacto direto em documentos oficiais,
+fora do escopo desta correção de UX. Prompts enviados à API do Gemini
+(`sugestaoMotivo`/`revisarEmailIa` em `ProcessoDecisaoController`) também
+não foram tocados — são instruções para a IA, não mensagens exibidas ao
+usuário.
+
+Suíte completa validada (JDK 21): 890 testes, 0 falhas atribuíveis a esta
+mudança (a única falha vista, `ComprovanteSntPendenteQueriesIntegrationTest
+.registrarUltimoLembreteSntGravaOTimestampNoBanco`, é a flakiness de
+precisão de nanossegundos do H2 já documentada em outras sessões — passa
+isolada, confirmado nesta mesma sessão).
 Suíte completa validada (JDK 21), sem regressão.

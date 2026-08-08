@@ -259,7 +259,7 @@ public class SolicitanteController {
                 // solicitacao real ja foi enviada com sucesso.
             }
             ra.addFlashAttribute("msg",
-                "Solicitacao enviada. Aguarde a triagem da equipe de Urgencia Renal.");
+                "Solicitação enviada. Aguarde a triagem da equipe de Urgência Renal.");
             return "redirect:/solicitante";
         } catch (IllegalArgumentException | IllegalStateException e) {
             model.addAttribute("equipe", usuario.getEquipeSolicitante());
@@ -481,7 +481,7 @@ public class SolicitanteController {
             auditoria.registrar("INFO_COMPLEMENTAR_RECEBIDA_PORTAL",
                 "Solicitacao " + id + " - processo " + s.getProcessoGerado().getNumero());
             ra.addFlashAttribute("msg",
-                "Informacoes enviadas. A equipe de Urgencia Renal vai retomar a analise em breve.");
+                "Informações enviadas. A equipe de Urgência Renal vai retomar a análise em breve.");
         } catch (IllegalArgumentException | IllegalStateException e) {
             ra.addFlashAttribute("erro", e.getMessage());
         }
@@ -512,22 +512,22 @@ public class SolicitanteController {
             auditoria.registrar("SOLICITACAO_ONLINE_CANCELADA", "Solicitacao " + id
                 + (processoCancelado != null ? " - processo " + processoCancelado + " cancelado junto" : ""));
             if (processoCancelado == null) {
-                ra.addFlashAttribute("msg", "Solicitacao cancelada.");
+                ra.addFlashAttribute("msg", "Solicitação cancelada.");
             } else {
                 ra.addFlashAttribute("msg",
-                    "Solicitacao cancelada. O processo foi encerrado e os avaliadores pendentes foram avisados.");
+                    "Solicitação cancelada. O processo foi encerrado e os avaliadores pendentes foram avisados.");
                 try {
                     List<String> naoAvisados =
                         solicitacaoService.notificarAvaliadoresCancelamento(processoCancelado);
                     if (!naoAvisados.isEmpty()) {
                         ra.addFlashAttribute("aviso",
-                            "Nao foi possivel avisar por e-mail: " + String.join(", ", naoAvisados)
-                                + ". O processo ja consta como cancelado e saiu da lista deles no portal.");
+                            "Não foi possível avisar por e-mail: " + String.join(", ", naoAvisados)
+                                + ". O processo já consta como cancelado e saiu da lista deles no portal.");
                     }
                 } catch (RuntimeException e) {
                     ra.addFlashAttribute("aviso",
                         "O cancelamento foi efetivado, mas houve uma falha inesperada ao avisar os avaliadores "
-                            + "pendentes. O processo ja consta como cancelado.");
+                            + "pendentes. O processo já consta como cancelado.");
                 }
             }
         } catch (IllegalStateException e) {
@@ -544,11 +544,11 @@ public class SolicitanteController {
         Usuario usuario = resolverUsuario(principal);
         SolicitacaoOnline s = conferirPosse(solicitacaoService.buscar(id), usuario);
         if (texto == null || texto.isBlank()) {
-            ra.addFlashAttribute("erro", "A mensagem nao pode estar em branco.");
+            ra.addFlashAttribute("erro", "A mensagem não pode estar em branco.");
             return "redirect:/solicitante/" + id;
         }
         if (s.getStatus() == StatusSolicitacaoOnline.CANCELADA || s.getStatus() == StatusSolicitacaoOnline.PROCESSO_EXCLUIDO) {
-            ra.addFlashAttribute("erro", "Nao e possivel enviar mensagem para esta solicitacao no estado atual.");
+            ra.addFlashAttribute("erro", "Não é possível enviar mensagem para esta solicitação no estado atual.");
             return "redirect:/solicitante/" + id;
         }
         mensagemService.enviar(s, texto, MensagemSolicitacao.RemetenteMensagem.SOLICITANTE, usuario.getId());
@@ -608,11 +608,11 @@ public class SolicitanteController {
         Usuario usuario = resolverUsuario(principal);
         SolicitacaoOnline s = conferirPosse(solicitacaoService.buscar(id), usuario);
         if (texto == null || texto.isBlank()) {
-            return ResponseEntity.badRequest().body(Map.of("erro", "A mensagem nao pode estar em branco."));
+            return ResponseEntity.badRequest().body(Map.of("erro", "A mensagem não pode estar em branco."));
         }
         if (s.getStatus() == StatusSolicitacaoOnline.CANCELADA || s.getStatus() == StatusSolicitacaoOnline.PROCESSO_EXCLUIDO) {
             return ResponseEntity.badRequest().body(Map.of("erro",
-                "Nao e possivel enviar mensagem para esta solicitacao no estado atual."));
+                "Não é possível enviar mensagem para esta solicitação no estado atual."));
         }
         mensagemService.enviar(s, texto, MensagemSolicitacao.RemetenteMensagem.SOLICITANTE, usuario.getId());
         auditoria.registrar("MENSAGEM_SOLICITANTE_ENVIADA",
@@ -654,7 +654,7 @@ public class SolicitanteController {
         AnexoSolicitacaoOnline anexo = anexoRepo.findById(anexoId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (!anexo.getSolicitacaoOnline().getId().equals(s.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Este anexo nao pertence a esta solicitacao.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Este anexo não pertence a esta solicitação.");
         }
         Path arquivo = anexoStorage.resolverArquivo(anexo);
         Resource resource = new UrlResource(arquivo.toUri());
@@ -696,7 +696,7 @@ public class SolicitanteController {
         boolean tipoPermitido = anexo.getTipo() == TipoAnexo.COMPROVANTE_SNT
             || anexo.getTipo() == TipoAnexo.OFICIO_INDEFERIMENTO;
         if (!tipoPermitido || !anexo.getProcesso().getId().equals(s.getProcessoGerado().getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Este anexo nao pertence a este pedido.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Este anexo não pertence a este pedido.");
         }
         Path arquivo = anexoStorageProcesso.resolverArquivo(anexo);
         Resource resource = new UrlResource(arquivo.toUri());
@@ -725,7 +725,7 @@ public class SolicitanteController {
     /** Mesma checagem de posse, para quando a solicitacao ja foi carregada. */
     private SolicitacaoOnline conferirPosse(SolicitacaoOnline s, Usuario usuario) {
         if (!s.getUsuarioSolicitante().getId().equals(usuario.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Esta solicitacao nao pertence a voce.");
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Esta solicitação não pertence a você.");
         }
         return s;
     }

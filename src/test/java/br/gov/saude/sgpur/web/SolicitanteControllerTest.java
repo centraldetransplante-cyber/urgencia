@@ -166,7 +166,7 @@ class SolicitanteControllerTest {
         mvc.perform(post("/solicitante/50/cancelar").with(csrf()))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/solicitante"))
-            .andExpect(flash().attribute("msg", "Solicitacao cancelada."));
+            .andExpect(flash().attribute("msg", "Solicitação cancelada."));
 
         verify(solicitacaoService).cancelar(50L, 1L);
         verify(auditoria).registrar(eq("SOLICITACAO_ONLINE_CANCELADA"), any());

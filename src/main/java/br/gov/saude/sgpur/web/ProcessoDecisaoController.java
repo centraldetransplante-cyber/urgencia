@@ -144,7 +144,7 @@ public class ProcessoDecisaoController {
         if (arquivo != null && !arquivo.isEmpty()) {
             try {
                 anexoStorage.salvar(p, TipoAnexo.INFO_COMPLEMENTAR,
-                    "Resposta com as informacoes complementares do solicitante", arquivo);
+                    "Resposta com as informações complementares do solicitante", arquivo);
                 auditoria.registrar("ANEXO_ADICIONADO",
                     "Processo " + p.getNumero() + " - Informacao complementar (recebida)");
             } catch (IllegalArgumentException | IOException e) {
@@ -176,12 +176,12 @@ public class ProcessoDecisaoController {
                 "Processo " + pRetomado.getNumero() + " - decisao automatica: "
                 + pRetomado.getStatus().getDescricao());
             ra.addFlashAttribute("msg",
-                "Informacao complementar recebida. Analise retomada e decisao automatica aplicada: "
+                "Informação complementar recebida. Análise retomada e decisão automática aplicada: "
                 + pRetomado.getStatus().getDescricao() + ".");
             return "redirect:/processos/" + id;
         }
         ra.addFlashAttribute("msg",
-            "Informacao complementar recebida. Analise retomada - registre os pareceres definitivos.");
+            "Informação complementar recebida. Análise retomada - registre os pareceres definitivos.");
         return "redirect:/processos/" + id + "#respostas";
     }
 
@@ -221,11 +221,11 @@ public class ProcessoDecisaoController {
 
         List<String> avisos = new ArrayList<>();
         if (!resultado.avisos().isEmpty()) {
-            avisos.add("Estes documentos clinicos ficaram de fora do PDF consolidado: "
+            avisos.add("Estes documentos clínicos ficaram de fora do PDF consolidado: "
                 + String.join(", ", resultado.avisos()) + ".");
         }
         if (!convites.avisos().isEmpty()) {
-            avisos.add("O convite ao Portal do Avaliador nao foi enviado a: "
+            avisos.add("O convite ao Portal do Avaliador não foi enviado a: "
                 + String.join(", ", convites.avisos())
                 + ". Use o lembrete manual no card de Respostas depois de corrigir.");
         }
@@ -264,13 +264,13 @@ public class ProcessoDecisaoController {
         }
         try {
             String desc = (descricao != null && !descricao.isBlank())
-                ? descricao : "Documento clinico anonimizado para os avaliadores";
+                ? descricao : "Documento clínico anonimizado para os avaliadores";
             anexoStorage.salvar(p, TipoAnexo.DOCUMENTO_CLINICO_AVALIADOR, desc, arquivo);
             auditoria.registrar("ANEXO_ADICIONADO",
                 "Processo " + p.getNumero() + " - " + TipoAnexo.DOCUMENTO_CLINICO_AVALIADOR.getDescricao());
-            ra.addFlashAttribute("msg", "Documento clinico anexado. Sera consolidado no PDF dos avaliadores ao registrar o envio.");
+            ra.addFlashAttribute("msg", "Documento clínico anexado. Será consolidado no PDF dos avaliadores ao registrar o envio.");
         } catch (IllegalArgumentException | IOException e) {
-            ra.addFlashAttribute("erro", "Falha ao anexar documento clinico: " + e.getMessage());
+            ra.addFlashAttribute("erro", "Falha ao anexar documento clínico: " + e.getMessage());
         }
         return "redirect:/processos/" + id + "#envio";
     }
@@ -298,7 +298,7 @@ public class ProcessoDecisaoController {
         if (decisao != StatusProcesso.DEFERIDO
                 && decisao != StatusProcesso.INDEFERIDO
                 && decisao != StatusProcesso.CANCELADO) {
-            ra.addFlashAttribute("erro", "Decisao invalida: escolha Deferido, Indeferido ou Cancelado.");
+            ra.addFlashAttribute("erro", "Decisão inválida: escolha Deferido, Indeferido ou Cancelado.");
             return "redirect:/processos/" + id;
         }
         if (decisao == StatusProcesso.INDEFERIDO
@@ -336,7 +336,7 @@ public class ProcessoDecisaoController {
         auditoria.registrar("PROCESSO_DECIDIDO",
             "Processo " + p.getNumero() + " - " + decisao.getDescricao(),
             request.getRemoteAddr());
-        ra.addFlashAttribute("msg", "Decisao registrada: " + decisao.getDescricao());
+        ra.addFlashAttribute("msg", "Decisão registrada: " + decisao.getDescricao());
         return "redirect:/processos/" + id;
     }
 
@@ -383,18 +383,18 @@ public class ProcessoDecisaoController {
     @Transactional(readOnly = true)
     public IaTextoResponse sugestaoMotivo(@PathVariable Long id) {
         if (!geminiService.isDisponivel()) {
-            return IaTextoResponse.erro("Assistencia por IA nao configurada.");
+            return IaTextoResponse.erro("Assistência por IA não configurada.");
         }
         Processo p;
         try { p = processoService.buscar(id); }
-        catch (RuntimeException e) { return IaTextoResponse.erro("Processo nao encontrado."); }
+        catch (RuntimeException e) { return IaTextoResponse.erro("Processo não encontrado."); }
         String justificativas = p.getPareceres().stream()
             .filter(par -> par.getResultado() == ResultadoParecer.NAO_FAVORAVEL)
             .map(Parecer::getJustificativa)
             .filter(j -> j != null && !j.isBlank())
             .collect(java.util.stream.Collectors.joining("\n---\n"));
         if (justificativas.isBlank()) {
-            return IaTextoResponse.erro("Nenhuma justificativa de parecer desfavoravel encontrada para basear a sugestao.");
+            return IaTextoResponse.erro("Nenhuma justificativa de parecer desfavorável encontrada para basear a sugestão.");
         }
         String prompt = "Voce e um assistente administrativo de um orgao publico de saude do Brasil. "
             + "Com base nas justificativas tecnicas abaixo, dadas por medicos avaliadores que "
@@ -421,16 +421,16 @@ public class ProcessoDecisaoController {
     public AcaoResponse lembreteAvaliador(@PathVariable Long id, @RequestParam Long parecerId) {
         Processo p;
         try { p = processoService.buscar(id); }
-        catch (RuntimeException e) { return AcaoResponse.erro("Processo nao encontrado."); }
+        catch (RuntimeException e) { return AcaoResponse.erro("Processo não encontrado."); }
         if (validator.edicaoBloqueada(p)) {
             return AcaoResponse.erro(ProcessoValidator.MSG_ENCERRADO);
         }
         Parecer parecer = processoService.buscarParecer(id, parecerId).orElse(null);
         if (parecer == null) {
-            return AcaoResponse.erro("Parecer nao encontrado neste processo.");
+            return AcaoResponse.erro("Parecer não encontrado neste processo.");
         }
         if (parecer.getResultado() != null) {
-            return AcaoResponse.erro("Este avaliador ja registrou o parecer.");
+            return AcaoResponse.erro("Este avaliador já registrou o parecer.");
         }
         MembroUrgenciaRenal membro = parecer.getMembro();
         if (membro.getEmail() == null || membro.getEmail().isBlank()) {
@@ -446,7 +446,7 @@ public class ProcessoDecisaoController {
         }
         auditoria.registrar("LEMBRETE_AVALIADOR_FALHA",
             "Processo " + p.getNumero() + " - " + membro.getNome());
-        return AcaoResponse.erro("Falha ao enviar o e-mail. Verifique a configuracao de SMTP.");
+        return AcaoResponse.erro("Falha ao enviar o e-mail. Verifique a configuração de SMTP.");
     }
 
     /**
@@ -462,13 +462,13 @@ public class ProcessoDecisaoController {
     public AcaoResponse lembretePendentes(@PathVariable Long id) {
         Processo p;
         try { p = processoService.buscar(id); }
-        catch (RuntimeException e) { return AcaoResponse.erro("Processo nao encontrado."); }
+        catch (RuntimeException e) { return AcaoResponse.erro("Processo não encontrado."); }
         if (validator.edicaoBloqueada(p)) {
             return AcaoResponse.erro(ProcessoValidator.MSG_ENCERRADO);
         }
         var pendentes = processoService.pareceresPendentesComEmail(id);
         if (pendentes.isEmpty()) {
-            return AcaoResponse.erro("Nao ha avaliadores com parecer pendente neste processo.");
+            return AcaoResponse.erro("Não há avaliadores com parecer pendente neste processo.");
         }
         int enviados = 0, falhas = 0, semEmail = 0;
         for (Parecer parecer : pendentes) {
@@ -514,7 +514,7 @@ public class ProcessoDecisaoController {
                                           @RequestParam String assunto,
                                           @RequestParam String corpo) {
         if (!geminiService.isDisponivel()) {
-            return IaTextoResponse.erro("Assistencia por IA nao configurada.");
+            return IaTextoResponse.erro("Assistência por IA não configurada.");
         }
         String prompt = "Voce e um assistente de redacao de um orgao publico de saude do Brasil. "
             + "Revise o e-mail abaixo (assunto e corpo), mantendo o mesmo idioma (portugues do "
@@ -567,7 +567,7 @@ public class ProcessoDecisaoController {
         }
         auditoria.registrar("EMAIL_ENVIO_FALHA",
             "Processo " + p.getNumero() + " - template " + chave + " -> " + prep.destinatarios());
-        return AcaoResponse.erro("Falha ao enviar o e-mail. Verifique a configuracao de SMTP.");
+        return AcaoResponse.erro("Falha ao enviar o e-mail. Verifique a configuração de SMTP.");
     }
 
     /**
@@ -588,7 +588,7 @@ public class ProcessoDecisaoController {
                                             @RequestParam(required = false) Long parecerId) {
         Processo p;
         try { p = processoService.buscar(id); }
-        catch (RuntimeException e) { return EmailPreviewResponse.erro("Processo nao encontrado."); }
+        catch (RuntimeException e) { return EmailPreviewResponse.erro("Processo não encontrado."); }
         switch (tipo) {
             case "pronto" -> {
                 EmailPreparado prep = prepararEmailPronto(p, chave, assunto, corpo);
@@ -603,14 +603,14 @@ public class ProcessoDecisaoController {
                 // findById(null) lancaria InvalidDataAccessApiUsageException (500
                 // generico) em vez da mensagem amigavel abaixo - checa antes.
                 if (parecerId == null) {
-                    return EmailPreviewResponse.erro("Parecer nao encontrado neste processo.");
+                    return EmailPreviewResponse.erro("Parecer não encontrado neste processo.");
                 }
                 Parecer parecer = processoService.buscarParecer(id, parecerId).orElse(null);
                 if (parecer == null) {
-                    return EmailPreviewResponse.erro("Parecer nao encontrado neste processo.");
+                    return EmailPreviewResponse.erro("Parecer não encontrado neste processo.");
                 }
                 if (parecer.getResultado() != null) {
-                    return EmailPreviewResponse.erro("Este avaliador ja registrou o parecer.");
+                    return EmailPreviewResponse.erro("Este avaliador já registrou o parecer.");
                 }
                 MembroUrgenciaRenal membro = parecer.getMembro();
                 if (membro.getEmail() == null || membro.getEmail().isBlank()) {
@@ -634,12 +634,12 @@ public class ProcessoDecisaoController {
                 }
                 if (mensagens.isEmpty()) {
                     return EmailPreviewResponse.erro(
-                        "Nao ha avaliadores com parecer pendente e e-mail cadastrado neste processo.");
+                        "Não há avaliadores com parecer pendente e e-mail cadastrado neste processo.");
                 }
                 return EmailPreviewResponse.ok(mensagens);
             }
             default -> {
-                return EmailPreviewResponse.erro("Tipo de pre-visualizacao desconhecido: " + tipo);
+                return EmailPreviewResponse.erro("Tipo de pré-visualização desconhecido: " + tipo);
             }
         }
     }
