@@ -4630,3 +4630,47 @@ relacionadas por já existirem antes desta sessão. E2E completo (4 classes
 `PortaisVisualCompletoIT` (novo) e `RedesignVisualSolicitanteIT` passam;
 `FluxoCompletoProcessoIT` falha só na linha pré-existente e já documentada
 de confirmação de e-mail (SMTP local ausente) — nenhuma regressão.
+
+## Bug real corrigido: chevron `.chevron-collapse` nunca girava visualmente (2026-08-08)
+
+Reportado pelo usuário em **produção**, em `/processos/15#respostas`: o
+ícone de seta do botão "Conversa" (por avaliador, dentro do card "Respostas
+dos Avaliadores") deveria girar 180° ao abrir/fechar o painel de chat e
+nunca girava — ficava sempre apontando para cima, aberto ou fechado.
+
+**Causa raiz real, confirmada no navegador (Playwright, screenshots reais
+antes/depois de cada clique — não hipótese de leitura de código):** o
+Bootstrap alternava a classe `.collapsed` no botão **corretamente**
+(confirmado por `getComputedStyle` e pelo funcionamento normal do
+collapse), e a regra CSS `[data-bs-toggle="collapse"].collapsed
+.chevron-collapse { transform: rotate(180deg); }` também **era aplicada**
+— `getComputedStyle(...).transform` já reportava a matriz de rotação
+correta em cada estado. O problema é que `.chevron-collapse` é um `<i>`
+(`display: inline` por padrão), e a especificação de CSS Transforms **não
+aplica visualmente `transform` a elementos inline não substituídos** — o
+navegador calculava e reportava a rotação (computed style), mas nunca a
+pintava na tela. Confirmado comparando screenshots reais do botão nos
+estados aberto/fechado (idênticos, sempre "^") e depois confirmando que
+injetar `display: inline-block` no elemento fazia a rotação aparecer de
+verdade ("v" ao fechar).
+
+**Não era exclusivo do botão "Conversa" do avaliador** — os outros dois
+lugares que usam a mesma classe `.chevron-collapse` (o card "Todos os
+anexos" e o card "Conversa com o solicitante", ambos em
+`processos/detalhe.html`, além de `avaliador/votar.html` e
+`processos/solicitacoes-online-detalhe.html`/`solicitante/detalhe.html`)
+tinham **exatamente o mesmo defeito visual**, reproduzido e confirmado por
+screenshot antes da correção — só ninguém tinha reparado nos outros
+lugares.
+
+**Correção:** uma linha em `app.css`, na regra de base (não na regra de
+rotação): `[data-bs-toggle="collapse"] .chevron-collapse { display:
+inline-block; ... }`. Como é uma regra CSS compartilhada por todos os 4
+templates que usam `.chevron-collapse`, um único ajuste corrige todos os
+lugares de uma vez — nenhum template precisou mudar.
+
+**Testado manualmente clicando várias vezes em múltiplos avaliadores na
+mesma tela** (parecer que nasce com o painel fechado e parecer que nasce
+com o painel já aberto, por já ter conversa registrada) — cada botão gira
+de forma independente e correta, sem interferência entre eles. Suíte
+completa: 888 testes, 0 falhas (JDK 21).

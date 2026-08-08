@@ -1169,7 +1169,22 @@ tr.linha-inativa > td:first-child {
 }
 
 /* === Chat recolhivel: chevron gira ao colapsar === */
+/* Bug real reportado em producao (2026-08-08, /processos/15#respostas): o
+   icone nunca girava visualmente, apesar de o Bootstrap alternar a classe
+   ".collapsed" corretamente (confirmado por getComputedStyle e por
+   screenshot real via Playwright antes desta correcao). Causa raiz: <i> e
+   "display: inline" por padrao, e a especificacao de CSS Transforms nao
+   aplica "transform" visualmente a elementos inline nao substituidos -
+   getComputedStyle().transform ja reportava a matriz de rotacao correta
+   (a REGRA era aplicada), mas o navegador nao pintava a rotacao na tela.
+   Reproduzido nos 3 lugares que usam .chevron-collapse (card "Todos os
+   anexos", card "Conversa com o solicitante" e o botao "Conversa" por
+   avaliador em "Respostas dos Avaliadores") - nao era exclusivo do botao
+   do avaliador, so foi ali que o usuario reparou. "display: inline-block"
+   resolve: o elemento passa a formar sua propria caixa, que o transform
+   pode girar de verdade (verificado via screenshot com o fix aplicado). */
 [data-bs-toggle="collapse"] .chevron-collapse {
+    display: inline-block;
     transition: transform 0.2s ease;
 }
 [data-bs-toggle="collapse"].collapsed .chevron-collapse {
