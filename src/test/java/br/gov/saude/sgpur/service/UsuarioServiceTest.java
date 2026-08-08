@@ -53,6 +53,12 @@ class UsuarioServiceTest {
         u.setUsername("operador1");
         u.setNome("Operador Um");
         u.setEmail("operador1@example.com");
+        // versao != null: representa um Usuario normal, ja persistido (a
+        // situacao real de "versao nula" e legado/seed sem backfill, coberta
+        // a parte por UsuarioMinhaSenhaVersaoNulaIntegrationTest com H2 real
+        // - aqui, sem isso, o service tentaria "corrigir" um dado que so
+        // esta null porque e um POJO de teste nunca persistido).
+        u.setVersao(0L);
         return u;
     }
 
@@ -89,6 +95,7 @@ class UsuarioServiceTest {
         Usuario u = new Usuario();
         u.setUsername("sememail");
         u.setNome("Sem Email");
+        u.setVersao(0L);
         when(repo.findByUsername("sememail")).thenReturn(Optional.of(u));
 
         service.resetarSenha("sememail");
@@ -140,6 +147,7 @@ class UsuarioServiceTest {
         u2.setUsername("operador2");
         u2.setNome("Operador Dois");
         u2.setEmail("operador2@example.com");
+        u2.setVersao(0L);
         when(repo.findByUsername("operador1")).thenReturn(Optional.of(u1));
         when(repo.findByUsername("operador2")).thenReturn(Optional.of(u2));
         when(encoder.encode(any())).thenReturn("hash-fake");

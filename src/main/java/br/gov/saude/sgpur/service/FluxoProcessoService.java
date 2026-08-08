@@ -6,6 +6,8 @@ import br.gov.saude.sgpur.service.dto.EstadoEtapa;
 import br.gov.saude.sgpur.service.dto.EtapaFluxo;
 import br.gov.saude.sgpur.service.dto.EtapaFluxo.Chave;
 import br.gov.saude.sgpur.service.dto.PassoWizard;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
@@ -30,6 +32,8 @@ import java.util.Optional;
  */
 @Service
 public class FluxoProcessoService {
+
+    private static final Logger log = LoggerFactory.getLogger(FluxoProcessoService.class);
 
     private final ProcessoService processoService;
     private final SolicitacaoOnlineRepository solicitacaoOnlineRepository;
@@ -76,7 +80,7 @@ public class FluxoProcessoService {
         //    carimbado), sem folha-rosto gerada pelo sistema.
         int totalMedicos = p.getPareceres().size();
         long enviadosCount = p.getPareceres().stream().filter(par -> par.getDataEnvio() != null).count();
-        boolean temDocClinicoPdf = p.getAnexos().stream()
+        boolean temDocClinicoPdf = anexosSeguro(p).stream()
             .anyMatch(a -> a.getTipo() == TipoAnexo.DOCUMENTO_CLINICO_AVALIADOR
                 && a.getContentType() != null
                 && a.getContentType().toLowerCase().contains("application/pdf"));
@@ -457,7 +461,50 @@ public class FluxoProcessoService {
     }
 
     private boolean temAnexo(Processo p, TipoAnexo tipo) {
-        return p.getAnexos().stream().anyMatch(a -> a.getTipo() == tipo);
+        return anexosSeguro(p).stream().anyMatch(a -> a.getTipo() == tipo);
+    }
+
+    /**
+     * Acesso defensivo a {@code p.getAnexos()}: um {@code Anexo.tipo} com um
+     * valor fora do enum atual (ex.: {@code CAPA_PROCESSO}/{@code
+     * SOLICITACAO_RECEBIDA}, removidos do enum no commit {@code 041dc43}, mas
+     * que podem sobrar numa linha de banco antigo - {@code ddl-auto: update}
+     * nunca valida dado ja gravado) faz o Hibernate lancar excecao ao
+     * hidratar a linha, e ISSO NAO E um erro de que o Processo em si esteja
+     * quebrado - so aquele anexo especifico virou lixo historico.
+     *
+     * <p><b>Bug real corrigido (2026-08-08):</b> sem este isolamento, um UNICO
+     * anexo com {@code tipo} invalido em QUALQUER processo do ano derrubava o
+     * Painel (500) e a lista de {@code /processos} inteiros - a excecao
+     * ({@code IllegalArgumentException} cru quando disparada por acesso
+     * lazy direto a um getter, ou {@code InvalidDataAccessApiUsageException}
+     * quando disparada dentro de um metodo de repositorio, como o
+     * pre-carregamento em lote de {@code ProcessoRepository.inicializarAnexos})
+     * nao tinha nenhum tratamento amigavel para esse segundo tipo. Aqui,
+     * captura ampla de proposito (o tipo exato varia conforme o caminho de
+     * acesso que disparou a hidratacao, ver acima) - loga o processo afetado
+     * e degrada para "sem anexos" NAQUELE calculo, deixando o restante da
+     * pagina (os demais processos, sem dado corrompido) renderizar
+     * normalmente em vez de um erro 500 cru.</p>
+     */
+    private List<Anexo> anexosSeguro(Processo p) {
+        try {
+            // p.getAnexos() sozinho so devolve a REFERENCIA da colecao lazy -
+            // o Hibernate so inicializa (e so lanca a excecao de hidratacao,
+            // se houver) no primeiro acesso de verdade. `new ArrayList<>(...)`
+            // forca essa inicializacao AQUI DENTRO do try - devolver a
+            // colecao sem materializar deixava a excecao escapar para o
+            // chamador, fora deste catch (bug corrigido antes mesmo de sair
+            // do rascunho: pego pelo teste de integracao real, nao pela
+            // leitura do codigo).
+            return new ArrayList<>(p.getAnexos());
+        } catch (RuntimeException e) {
+            log.warn("Processo id {} tem ao menos um anexo com 'tipo' que nao corresponde a "
+                + "nenhum valor valido do enum TipoAnexo (dado legado/removido do enum) - "
+                + "ignorando os anexos deste processo neste calculo, em vez de quebrar a "
+                + "pagina inteira: {}", p.getId(), e.getMessage());
+            return List.of();
+        }
     }
 
     /**

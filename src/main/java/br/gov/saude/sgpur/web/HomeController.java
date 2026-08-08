@@ -8,6 +8,8 @@ import br.gov.saude.sgpur.service.TempoRespostaService;
 import br.gov.saude.sgpur.service.TempoRespostaService.ResumoTempo;
 import br.gov.saude.sgpur.service.dto.EtapaFluxo;
 import br.gov.saude.sgpur.web.dto.PainelLinha;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Controller;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.ui.Model;
@@ -19,6 +21,8 @@ import java.util.Map;
 
 @Controller
 public class HomeController {
+
+    private static final Logger log = LoggerFactory.getLogger(HomeController.class);
 
     private final ProcessoRepository processoRepository;
     private final MembroUrgenciaRenalService membroService;
@@ -63,9 +67,24 @@ public class HomeController {
         // processo. Inicializa num lote so (mesma transacao/persistence
         // context), evitando 1 select de anexos por processo do ano inteiro
         // em toda visita ao Painel.
+        // Falha isolada (RuntimeException): um UNICO Anexo.tipo fora do enum
+        // atual (dado legado/removido do enum, sem validacao pelo
+        // ddl-auto: update) faz esta consulta em lote lancar
+        // InvalidDataAccessApiUsageException e derrubaria o Painel inteiro
+        // (500) por causa de um processo so. Se falhar, cada processo volta a
+        // carregar seus proprios anexos sob demanda (lazy) mais adiante -
+        // FluxoProcessoService.anexosSeguro protege esse acesso individual,
+        // entao so o(s) processo(s) realmente afetado(s) perdem o calculo de
+        // pendencia, e o resto do Painel renderiza normalmente.
         if (!processos.isEmpty()) {
-            processoRepository.inicializarAnexos(
-                processos.stream().map(Processo::getId).toList());
+            try {
+                processoRepository.inicializarAnexos(
+                    processos.stream().map(Processo::getId).toList());
+            } catch (RuntimeException e) {
+                log.warn("Falha ao pre-carregar anexos em lote no Painel (provavel Anexo.tipo "
+                    + "com valor fora do enum TipoAnexo atual, em algum processo do ano) - cada "
+                    + "processo vai carregar seus proprios anexos sob demanda: {}", e.getMessage());
+            }
         }
 
         long deferidos = 0;

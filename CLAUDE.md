@@ -3498,3 +3498,150 @@ solicitante no fixture e um teste
 que confirma o JSON de `GET .../mensagens` contendo o nome real
 ("Solicitante Detalhe Teste"/"Solicitante Teste") em vez do literal antigo.
 Suíte completa validada (JDK 21), sem regressão.
+
+## Dois bugs de robustez achados em QA (2026-08-08): 500 cru em `/usuarios/minha-senha` e no Painel/`/processos`
+
+Achados numa simulação de QA (Playwright, ambiente local H2), investigados e
+corrigidos na mesma sessão, cada um com causa raiz confirmada por
+reproducao direta (nunca presumida) e teste de integracao real (H2, sem
+mock do service - mesma convencao do CLAUDE.md para escrita irreversivel/
+caminho de falha).
+
+### Bug 1 - `POST /usuarios/minha-senha` devolvia 500 para `Usuario.versao` nula
+
+**Sintoma:** trocar a propria senha (`/usuarios/minha-senha`, disponivel a
+qualquer perfil autenticado) devolvia "Erro interno do servidor" em vez de
+trocar a senha, para um usuario cujo `Usuario.versao` estava `NULL` no
+banco - cenario real em qualquer arquivo H2 de desenvolvimento criado
+*antes* do commit `b34643a` (2026-07-29, que adicionou `@Version` a
+`Usuario`) sem o backfill manual (`UPDATE usuario SET versao = 0 WHERE
+versao IS NULL`) ter rodado - o H2 de dev e um arquivo persistente entre
+reinicios (`data/sgpur.mv.db`, nunca apagado), entao e facil acumular linhas
+assim sem perceber.
+
+**Causa raiz (confirmada reproduzindo direto, nao presumida):** ao contrario
+do que se poderia esperar, salvar um `Usuario` com `versao == null` **nao**
+lanca `ObjectOptimisticLockingFailureException` (que o
+`GlobalExceptionHandler` ja trata graciosamente desde a vistoria de
+2026-07-24, ver "Regras de negocio" acima). O Hibernate lanca uma
+`NullPointerException` **crua** dentro de si mesmo
+(`org.hibernate.type.descriptor.java.LongJavaType.next`, ao tentar
+`current.longValue()` com `current == null` para incrementar a versao no
+momento do **commit** da transacao), envolvida numa
+`org.springframework.transaction.TransactionSystemException` - um tipo que
+nenhum `@ExceptionHandler` do projeto reconhecia, resultando no fallback
+generico de 500.
+
+**Duas tentativas de correcao, so a segunda funcionou (documentado para nao
+recair):**
+1. **`u.setVersao(0L)` num objeto ja gerenciado antes de `save()` - NAO
+   resolve**, mesmo confirmado por reproducao direta. O Hibernate calcula a
+   proxima versao a partir do **snapshot carregado na sessao no momento do
+   `SELECT`** (o mesmo valor usado na clausula `WHERE` do `UPDATE` real para
+   o lock otimista) - nao a partir do valor atual do campo no objeto Java.
+   Mudar so o campo em memoria nao muda esse snapshot; o Hibernate segue
+   tentando incrementar o `null` original no commit.
+2. **Correcao de verdade: alcancar o BANCO e recarregar.**
+   `UsuarioRepository.normalizarVersaoNula(Long id)` - um `@Modifying
+   (clearAutomatically = true) @Query("update Usuario u set u.versao = 0
+   where u.id = :id and u.versao is null")` - corrige a coluna direto no
+   banco (bypassa o lock otimista, e um UPDATE em lote/bulk) e
+   `clearAutomatically = true` descarta o persistence-context inteiro depois
+   dele. `UsuarioService.normalizarVersaoLegada(Usuario u)` (privado, chamado
+   logo apos CADA fetch de escrita - `atualizar`, `alternarAtivo`,
+   `resetarSenha`, `alterarPropriaSenha` - **antes** de qualquer `set...` no
+   objeto, porque `clearAutomatically` descartaria mutacoes pendentes) checa
+   `versao == null`, roda a normalizacao e **RECARREGA** a entidade
+   (`buscar(u.getId())`), retornando essa nova instancia (ja com `versao =
+   0`) para o chamador continuar a partir dela.
+
+**Arquivos:** `src/main/java/br/gov/saude/sgpur/repository/
+UsuarioRepository.java`, `src/main/java/br/gov/saude/sgpur/service/
+UsuarioService.java`. Teste: `src/test/java/br/gov/saude/sgpur/web/
+UsuarioMinhaSenhaVersaoNulaIntegrationTest.java` (`@SpringBootTest` + H2
+real + sessao HTTP via `SecurityMockMvcRequestPostProcessors.user(...)`,
+forca `versao = NULL` via SQL nativo no fixture, confirma `POST
+/usuarios/minha-senha` redireciona com sucesso - nunca 500 - e que a senha
+nova vale de verdade relida do banco). `UsuarioServiceTest` (mocks) precisou
+setar `versao(0L)` nos fixtures de `Usuario` usados com `resetarSenha` - sem
+isso, o proprio `new Usuario()` de teste (nunca persistido, `versao` nula
+por default) disparava a normalizacao e quebrava porque `repo.findById`
+nao estava stubado nesses testes (nao e o cenario real do bug, so um
+artefato de POJO de teste puro).
+
+### Bug 2 - Painel (`/`) e `/processos` (sem filtro) devolviam 500 com `Anexo.tipo` fora do enum atual
+
+**Sintoma:** um unico `Anexo` com `tipo` gravado no banco fora dos valores
+validos atuais de `TipoAnexo` (ex.: `CAPA_PROCESSO`, `SOLICITACAO_RECEBIDA`
+- **removidos por completo do enum** no commit `041dc43`, 2026-07-29, mas
+que podem sobrar em linhas de banco antigo, ja que `ddl-auto: update`
+**nunca** valida dado ja gravado - ver "Convencoes de codigo") derrubava o
+Painel **inteiro** e a lista de `/processos` **inteira** com 500, mesmo
+havendo dezenas de outros processos saudaveis na mesma pagina.
+
+**Causa raiz (confirmada reproduzindo direto):** duas variantes do mesmo
+problema de fundo, dependendo do caminho de acesso:
+- `ProcessoRepository.inicializarAnexos` (consulta em lote/JOIN FETCH,
+  chamada por `HomeController.dashboard` e, via `ProcessoService.
+  inicializarPareceresEAnexos`, por `ProcessoListaController.listar`) lanca
+  `org.springframework.dao.InvalidDataAccessApiUsageException` (traduzida
+  pelo Spring a partir de um `IllegalArgumentException: No enum constant
+  ...`) - um tipo **sem nenhum** `@ExceptionHandler` no projeto.
+- O acesso lazy direto (`p.getAnexos()`, em `FluxoProcessoService.
+  montarEtapas`/`temAnexo`) lanca o `IllegalArgumentException` **cru**, sem
+  traducao - esse **e** capturado por
+  `GlobalExceptionHandler.handleNotFound` (`@ExceptionHandler
+  (IllegalArgumentException.class)`), mas produz um redirect confuso
+  ("Registro nao encontrado") para a tela inteira por causa de UM processo
+  com dado ruim - ainda uma degradacao ruim, mesmo nao sendo 500 tecnico.
+
+**Correcao, em duas camadas** (a mesma classe de protecao ja documentada
+para outros defeitos de robustez do projeto - nunca deixar dado legado
+inesperado virar 500 cru; degradar ignorando/logando a linha invalida):
+1. **Pre-carregamento em lote com fallback.**
+   `HomeController.dashboard` e `ProcessoService.inicializarPareceresEAnexos`
+   agora envolvem a chamada a `inicializarAnexos` num `try/catch
+   (RuntimeException)`: se falhar, loga um aviso e segue sem o
+   pre-carregamento - cada processo volta a carregar seus proprios anexos
+   sob demanda (lazy), mais lento (reintroduz o N+1 que o metodo existe para
+   evitar) mas so na hipotese rara de dado invalido.
+2. **Isolamento por processo.** `FluxoProcessoService.anexosSeguro(Processo
+   p)` (privado, novo) substitui os dois usos diretos de `p.getAnexos()`
+   (`montarEtapas`/`temAnexo`): tenta materializar a colecao
+   (`new ArrayList<>(p.getAnexos())` - **crucial forcar a materializacao
+   dentro do proprio `try`**, ver "bug do meu proprio fix" abaixo), captura
+   `RuntimeException`, loga o `Processo.id` afetado e devolve lista vazia.
+   Assim, so o processo com o anexo corrompido perde o calculo de
+   pendencia/documento clinico naquele item - o resto da pagina (Painel ou
+   lista) renderiza normalmente, sem 500 e sem redirect surpresa.
+
+**Bug do proprio fix, pego pelo teste de integracao real (nao pela leitura
+do codigo):** a primeira versao de `anexosSeguro` fazia so `return
+p.getAnexos();` dentro do `try` - mas isso devolve a **referencia** da
+colecao lazy, ainda nao inicializada; a excecao de hidratacao so dispara no
+primeiro acesso de verdade (`.stream()`/`.iterator()`), que acontecia
+**fora** do `try`, no codigo chamador. Corrigido forcando a materializacao
+(`new ArrayList<>(...)`) dentro do proprio bloco `try`. Licao: um `try/catch`
+em volta de uma colecao JPA lazy so protege de verdade se tambem forca a
+inicializacao - devolver a referencia sem tocar nela nao conta.
+
+**Arquivos:** `src/main/java/br/gov/saude/sgpur/service/
+FluxoProcessoService.java`, `src/main/java/br/gov/saude/sgpur/service/
+ProcessoService.java`, `src/main/java/br/gov/saude/sgpur/web/
+HomeController.java`. Teste: `src/test/java/br/gov/saude/sgpur/web/
+AnexoTipoInvalidoNaoDerrubaPainelIntegrationTest.java` (`@SpringBootTest` +
+H2 real, insere um `Processo` com um `Anexo` de `tipo = 'CAPA_PROCESSO'` via
+SQL nativo, confirma `GET /` e `GET /processos` retornam 200).
+
+**Validacao:** suite completa, **891 testes** (2 novos: um por bug), 0
+falhas relacionadas - a unica falha vista numa rodada foi a flakiness de
+precisao de timestamp ja documentada
+(`ComprovanteSntPendenteQueriesIntegrationTest`), confirmada pre-existente
+e nao relacionada rodando o mesmo teste isolado (passou).
+
+**Nota de processo desta sessao:** o trabalho foi feito num **git worktree
+dedicado** (`../urgencia-wt-fix500`), nao no checkout principal - esta
+maquina tinha multiplas sessoes/processos concorrentes mexendo no mesmo
+diretorio principal (branch trocado e edicoes nao commitadas revertidas por
+fora, no meio da investigacao), entao isolar o trabalho num worktree proprio
+evitou perder o progresso de novo.

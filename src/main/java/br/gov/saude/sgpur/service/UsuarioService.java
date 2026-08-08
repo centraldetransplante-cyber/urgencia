@@ -137,7 +137,7 @@ public class UsuarioService {
      */
     @Transactional
     public Usuario atualizar(Long id, Usuario form, String senhaPura, Long membroId, String equipeSolicitante) {
-        Usuario u = buscar(id);
+        Usuario u = normalizarVersaoLegada(buscar(id));
         if (!u.getUsername().equals(form.getUsername())) {
             if (repo.existsByUsername(form.getUsername())) {
                 throw new IllegalArgumentException("Ja existe um usuario com este login.");
@@ -166,7 +166,7 @@ public class UsuarioService {
      */
     @Transactional
     public void alternarAtivo(Long id, String usernameLogado) {
-        Usuario u = buscar(id);
+        Usuario u = normalizarVersaoLegada(buscar(id));
         boolean vaiDesativar = u.isAtivo();
         if (vaiDesativar) {
             validarNaoAutoGerenciamento(u, usernameLogado, "desativar");
@@ -262,6 +262,7 @@ public class UsuarioService {
             log.debug("resetarSenha: usuario '{}' nao encontrado.", username);
             return;
         }
+        u = normalizarVersaoLegada(u);
         if (u.getEmail() == null || u.getEmail().isBlank()) {
             log.warn("resetarSenha: usuario '{}' nao tem e-mail cadastrado - "
                 + "senha NAO foi alterada. Peca ao ADMIN redefinir manualmente.", username);
@@ -304,6 +305,7 @@ public class UsuarioService {
                                     String novaSenha, String confirmacao) {
         Usuario u = repo.findByUsername(username)
             .orElseThrow(() -> new IllegalArgumentException("Usuario nao encontrado."));
+        u = normalizarVersaoLegada(u);
         if (senhaAtual == null || !encoder.matches(senhaAtual, u.getSenha())) {
             throw new IllegalArgumentException("Senha atual incorreta.");
         }
@@ -316,6 +318,55 @@ public class UsuarioService {
         }
         u.setSenha(encoder.encode(novaSenha));
         repo.save(u);
+    }
+
+    /**
+     * Corrige em tempo de execucao um {@code Usuario} carregado com
+     * {@code versao} nula - dado seed/legado de antes do commit que adicionou
+     * {@code @Version} a esta entidade (2026-07-29), sem o backfill manual
+     * (documentado no CLAUDE.md, {@code UPDATE usuario SET versao = 0 WHERE
+     * versao IS NULL}) ter rodado no banco em uso (ex.: o arquivo H2 de
+     * desenvolvimento de alguem, que persiste entre reinicios e pode ter sido
+     * criado antes daquele commit).
+     *
+     * <p><b>Bug real corrigido (2026-08-08):</b> sem esta normalizacao, salvar
+     * um {@code Usuario} com {@code versao == null} nao lanca
+     * {@code ObjectOptimisticLockingFailureException} (que o
+     * {@code GlobalExceptionHandler} ja trata graciosamente) - lanca uma
+     * {@code NullPointerException} CRUA de dentro do Hibernate
+     * ({@code org.hibernate.type.descriptor.java.LongJavaType.next}, ao tentar
+     * fazer {@code current.longValue()} com {@code current == null} para
+     * incrementar a versao no COMMIT), envolvida em
+     * {@code TransactionSystemException} - um tipo que nenhum
+     * {@code @ExceptionHandler} do projeto reconhecia, resultando em "Erro
+     * interno do servidor" (500) para o usuario, reproduzido primeiro em
+     * {@code /usuarios/minha-senha} pelo proprio ADMIN seed local.
+     *
+     * <p><b>Por que NAO basta {@code u.setVersao(0L)} num objeto ja
+     * gerenciado</b> (primeira tentativa, tambem confirmada por reproducao
+     * direta que NAO corrige o bug): o Hibernate calcula a proxima versao a
+     * partir do snapshot carregado na sessao no momento do {@code SELECT}
+     * (usado tambem na clausula {@code WHERE} do {@code UPDATE} real para o
+     * lock otimista), nao a partir do valor atual do campo no objeto Java -
+     * mudar so o campo em memoria nao muda esse snapshot, entao o Hibernate
+     * segue tentando incrementar o {@code null} original no commit. A
+     * correcao de verdade precisa alcancar o BANCO (via
+     * {@code UsuarioRepository.normalizarVersaoNula}, um {@code UPDATE} em
+     * lote com {@code clearAutomatically = true}) e depois RECARREGAR a
+     * entidade - por isso este metodo devolve um {@code Usuario} (que pode
+     * ser uma instancia DIFERENTE da recebida) e precisa ser chamado logo
+     * apos o fetch, ANTES de qualquer {@code set...} no objeto original (que
+     * seria perdido pelo {@code clearAutomatically}).</p>
+     */
+    private Usuario normalizarVersaoLegada(Usuario u) {
+        if (u.getVersao() != null) {
+            return u;
+        }
+        log.warn("Usuario '{}' (id {}) tinha versao nula (dado legado sem backfill) - "
+            + "normalizando para 0 no banco e recarregando antes de qualquer alteracao.",
+            u.getUsername(), u.getId());
+        repo.normalizarVersaoNula(u.getId());
+        return buscar(u.getId());
     }
 
     private void validarSenha(String senha) {

@@ -3,6 +3,7 @@ package br.gov.saude.sgpur.repository;
 import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.Usuario;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -40,4 +41,29 @@ public interface UsuarioRepository extends JpaRepository<Usuario, Long> {
         order by u.username asc
         """)
     List<Usuario> buscar(@Param("q") String q);
+
+    /**
+     * Corrige em BANCO um {@code Usuario} com {@code versao} nula (dado
+     * seed/legado de antes do commit que adicionou {@code @Version} a esta
+     * entidade, sem o backfill manual documentado no CLAUDE.md ter rodado).
+     *
+     * <p><b>Por que precisa ser um UPDATE em lote (bulk, via {@code
+     * @Modifying}), e nao so {@code usuario.setVersao(0L)} num objeto ja
+     * gerenciado:</b> o Hibernate calcula a proxima versao a partir do
+     * SNAPSHOT carregado na sessao no momento do fetch (o valor lido do banco,
+     * usado tambem na clausula {@code WHERE} do UPDATE de verdade) - nao a
+     * partir do valor atual do campo no objeto Java. Setar o campo em memoria
+     * NAO muda esse snapshot, entao o Hibernate segue tentando incrementar o
+     * {@code null} original no COMMIT e a {@code NullPointerException}
+     * continua acontecendo (confirmado por reproducao direta - so mudar o
+     * campo no objeto NAO bastou). {@code clearAutomatically = true} descarta
+     * o persistence-context inteiro apos este UPDATE, forcando quem chamou a
+     * RECARREGAR o {@code Usuario} do banco (ja com {@code versao = 0}) antes
+     * de aplicar qualquer mutacao - ver {@code UsuarioService.
+     * normalizarVersaoLegada}, que e sempre chamado ANTES de qualquer
+     * {@code set...} no objeto, exatamente por causa disso.</p>
+     */
+    @Modifying(clearAutomatically = true)
+    @Query("update Usuario u set u.versao = 0 where u.id = :id and u.versao is null")
+    int normalizarVersaoNula(@Param("id") Long id);
 }

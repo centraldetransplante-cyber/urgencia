@@ -6,6 +6,8 @@ import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.service.dto.EmailTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -20,6 +22,8 @@ import java.util.Optional;
 
 @Service
 public class ProcessoService {
+
+    private static final Logger log = LoggerFactory.getLogger(ProcessoService.class);
 
     /** A partir deste ano a numeracao passa a ser automatica (2026 e manual). */
     private static final int ANO_NUMERACAO_AUTOMATICA = 2027;
@@ -545,6 +549,22 @@ public class ProcessoService {
      * as colecoes recem-carregadas com as MESMAS instancias gerenciadas de
      * {@code Processo} que ja estao em {@code processos} (identity map da
      * sessao), sem precisar substituir a lista original.
+     *
+     * <p><b>Bug real corrigido (2026-08-08):</b> {@code inicializarAnexos} e
+     * uma unica consulta em lote que hidrata os anexos de TODOS os processos
+     * recebidos - se um UNICO deles tiver um {@code Anexo.tipo} fora do enum
+     * atual (dado legado/removido do enum, sem validacao pelo {@code
+     * ddl-auto: update}), a consulta inteira lanca {@code
+     * InvalidDataAccessApiUsageException} e derrubava a pagina inteira (500),
+     * mesmo com dezenas de outros processos saudaveis na mesma pagina. A
+     * falha e isolada aqui: se o pre-carregamento em lote falhar, cada
+     * processo volta a carregar suas proprias colecoes sob demanda (lazy) -
+     * mais lento (reintroduz o N+1 que este metodo existe para evitar), mas
+     * so na hipotese rara de dado invalido, e o proprio acesso lazy por
+     * processo ja e protegido individualmente por
+     * {@code FluxoProcessoService.anexosSeguro}, entao so o(s) processo(s)
+     * realmente afetado(s) perdem o calculo de pendencia - o resto da pagina
+     * continua correto.</p>
      */
     @Transactional(readOnly = true)
     public void inicializarPareceresEAnexos(List<Processo> processos) {
@@ -553,7 +573,13 @@ public class ProcessoService {
         }
         List<Long> ids = processos.stream().map(Processo::getId).toList();
         processoRepository.inicializarPareceresComMembro(ids);
-        processoRepository.inicializarAnexos(ids);
+        try {
+            processoRepository.inicializarAnexos(ids);
+        } catch (RuntimeException e) {
+            log.warn("Falha ao pre-carregar anexos em lote (provavel Anexo.tipo com valor "
+                + "fora do enum TipoAnexo atual, em algum processo do lote) - cada processo vai "
+                + "carregar seus proprios anexos sob demanda: {}", e.getMessage());
+        }
     }
 
     /** True se o processo esta encerrado e, portanto, com a edicao travada. */
