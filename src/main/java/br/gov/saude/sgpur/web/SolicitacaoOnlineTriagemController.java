@@ -119,7 +119,7 @@ public class SolicitacaoOnlineTriagemController {
         // desligado aqui - ver "chatAtivoNestaTela" em layout.html.
         model.addAttribute("chatAtivoNestaTela", true);
         Usuario operador = usuarioRepo.findByUsername(principal.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+            .orElseThrow(() -> new SessaoInvalidaException("Sua sessao nao e mais valida. Faca login novamente."));
         mensagemService.marcarComoLidas(id, MensagemSolicitacao.RemetenteMensagem.SOLICITANTE, operador.getId());
         return "processos/solicitacoes-online-detalhe";
     }
@@ -187,7 +187,7 @@ public class SolicitacaoOnlineTriagemController {
             Principal principal, RedirectAttributes ra) {
         SolicitacaoOnline s = service.buscar(id);
         Usuario operador = usuarioRepo.findByUsername(principal.getName())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+                .orElseThrow(() -> new SessaoInvalidaException("Sua sessao nao e mais valida. Faca login novamente."));
         if (texto == null || texto.isBlank()) {
             ra.addFlashAttribute("erro", "A mensagem nao pode estar em branco.");
             return "redirect:/processos/solicitacoes-online/" + id;
@@ -222,7 +222,7 @@ public class SolicitacaoOnlineTriagemController {
     public String apagarMensagem(@PathVariable Long id, @PathVariable Long mensagemId,
                                   Principal principal, RedirectAttributes ra) {
         Usuario operador = usuarioRepo.findByUsername(principal.getName())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+                .orElseThrow(() -> new SessaoInvalidaException("Sua sessao nao e mais valida. Faca login novamente."));
         try {
             mensagemService.apagar(mensagemId, operador.getId(), MensagemSolicitacao.RemetenteMensagem.OPERADOR);
         } catch (IllegalArgumentException e) {
@@ -242,7 +242,7 @@ public class SolicitacaoOnlineTriagemController {
     @Transactional
     public Map<String, Object> mensagensJson(@PathVariable Long id, Principal principal) {
         Usuario operador = usuarioRepo.findByUsername(principal.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+            .orElseThrow(() -> new SessaoInvalidaException("Sua sessao nao e mais valida. Faca login novamente."));
         mensagemService.marcarComoLidas(id, MensagemSolicitacao.RemetenteMensagem.SOLICITANTE, operador.getId());
         String nomeSolicitante = service.nomeSolicitante(id);
         Map<String, Object> resp = new LinkedHashMap<>();
@@ -262,7 +262,7 @@ public class SolicitacaoOnlineTriagemController {
             @RequestParam String texto, Principal principal) {
         SolicitacaoOnline s = service.buscar(id);
         Usuario operador = usuarioRepo.findByUsername(principal.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+            .orElseThrow(() -> new SessaoInvalidaException("Sua sessao nao e mais valida. Faca login novamente."));
         if (texto == null || texto.isBlank()) {
             return org.springframework.http.ResponseEntity.badRequest()
                 .body(Map.of("erro", "A mensagem nao pode estar em branco."));
@@ -283,7 +283,7 @@ public class SolicitacaoOnlineTriagemController {
     public org.springframework.http.ResponseEntity<Map<String, Object>> apagarMensagemAjax(@PathVariable Long id,
             @PathVariable Long mensagemId, Principal principal) {
         Usuario operador = usuarioRepo.findByUsername(principal.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+            .orElseThrow(() -> new SessaoInvalidaException("Sua sessao nao e mais valida. Faca login novamente."));
         try {
             mensagemService.apagar(mensagemId, operador.getId(), MensagemSolicitacao.RemetenteMensagem.OPERADOR);
             return org.springframework.http.ResponseEntity.ok(Map.of("ok", true));
