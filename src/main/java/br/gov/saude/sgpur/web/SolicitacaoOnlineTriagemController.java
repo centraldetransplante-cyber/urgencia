@@ -108,6 +108,11 @@ public class SolicitacaoOnlineTriagemController {
     @Transactional
     public String detalhe(@PathVariable Long id, Principal principal, Model model) {
         model.addAttribute("solicitacao", service.buscarParaDetalhe(id));
+        // Nome real de quem enviou, para o CABECALHO do card de chat (as
+        // mensagens em si ja usavam o nome real desde o PR #61 - ver
+        // MensagemSolicitacaoService.paraChat). Antes de 2026-08-08 o titulo
+        // ficava com o literal generico "Conversa com o solicitante".
+        model.addAttribute("nomeSolicitante", service.nomeSolicitante(id));
         List<MensagemSolicitacao> mensagens = mensagemService.listarPorSolicitacao(id);
         model.addAttribute("mensagens", mensagens);
         long msgNaoLidas = mensagens.stream()

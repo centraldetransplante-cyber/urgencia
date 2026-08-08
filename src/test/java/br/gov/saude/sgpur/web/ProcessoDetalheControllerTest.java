@@ -615,12 +615,17 @@ class ProcessoDetalheControllerTest {
         when(solicitacaoOnlineRepository.findIdByProcessoGeradoId(1L)).thenReturn(Optional.of(42L));
         when(fluxoService.calcularGating(processo)).thenReturn(
             new FluxoProcessoService.GatingAbas(true, false, false, false));
+        when(solicitacaoOnlineService.nomeSolicitante(42L)).thenReturn("Santa Casa - Nefro");
 
         mvc.perform(get("/processos/1"))
             .andExpect(status().isOk())
             .andExpect(model().attribute("processoVeioDoPortal", true))
             .andExpect(model().attribute("solicitacaoOnlineOrigemId", 42L))
-            .andExpect(model().attribute("liberadoEnvio", true));
+            .andExpect(model().attribute("nomeSolicitante", "Santa Casa - Nefro"))
+            .andExpect(model().attribute("liberadoEnvio", true))
+            // Cabecalho do card de chat mostra o nome real, nao o literal
+            // generico "Conversa com o solicitante" (correcao de 2026-08-08).
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Santa Casa - Nefro")));
     }
 
     // ----- editar / atualizar -----

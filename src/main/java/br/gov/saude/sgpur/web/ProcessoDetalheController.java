@@ -498,6 +498,11 @@ public class ProcessoDetalheController {
             if (solicitacaoOrigemIdOpt.isPresent()) {
                 Long solicitacaoOrigemId = solicitacaoOrigemIdOpt.get();
                 model.addAttribute("solicitacaoOnlineOrigemId", solicitacaoOrigemId);
+                // Nome real de quem enviou, para o CABECALHO do card de chat (as
+                // mensagens em si ja usavam o nome real desde o PR #61 - ver
+                // MensagemSolicitacaoService.paraChat). Antes de 2026-08-08 o
+                // titulo ficava com o literal generico "Conversa com o solicitante".
+                model.addAttribute("nomeSolicitante", solicitacaoOnlineService.nomeSolicitante(solicitacaoOrigemId));
                 java.util.List<MensagemSolicitacao> mensagens = mensagemService.listarPorSolicitacao(solicitacaoOrigemId);
                 model.addAttribute("mensagens", mensagens);
                 long msgNaoLidas = mensagens.stream()

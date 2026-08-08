@@ -4674,3 +4674,50 @@ mesma tela** (parecer que nasce com o painel fechado e parecer que nasce
 com o painel já aberto, por já ter conversa registrada) — cada botão gira
 de forma independente e correta, sem interferência entre eles. Suíte
 completa: 888 testes, 0 falhas (JDK 21).
+
+## Nome real do solicitante também no CABEÇALHO do chat, não só nas mensagens (2026-08-08)
+
+Continuação do PR #61 (já mesclado), que trocou o rótulo genérico
+"Solicitante" pelo nome real **dentro** das mensagens do chat (via
+`MensagemSolicitacaoService.paraChat`, usado pelo endpoint AJAX de
+polling). O usuário reportou que o **título do card** — o texto estático
+"Conversa com o solicitante" no `card-header`, renderizado no HTML inicial
+pelo Thymeleaf, fora do JS de polling — continuava genérico.
+
+**Causa raiz:** `SolicitacaoOnlineService.nomeSolicitante(Long)` (já
+existente, com fallback para o literal "Solicitante" se vier nulo/em
+branco) só era chamado dentro do endpoint AJAX `mensagensJson`, nunca no
+método de render principal (`detalhe()`/`ProcessoDetalheController` e
+`SolicitacaoOnlineTriagemController`) que gera o HTML inicial da página —
+por isso o `card-header` nunca teve acesso a esse dado.
+
+**Correção:** os dois controllers passaram a adicionar
+`model.addAttribute("nomeSolicitante", ...)` no método de render principal:
+- `SolicitacaoOnlineTriagemController.detalhe` — sempre (o `id` da própria
+  `SolicitacaoOnline` está sempre disponível; o card de chat nessa tela
+  nunca teve `th:if` de guarda).
+- `ProcessoDetalheController.detalhe` — só dentro do bloco
+  `if (processoVeioDoPortal)`, quando `solicitacaoOrigemId` já foi
+  resolvido (mesmo guard que os demais atributos de chat dessa tela usam;
+  o card inteiro só renderiza com `th:if="${solicitacaoOnlineOrigemId !=
+  null}"`, então nunca falta o atributo quando o `<span>` novo é avaliado).
+
+Templates `processos/solicitacoes-online-detalhe.html` e
+`processos/detalhe.html`: o texto fixo `Conversa com o solicitante` virou
+`Conversa com <span th:text="${nomeSolicitante}">o solicitante</span>` —
+mesmo ícone `bi-chat-dots`, sem mudar nenhum `id`/classe/estrutura do
+resto do card.
+
+**Não mexido, de propósito:** o rótulo das mensagens dentro do chat (já
+correto desde o PR #61) e o toast de notificação (`"Nova mensagem recebida
+do solicitante"`, deliberadamente genérico — usuário confirmou que está
+OK). `solicitante/detalhe.html` (chat do lado do próprio solicitante,
+título "Conversa com a equipe de Urgência Renal") também não foi tocado —
+não é genérico, já nomeia a equipe corretamente.
+
+Coberto por `ProcessoDetalheControllerTest.
+detalheExpoeProcessoVeioDoPortalTrueELinkDaOrigem` e
+`SolicitacaoOnlineTriagemControllerTest.detalheExibeASolicitacao`, ambos
+ajustados para stubar `nomeSolicitante` e confirmar, via
+`content().string(containsString(...))`, que o **HTML renderizado** (não
+só o model attribute) mostra o nome real no cabeçalho.

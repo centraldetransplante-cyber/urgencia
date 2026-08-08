@@ -69,7 +69,7 @@
     <div class="card mt-3">
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-1" role="button"
              data-bs-toggle="collapse" data-bs-target="#chatBody" aria-expanded="true">
-            <span><i class="bi bi-chat-dots"></i> Conversa com o solicitante</span>
+            <span><i class="bi bi-chat-dots"></i> Conversa com <span th:text="${nomeSolicitante}">o solicitante</span></span>
             <span class="d-flex align-items-center gap-1">
                 <span id="chatBadgeNaoLida" th:if="${msgNaoLidas > 0}" class="badge bg-warning text-dark"
                       th:text="${msgNaoLidas} + ' nova(s)'">0</span>

@@ -124,11 +124,16 @@ class SolicitacaoOnlineTriagemControllerTest {
     @WithMockUser(roles = "ADMIN")
     void detalheExibeASolicitacao() throws Exception {
         when(service.buscarParaDetalhe(50L)).thenReturn(solicitacao);
+        when(service.nomeSolicitante(50L)).thenReturn("Santa Casa - Nefro");
 
         mvc.perform(get("/processos/solicitacoes-online/50"))
             .andExpect(status().isOk())
             .andExpect(view().name("processos/solicitacoes-online-detalhe"))
-            .andExpect(model().attribute("solicitacao", solicitacao));
+            .andExpect(model().attribute("solicitacao", solicitacao))
+            .andExpect(model().attribute("nomeSolicitante", "Santa Casa - Nefro"))
+            // Cabecalho do card de chat mostra o nome real, nao o literal
+            // generico "Conversa com o solicitante" (correcao de 2026-08-08).
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Santa Casa - Nefro")));
     }
 
     @Test
