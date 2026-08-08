@@ -586,4 +586,135 @@ class SolicitanteControllerTest {
         verify(solicitacaoService).criar(any(SolicitacaoOnline.class), eq(dono), any());
         verify(rascunhoService).apagar(1L);
     }
+
+    // ----- Cartao de situacao: mensagem coerente com o real envio da resposta -----
+    // Bug real achado em QA (2026-08): o cartao de "Deferido" afirmava, ao mesmo
+    // tempo, que a resposta oficial ja tinha sido enviada por e-mail com o
+    // comprovante SNT em anexo E que o comprovante "ainda esta sendo providenciado" -
+    // a mensagem so pode afirmar "ja enviada" quando o anexo existe DE VERDADE e
+    // Processo.emailEnviadoSolicitante ja confirma o envio.
+
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void deferidoSemComprovanteSntNaoAfirmaQueAResostaJaFoiEnviadaPorEmail() throws Exception {
+        br.gov.saude.sgpur.domain.Processo processo = new br.gov.saude.sgpur.domain.Processo();
+        processo.setId(200L);
+        processo.setNumero("05/2026");
+        processo.setStatus(br.gov.saude.sgpur.domain.StatusProcesso.DEFERIDO);
+        processo.setEmailEnviadoSolicitante(false);
+        solicitacaoDoDono.setStatus(StatusSolicitacaoOnline.CONVERTIDA);
+        solicitacaoDoDono.setProcessoGerado(processo);
+
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.buscarParaDetalhe(50L)).thenReturn(solicitacaoDoDono);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(1, "bg-secondary"));
+        when(mensagemService.listarPorSolicitacao(50L)).thenReturn(java.util.List.of());
+        when(anexoStorageProcesso.buscarUltimoPorTipo(200L, br.gov.saude.sgpur.domain.TipoAnexo.COMPROVANTE_SNT))
+            .thenReturn(null);
+        when(anexoStorageProcesso.buscarUltimoPorTipo(200L, br.gov.saude.sgpur.domain.TipoAnexo.OFICIO_INDEFERIMENTO))
+            .thenReturn(null);
+
+        mvc.perform(get("/solicitante/50"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("A resposta oficial foi enviada por e-mail"))))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "Comprovante SNT ainda sendo providenciado pela equipe")));
+    }
+
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void deferidoComComprovanteSntEEmailConfirmadoAfirmaQueAResostaJaFoiEnviada() throws Exception {
+        br.gov.saude.sgpur.domain.Processo processo = new br.gov.saude.sgpur.domain.Processo();
+        processo.setId(201L);
+        processo.setNumero("06/2026");
+        processo.setStatus(br.gov.saude.sgpur.domain.StatusProcesso.DEFERIDO);
+        processo.setEmailEnviadoSolicitante(true);
+        solicitacaoDoDono.setStatus(StatusSolicitacaoOnline.CONVERTIDA);
+        solicitacaoDoDono.setProcessoGerado(processo);
+
+        br.gov.saude.sgpur.domain.Anexo comprovante = new br.gov.saude.sgpur.domain.Anexo();
+        comprovante.setId(900L);
+        comprovante.setTipo(br.gov.saude.sgpur.domain.TipoAnexo.COMPROVANTE_SNT);
+
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.buscarParaDetalhe(50L)).thenReturn(solicitacaoDoDono);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(1, "bg-secondary"));
+        when(mensagemService.listarPorSolicitacao(50L)).thenReturn(java.util.List.of());
+        when(anexoStorageProcesso.buscarUltimoPorTipo(201L, br.gov.saude.sgpur.domain.TipoAnexo.COMPROVANTE_SNT))
+            .thenReturn(comprovante);
+        when(anexoStorageProcesso.buscarUltimoPorTipo(201L, br.gov.saude.sgpur.domain.TipoAnexo.OFICIO_INDEFERIMENTO))
+            .thenReturn(null);
+
+        mvc.perform(get("/solicitante/50"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "A resposta oficial foi enviada por e-mail")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Comprovante SNT ainda sendo providenciado pela equipe"))));
+    }
+
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void indeferidoSemOficioNaoAfirmaQueOOficioJaFoiEnviadoPorEmail() throws Exception {
+        br.gov.saude.sgpur.domain.Processo processo = new br.gov.saude.sgpur.domain.Processo();
+        processo.setId(202L);
+        processo.setNumero("07/2026");
+        processo.setStatus(br.gov.saude.sgpur.domain.StatusProcesso.INDEFERIDO);
+        processo.setEmailEnviadoSolicitante(false);
+        solicitacaoDoDono.setStatus(StatusSolicitacaoOnline.CONVERTIDA);
+        solicitacaoDoDono.setProcessoGerado(processo);
+
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.buscarParaDetalhe(50L)).thenReturn(solicitacaoDoDono);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(1, "bg-secondary"));
+        when(mensagemService.listarPorSolicitacao(50L)).thenReturn(java.util.List.of());
+        when(anexoStorageProcesso.buscarUltimoPorTipo(202L, br.gov.saude.sgpur.domain.TipoAnexo.COMPROVANTE_SNT))
+            .thenReturn(null);
+        when(anexoStorageProcesso.buscarUltimoPorTipo(202L, br.gov.saude.sgpur.domain.TipoAnexo.OFICIO_INDEFERIMENTO))
+            .thenReturn(null);
+
+        mvc.perform(get("/solicitante/50"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("O ofício com os detalhes foi enviado por e-mail"))))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "Ofício ainda sendo providenciado pela equipe")));
+    }
+
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void indeferidoComOficioEEmailConfirmadoAfirmaQueOOficioJaFoiEnviado() throws Exception {
+        br.gov.saude.sgpur.domain.Processo processo = new br.gov.saude.sgpur.domain.Processo();
+        processo.setId(203L);
+        processo.setNumero("08/2026");
+        processo.setStatus(br.gov.saude.sgpur.domain.StatusProcesso.INDEFERIDO);
+        processo.setEmailEnviadoSolicitante(true);
+        solicitacaoDoDono.setStatus(StatusSolicitacaoOnline.CONVERTIDA);
+        solicitacaoDoDono.setProcessoGerado(processo);
+
+        br.gov.saude.sgpur.domain.Anexo oficio = new br.gov.saude.sgpur.domain.Anexo();
+        oficio.setId(901L);
+        oficio.setTipo(br.gov.saude.sgpur.domain.TipoAnexo.OFICIO_INDEFERIMENTO);
+
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.buscarParaDetalhe(50L)).thenReturn(solicitacaoDoDono);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(1, "bg-secondary"));
+        when(mensagemService.listarPorSolicitacao(50L)).thenReturn(java.util.List.of());
+        when(anexoStorageProcesso.buscarUltimoPorTipo(203L, br.gov.saude.sgpur.domain.TipoAnexo.COMPROVANTE_SNT))
+            .thenReturn(null);
+        when(anexoStorageProcesso.buscarUltimoPorTipo(203L, br.gov.saude.sgpur.domain.TipoAnexo.OFICIO_INDEFERIMENTO))
+            .thenReturn(oficio);
+
+        mvc.perform(get("/solicitante/50"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "O ofício com os detalhes foi enviado por e-mail")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Ofício ainda sendo providenciado pela equipe"))));
+    }
 }

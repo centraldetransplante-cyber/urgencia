@@ -3498,3 +3498,48 @@ solicitante no fixture e um teste
 que confirma o JSON de `GET .../mensagens` contendo o nome real
 ("Solicitante Detalhe Teste"/"Solicitante Teste") em vez do literal antigo.
 Suíte completa validada (JDK 21), sem regressão.
+
+## Fix: cartão "Deferido"/"Indeferido" do Portal do Solicitante afirmava envio de e-mail que ainda não tinha ocorrido (2026-08)
+
+**Bug real achado em simulação de QA (Playwright)**, no cartão de situação
+único do detalhe do Portal do Solicitante (`SolicitanteController
+.montarSituacaoPedido`, `solicitante/detalhe.html`). Quando o processo
+estava Deferido, o cartão afirmava, ao mesmo tempo, duas coisas
+contraditórias: que "a resposta oficial foi enviada por e-mail (...)
+contendo o comprovante de inserção no Sistema Nacional de Transplantes
+(SNT) em anexo" **e**, logo abaixo, que "Comprovante SNT ainda sendo
+providenciado pela equipe" — o mesmo tipo de bug se repetia no ramo
+Indeferido, com o ofício.
+
+**Causa raiz:** o texto de `mensagem` era montado de forma incondicional em
+`montarSituacaoPedido`, ignorando se o anexo (`comprovanteSnt`/
+`oficioIndeferimento`, já calculados antes da chamada via
+`AnexoStorageService.buscarUltimoPorTipo`) de fato existia, e ignorando
+`Processo.emailEnviadoSolicitante` (só passa a `true` dentro de
+`ProcessoService.finalizarResposta`, ver seção "Fluxo em 5 passos" acima) —
+ou seja, o cartão podia anunciar "já enviado" para um processo que acabou
+de ser Deferido automaticamente por maioria simples, mas cuja etapa 6
+(Resposta ao solicitante) o operador ainda nem tinha executado. O aviso
+"ainda sendo providenciado" (mais abaixo, no `solicitante/detalhe.html`) já
+lia corretamente `situacao.anexoParaBaixar() == null` — a contradição era
+sempre entre o texto fixo de `mensagem` e essa segunda checagem correta no
+template, nunca uma lógica duplicada/divergente no HTML.
+
+**Correção:** os dois ramos (`deferido`/`indeferido`) de
+`montarSituacaoPedido` passaram a calcular `respostaJaEnviada` (anexo
+correspondente não-nulo **e** `proc.isEmailEnviadoSolicitante()`) e montar
+a `mensagem` condicionalmente: só afirma "foi enviada/enviado por e-mail"
+quando as duas condições valem; caso contrário, afirma que a equipe **está
+providenciando** o envio formal, sem mencionar um e-mail que ainda não
+saiu. `SituacaoPedidoView` continua sendo a fonte única da decisão — nada
+foi duplicado no template, que já consumia `situacao.anexoParaBaixar()`
+corretamente.
+
+**Testes** (`SolicitanteControllerTest`): 4 casos novos cobrindo Deferido
+sem/com comprovante SNT (+ `emailEnviadoSolicitante`) e Indeferido sem/com
+ofício, cada um verificando por `content().string(...)` que a frase de
+"já enviado" só aparece no cenário correto e nunca coexiste com o aviso de
+"ainda sendo providenciado".
+
+**PR:** `fix/mensagem-comprovante-snt-contraditoria` (branch dedicada a
+partir de `main`, sem outra mudança de regra de negócio).

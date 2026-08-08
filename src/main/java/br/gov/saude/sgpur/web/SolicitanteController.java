@@ -363,11 +363,26 @@ public class SolicitanteController {
             AnexoDownload anexo = comprovanteSnt != null
                 ? new AnexoDownload(comprovanteSnt.getId(), "Baixar comprovante de inserção no SNT")
                 : null;
-            String mensagem = "Seu pedido (processo " + numero + ") foi analisado e DEFERIDO pela Central "
-                + "de Transplantes do Estado do Rio Grande do Sul, resultando no reconhecimento da urgência "
-                + "renal. A resposta oficial foi enviada por e-mail à sua equipe ("
-                + s.getSolicitanteEmail() + "), contendo o comprovante de inserção no Sistema Nacional de "
-                + "Transplantes (SNT) em anexo.";
+            // A mensagem so pode afirmar que a resposta oficial JA foi enviada por
+            // e-mail quando isso e verdade nos dois sentidos: o anexo do comprovante
+            // SNT existe E ProcessoService.finalizarResposta ja confirmou o envio
+            // (Processo.emailEnviadoSolicitante). Antes disso, dizer "foi enviada"
+            // contradiz o proprio botao de download (que fica ausente, com o aviso
+            // "ainda sendo providenciado" logo abaixo, no template) - bug real
+            // achado em QA, corrigido em 2026-08.
+            boolean respostaJaEnviada = comprovanteSnt != null
+                && proc != null && proc.isEmailEnviadoSolicitante();
+            String mensagem = respostaJaEnviada
+                ? "Seu pedido (processo " + numero + ") foi analisado e DEFERIDO pela Central "
+                    + "de Transplantes do Estado do Rio Grande do Sul, resultando no reconhecimento da urgência "
+                    + "renal. A resposta oficial foi enviada por e-mail à sua equipe ("
+                    + s.getSolicitanteEmail() + "), contendo o comprovante de inserção no Sistema Nacional de "
+                    + "Transplantes (SNT) em anexo."
+                : "Seu pedido (processo " + numero + ") foi analisado e DEFERIDO pela Central "
+                    + "de Transplantes do Estado do Rio Grande do Sul, resultando no reconhecimento da urgência "
+                    + "renal. A equipe está providenciando o envio formal da resposta, com o comprovante de "
+                    + "inserção no Sistema Nacional de Transplantes (SNT), à sua equipe ("
+                    + s.getSolicitanteEmail() + ").";
             String detalhe = proc != null ? proc.getMensagemResposta() : null;
             return new SituacaoPedidoView("Deferido", "success", "check-circle-fill",
                 "Deferido — Urgência renal reconhecida", mensagem, detalhe, false, false, anexo, numero);
@@ -379,10 +394,19 @@ public class SolicitanteController {
             AnexoDownload anexo = oficioIndeferimento != null
                 ? new AnexoDownload(oficioIndeferimento.getId(), "Baixar ofício de indeferimento")
                 : null;
-            String mensagem = "Seu pedido (processo " + numero + ") foi analisado e INDEFERIDO pela Central "
-                + "de Transplantes do Estado do Rio Grande do Sul, resultando no indeferimento da urgência "
-                + "renal. O ofício com os detalhes foi enviado por e-mail à sua equipe ("
-                + s.getSolicitanteEmail() + ").";
+            // Mesmo raciocinio do ramo deferido acima: so afirma que o oficio JA foi
+            // enviado por e-mail quando o anexo existe E o envio ja foi confirmado.
+            boolean respostaJaEnviada = oficioIndeferimento != null
+                && proc != null && proc.isEmailEnviadoSolicitante();
+            String mensagem = respostaJaEnviada
+                ? "Seu pedido (processo " + numero + ") foi analisado e INDEFERIDO pela Central "
+                    + "de Transplantes do Estado do Rio Grande do Sul, resultando no indeferimento da urgência "
+                    + "renal. O ofício com os detalhes foi enviado por e-mail à sua equipe ("
+                    + s.getSolicitanteEmail() + ")."
+                : "Seu pedido (processo " + numero + ") foi analisado e INDEFERIDO pela Central "
+                    + "de Transplantes do Estado do Rio Grande do Sul, resultando no indeferimento da urgência "
+                    + "renal. A equipe está providenciando o envio formal do ofício com os detalhes, à sua "
+                    + "equipe (" + s.getSolicitanteEmail() + ").";
             String motivo = proc != null ? proc.getMotivoIndeferimento() : null;
             String mensagemResposta = proc != null ? proc.getMensagemResposta() : null;
             String detalhe = motivo != null ? "Motivo informado: " + motivo : mensagemResposta;
