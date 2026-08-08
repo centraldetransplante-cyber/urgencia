@@ -37,9 +37,17 @@ public class AvaliadorPage {
      * anexo) - o seletor usa "comeca com" (^=) e .first() porque um processo
      * pode ter mais de um PDF anexado, e um locator estatico casaria varios
      * elementos (Playwright "strict mode violation" em chamadas como .click()).
+     *
+     * <p><b>O texto do title E ACENTUADO</b> ("Visualiza&ccedil;&atilde;o..."),
+     * como todo texto visivel dos dois portais desde a Fase 8 de acentuacao.
+     * Este seletor ficou com a versao sem acento por um tempo e casava ZERO
+     * elementos - {@code .first().isVisible()} devolve {@code false} em vez de
+     * estourar, entao a quebra so aparecia como um assert falso, sem dizer que
+     * o seletor e que estava errado. Corrigido em 2026-08-08; se a acentuacao
+     * do template mudar de novo, este seletor tem que acompanhar.
      */
     public Locator materialInline() {
-        return page.locator("iframe[title^='Visualizacao do processo anonimizado']").first();
+        return page.locator("iframe[title^='Visualização do processo anonimizado']").first();
     }
 
     /** Locator do botao de confirmacao final dentro do modal de ciencia do voto. */

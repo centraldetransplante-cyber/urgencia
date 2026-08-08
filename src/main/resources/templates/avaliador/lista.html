@@ -5,7 +5,26 @@
 <nav th:replace="~{layout :: navbar}"></nav>
 <div th:replace="~{layout :: flash}"></div>
 
-<main id="conteudo" class="container my-4 container-portal">
+<main id="conteudo">
+    <!-- Faixa de cabecalho SUAVE (M1(a) do redesign visual - ver
+         docs/RELATORIO-REDESIGN-VISUAL-SOLICITANTE-2026-08.md, estendido ao
+         Portal do Avaliador em 2026-08-08 por decisao do dono do produto):
+         mesma classe .pagina-cabecalho ja usada em solicitante/lista.html,
+         nenhum CSS novo. Emenda o azul da navbar no conteudo em vez do corte
+         seco para o cinza, e traz a marca (gota+cruz) para dentro da tela. -->
+    <div class="pagina-cabecalho">
+        <div class="pc-marca" aria-hidden="true"><svg th:replace="~{layout :: marcaSvg}"></svg></div>
+        <div class="pc-inner container-portal">
+            <div>
+                <h1 class="pagina-titulo">
+                    <i class="bi bi-clipboard2-pulse"></i> Meu painel do avaliador
+                </h1>
+                <p class="pagina-contexto mb-0" th:text="'Avaliador: ' + ${membroRotulo}">Avaliador</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="container my-4 container-portal">
     <!-- Aparece so logo apos registrar um voto (flash attribute), quando ainda
          sobra pendencia do mesmo avaliador - evita reabrir a lista e escanear
          de novo a cada voto (Fase 10 do relatorio de UI). -->
@@ -21,37 +40,51 @@
         </a>
     </div>
 
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h1 class="h3 mb-0">
-                <i class="bi bi-clipboard2-pulse"></i> Meu painel do avaliador
-            </h1>
-            <p class="text-muted small mb-0" th:text="'Avaliador: ' + ${membroRotulo}">Avaliador</p>
-        </div>
-    </div>
-
     <!-- Bloco unico de destaque das pendencias: antes o mesmo numero aparecia
          duas vezes (card "Pendentes" + alerta "Voce tem N processos"), com 7
          blocos de estatistica pessoal na frente da unica coisa que o
          avaliador veio fazer aqui - votar. Fundido num so bloco, com acao
-         direta para o primeiro pendente. -->
-    <div th:if="${!pareceres.isEmpty()}" class="alert alert-warning d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <span class="d-flex align-items-center">
-            <i class="bi bi-bell-fill fs-4 me-2"></i>
-            Você tem
-            <strong class="mx-1" th:text="${pareceres.size()}">0</strong>
-            <span th:text="${pareceres.size() == 1} ? 'processo aguardando' : 'processos aguardando'">processos aguardando</span>
-            o seu voto.
-        </span>
-        <a href="#lista-pendentes" class="btn btn-warning btn-sm text-nowrap">
-            <i class="bi bi-arrow-down-circle"></i> Começar a votar
-        </a>
+         direta para o primeiro pendente.
+         Redesign visual 2026-08-08: passou de alert-warning generico para o
+         .cartao-resultado (M4(i)+M6) - superficie tintada, icone em token
+         circular de 64px e titulo maior. E o UNICO elemento elev-2 da tela,
+         como manda a regra de uso do M3: no Portal do Avaliador a pergunta
+         que o usuario veio responder e "tenho algo para votar?". Texto
+         SEMPRE na variante -on/-dark da cor (Anexo C do relatorio). -->
+    <div th:if="${!pareceres.isEmpty()}" class="cartao-resultado cartao-resultado-destaque r-attention animate-fade-in">
+        <div class="cartao-resultado-icone"><i class="bi bi-bell-fill"></i></div>
+        <div class="flex-grow-1">
+            <h2>
+                Você tem <span th:text="${pareceres.size()}">0</span>
+                <span th:text="${pareceres.size() == 1} ? 'processo aguardando' : 'processos aguardando'">processos aguardando</span>
+                o seu voto
+            </h2>
+            <p>
+                Cada processo abaixo espera o seu parecer para seguir na análise da
+                Urgência Renal.
+            </p>
+            <a href="#lista-pendentes" class="btn btn-lg btn-resultado-attention">
+                <i class="bi bi-arrow-down-circle"></i> Começar a votar
+            </a>
+        </div>
     </div>
-    <div th:if="${pareceres.isEmpty()}" class="alert alert-success d-flex align-items-center">
-        <i class="bi bi-check2-circle fs-4 me-2"></i>
-        <span>Nenhuma avaliação pendente no momento.</span>
+    <div th:if="${pareceres.isEmpty()}" class="cartao-resultado r-ok animate-fade-in">
+        <div class="cartao-resultado-icone"><i class="bi bi-check2-circle"></i></div>
+        <div class="flex-grow-1">
+            <h2>Nenhuma avaliação pendente no momento</h2>
+            <p class="mb-0">
+                Você está em dia. Quando um novo processo for enviado para o seu
+                parecer, ele aparecerá aqui e você receberá um convite por e-mail.
+            </p>
+        </div>
     </div>
 
+    <!-- Secao inteira so quando ha pendencia: sem ela, o cartao verde acima ja
+         diz exatamente a mesma coisa ("Nenhuma avaliacao pendente"), e a tela
+         exibia a mesma informacao duas vezes seguidas, com dois desenhos
+         diferentes (visto na captura de tela desta leva). O aviso de
+         imparcialidade vem junto: ele descreve a LISTA de pendentes. -->
+    <th:block th:if="${!pareceres.isEmpty()}">
     <p class="small text-muted">
         <i class="bi bi-info-circle"></i>
         Exibindo apenas os processos atribuídos a você que aguardam seu parecer.
@@ -59,7 +92,7 @@
         são identificados <strong>apenas pelas iniciais</strong>.
     </p>
 
-    <h2 id="lista-pendentes" class="h5 mb-2"><i class="bi bi-clipboard2-pulse"></i> Pendentes de voto</h2>
+    <h2 id="lista-pendentes" class="secao-titulo"><i class="bi bi-clipboard2-pulse"></i> Pendentes de voto</h2>
 
     <div>
 
@@ -272,16 +305,11 @@
                 </div>
             </div>
         </div>
-        <div th:if="${pareceresAtrasados.isEmpty() and pareceresDemais.isEmpty()}" class="card mb-4">
-            <div class="text-center text-muted py-5">
-                <i class="bi bi-check2-all fs-2 d-block mb-2"></i>
-                Nenhum processo pendente de avaliação no momento.
-            </div>
-        </div>
     </div>
+    </th:block>
 
     <!-- Historico das MINHAS avaliacoes (somente pareceres ja votados por mim) -->
-    <h2 class="h5 mb-2"><i class="bi bi-clock-history"></i> Histórico das minhas avaliações</h2>
+    <h2 class="secao-titulo"><i class="bi bi-clock-history"></i> Histórico das minhas avaliações</h2>
     <div class="card mb-4">
         <!-- Desktop/tablet (>=768px): tabela -->
         <div class="table-responsive d-none d-md-block">
@@ -325,9 +353,12 @@
                         </td>
                     </tr>
                     <tr th:if="${historico.isEmpty()}">
-                        <td colspan="4" class="text-center text-muted py-5">
-                            <i class="bi bi-inbox fs-2 d-block mb-2"></i>
-                            Você ainda não registrou nenhuma avaliação.
+                        <td colspan="4">
+                            <div class="estado-vazio estado-vazio-compacto">
+                                <div class="estado-vazio-icone"><i class="bi bi-inbox"></i></div>
+                                <h3>Você ainda não registrou nenhuma avaliação</h3>
+                                <p class="mb-0">Os pareceres que você emitir ficam registrados aqui.</p>
+                            </div>
                         </td>
                     </tr>
                 </tbody>
@@ -360,9 +391,10 @@
                     </span>
                 </div>
             </div>
-            <div th:if="${historico.isEmpty()}" class="text-center text-muted py-5">
-                <i class="bi bi-inbox fs-2 d-block mb-2"></i>
-                Você ainda não registrou nenhuma avaliação.
+            <div th:if="${historico.isEmpty()}" class="estado-vazio estado-vazio-compacto">
+                <div class="estado-vazio-icone"><i class="bi bi-inbox"></i></div>
+                <h3>Você ainda não registrou nenhuma avaliação</h3>
+                <p class="mb-0">Os pareceres que você emitir ficam registrados aqui.</p>
             </div>
         </div>
     </div>
@@ -370,7 +402,7 @@
     <!-- Estatisticas pessoais: interesse secundario, por isso ficam por
          ultimo - o avaliador entra no portal para votar, nao para ver
          numeros sobre si mesmo (ver Fase 3 do relatorio de UI). -->
-    <h2 class="h5 mb-2"><i class="bi bi-bar-chart-line"></i> Minhas estatísticas</h2>
+    <h2 class="secao-titulo"><i class="bi bi-bar-chart-line"></i> Minhas estatísticas</h2>
     <div class="row g-3 mb-4">
         <div class="col-6 col-md-4">
             <!-- Padrao unico .stat-card/.stat-number/.stat-icon (ja usado pelo
@@ -433,6 +465,7 @@
                 </div>
             </div>
         </div>
+    </div>
     </div>
 </main>
 

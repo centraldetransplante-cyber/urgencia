@@ -5,24 +5,41 @@
 <nav th:replace="~{layout :: navbar}"></nav>
 <div th:replace="~{layout :: flash}"></div>
 
-<main id="conteudo" class="container-fluid px-lg-4 my-4">
-
-    <div class="d-flex align-items-center mb-3 gap-2 flex-wrap">
-        <a th:href="@{/avaliador}" class="btn btn-outline-secondary btn-sm">
-            <i class="bi bi-arrow-left"></i> Voltar
-        </a>
-        <h1 class="h3 mb-0">Emitir parecer</h1>
-        <span class="badge bg-light text-dark border font-monospace">
-            <i class="bi bi-hash"></i><span th:text="${numero}">00/0000</span>
-        </span>
-        <!-- Progresso entre OS PROPRIOS pendentes do avaliador (nunca dado do
-             processo em si) - quem tem varios atrasados sabe onde esta na fila. -->
-        <span th:if="${totalPendentesMembro} > 1" class="badge bg-secondary-subtle text-secondary-emphasis">
-            Processo <span th:text="${posicaoPendente}">1</span> de
-            <span th:text="${totalPendentesMembro}">1</span> pendentes
-        </span>
+<main id="conteudo">
+    <!-- Faixa de cabecalho SOLIDA (M1(b) do redesign visual - ver
+         docs/RELATORIO-REDESIGN-VISUAL-SOLICITANTE-2026-08.md, estendido ao
+         Portal do Avaliador em 2026-08-08 por decisao do dono do produto):
+         mesma dupla .pagina-cabecalho/.pagina-cabecalho-solida ja usada em
+         solicitante/detalhe.html, nenhum CSS novo. Aqui ela faz o papel de
+         "capa do processo" - o numero CET-RS (a chave que o avaliador cita
+         ao telefone com a Secretaria) sai de um badge cinza discreto para o
+         .chip-protocolo ao lado do titulo.
+         IMPARCIALIDADE: nada de novo e exposto - continua so o numero do
+         processo, sem nome do paciente, equipe solicitante ou
+         co-avaliadores (as iniciais seguem no cartao de identificacao
+         abaixo, como antes). -->
+    <div class="pagina-cabecalho pagina-cabecalho-solida">
+        <div class="pc-marca" aria-hidden="true"><svg th:replace="~{layout :: marcaSvg}"></svg></div>
+        <div class="pc-inner container-fluid px-lg-4 d-block">
+            <a th:href="@{/avaliador}" class="pagina-cabecalho-voltar">
+                <i class="bi bi-arrow-left"></i> Meu painel do avaliador
+            </a>
+            <h1 class="pagina-titulo mt-2">
+                Emitir parecer
+                <span class="chip-protocolo">
+                    <i class="bi bi-hash"></i><span th:text="${numero}">00/0000</span>
+                </span>
+            </h1>
+            <!-- Progresso entre OS PROPRIOS pendentes do avaliador (nunca dado do
+                 processo em si) - quem tem varios atrasados sabe onde esta na fila. -->
+            <p th:if="${totalPendentesMembro} > 1" class="pagina-contexto mb-0">
+                Processo <span th:text="${posicaoPendente}">1</span> de
+                <span th:text="${totalPendentesMembro}">1</span> pendentes na sua fila
+            </p>
+        </div>
     </div>
 
+    <div class="container-fluid px-lg-4 my-4">
     <div class="row g-4">
         <!-- Coluna esquerda: material para leitura (fica a vista o tempo todo,
              o avaliador nao precisa rolar pra cima/baixo entre ler e votar) -->
@@ -98,9 +115,12 @@
     <div class="col-xl-5">
     <div class="sticky-lg-top sticky-offset-top">
 
-    <!-- Identificacao do processo — SOMENTE iniciais, sem dados do solicitante -->
-    <div class="card mb-3">
-        <div class="card-body py-3">
+    <!-- Identificacao do processo — SOMENTE iniciais, sem dados do solicitante.
+         .superficie-apoio (M3): sem sombra, fundo levemente afundado - deixa
+         de ser mais um "cartao branco identico" e vira apoio do cartao que
+         de fato importa aqui, o formulario de voto logo abaixo (elev-2). -->
+    <div class="superficie-apoio mb-3">
+        <div class="p-3">
             <dl class="row mb-0">
                 <dt class="col-sm-4">Processo</dt>
                 <dd class="col-sm-8 fw-semibold" th:text="${numero}">00/0000</dd>
@@ -119,8 +139,11 @@
         </div>
     </div>
 
-    <!-- Formulario de voto -->
-    <div class="card">
+    <!-- Formulario de voto. UNICO elemento elev-2 desta tela (regra de uso do
+         M3: se dois cartoes "importam", nenhum importa) - e a acao que o
+         avaliador veio fazer. O material em PDF ao lado continua em cartao
+         padrao: e leitura de apoio para chegar ate aqui. -->
+    <div class="card elev-2">
         <div class="card-header">
             <i class="bi bi-check2-square"></i> Registrar meu voto
         </div>
@@ -227,8 +250,14 @@
             </span>
         </div>
         <div class="card-body collapse" th:classappend="${existeConversaAval} ? 'show' : ''" id="chatBodyAvaliador">
-            <div id="chatVazioAval" class="text-muted small text-center py-3">
-                Nenhuma mensagem ainda.
+            <!-- Estado vazio desenhado (M5), mesma classe do Portal do
+                 Solicitante. O id continua sendo o alvo de
+                 chat-solicitacao.js (emptySelector), que so alterna d-none
+                 no elemento - nunca reescreve o conteudo interno. -->
+            <div id="chatVazioAval" class="estado-vazio estado-vazio-compacto">
+                <div class="estado-vazio-icone"><i class="bi bi-chat-dots"></i></div>
+                <h3>Nenhuma mensagem ainda</h3>
+                <p class="mb-0">Escreva abaixo se precisar falar com a equipe da Secretaria.</p>
             </div>
             <div id="chatBoxAval" class="mb-3 chat-box d-none"></div>
             <form id="chatFormAval" method="post">
@@ -250,6 +279,7 @@
         </div>
     </div>
 
+    </div>
     </div>
     </div>
     </div>

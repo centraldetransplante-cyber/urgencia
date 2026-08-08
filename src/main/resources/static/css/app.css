@@ -1749,6 +1749,18 @@ tr.linha-inativa > td:first-child {
 }
 .btn-resultado-danger:hover,
 .btn-resultado-danger:focus { background: var(--rs-red-dark); color: #fff; filter: brightness(1.1); }
+/* Completa a familia acima para a superficie .r-attention, usada pelo cartao
+   de chamada do Portal do Avaliador ("voce tem N pareceres pendentes").
+   btn-warning do Bootstrap (fundo --rs-gold puro) sobre --rs-gold-light da
+   praticamente o mesmo matiz do proprio cartao e some; a variante -dark e a
+   mesma regra de contraste do Anexo C do relatorio de redesign. */
+.btn-resultado-attention {
+    background: var(--rs-gold-dark);
+    border-color: var(--rs-gold-dark);
+    color: #fff;
+}
+.btn-resultado-attention:hover,
+.btn-resultado-attention:focus { background: var(--rs-gold-dark); color: #fff; filter: brightness(1.15); }
 
 /* === V5 - M4(ii) + M3: faixa de resumo (lista.html) === */
 /* O numero do card de resumo (1.75rem) competia com --saur-font-xl do

@@ -4401,3 +4401,103 @@ não queremos poluir todo campo exportado.
 
 **PR:** `fix/csv-formula-injection-auditoria` (branch dedicada a partir de
 `main`, sem outra mudança de regra de negócio).
+
+## Redesign visual estendido ao Portal do Avaliador (2026-08-08)
+
+**Decisão de produto aprovada explicitamente pelo dono do produto** nesta
+sessão: estender ao Portal do Avaliador (`/avaliador`) o sistema de design
+criado nas fases V1–V6 do
+`docs/RELATORIO-REDESIGN-VISUAL-SOLICITANTE-2026-08.md` (PR #42). Isso
+**reabre, na opção B, a decisão 6 do §10 daquele relatório** ("aplicar só ao
+Solicitante agora; avaliar o Avaliador depois, com o aprendizado") — o
+aprendizado veio e o dono do produto autorizou a extensão. Três limites
+fixados junto com a aprovação, que **não devem ser reabertos**:
+
+- **Não** trazer o dourado de volta como cor de marca (decisão 1 do §10
+  segue na opção A: dourado = "atenção").
+- **Não** criar ilustrações SVG próprias derivadas do logo (decisão 3 segue
+  na opção (a): só bootstrap-icons em token circular).
+- **Só o Portal do Avaliador.** A área do operador (ADMIN/OPERADOR,
+  densidade `operacional`) continua **fora** — decisão 6, opção C, segue
+  não recomendada e não foi tocada.
+
+**Mudança puramente visual.** Nenhum controller, endpoint, DTO, regra de
+negócio, `name=`/`id` de campo ou consulta foi alterado. A imparcialidade
+segue intacta: as telas continuam expondo **só as iniciais** do paciente e
+**nenhuma informação nova** (o `.chip-protocolo` da faixa de `votar.html`
+carrega apenas o número CET-RS, que a tela já mostrava num badge cinza).
+
+### O que foi aplicado (reaproveitando as classes que já existiam)
+
+Nenhuma classe nova de componente foi criada — todas vêm do bloco de
+redesign do `app.css` (`.pagina-cabecalho`, `.pagina-cabecalho-solida`,
+`.pagina-titulo`, `.pagina-contexto`, `.chip-protocolo`, `.secao-titulo`,
+`.cartao-resultado` + `.r-*`, `.estado-vazio` + `.estado-vazio-compacto`,
+`.superficie-apoio`, `.elev-2`, `.pc-marca`).
+
+`avaliador/lista.html`:
+- Faixa de cabeçalho **suave** (M1(a)) com a marca d'água gota+cruz, no
+  lugar do `<h1 class="h3">` solto sobre o cinza; conteúdo passou a viver
+  num `container my-4 container-portal` dentro do `<main id="conteudo">`.
+- O `alert-warning` "Você tem N processos aguardando o seu voto" virou
+  **`.cartao-resultado.cartao-resultado-destaque.r-attention`** (M4(i)+M6) —
+  ícone em token circular de 64px, título 1,75rem e CTA `btn-lg`. É o
+  **único elev-2 da tela** (regra do M3): no Portal do Avaliador a pergunta
+  que o médico veio responder é "tenho algo para votar?". O caso sem
+  pendência usa o mesmo layout em `.r-ok` ("simetria estrutural com
+  assimetria cromática", decisão 2).
+- Títulos de seção `h2.h5` → `.secao-titulo` (1,25rem, cor de texto real).
+- Os 3 estados vazios (`text-muted py-5` com ícone solto) → `.estado-vazio`
+  / `.estado-vazio-compacto`.
+- **Redundância removida:** a seção "Pendentes de voto" inteira (título +
+  lista + aviso de imparcialidade, que descreve essa lista) só é renderizada
+  quando há pendência — o cartão verde acima já dizia exatamente a mesma
+  coisa, e a tela exibia a informação duas vezes seguidas com dois desenhos
+  diferentes. Achado na **captura de tela**, não no código.
+
+`avaliador/votar.html`:
+- Faixa de cabeçalho **sólida** (M1(b), a mesma de `solicitante/detalhe.html`)
+  fazendo o papel de "capa do processo": link de volta, título e o número
+  CET-RS promovido de badge cinza para `.chip-protocolo`; a posição na fila
+  de pendentes virou `.pagina-contexto`.
+- Cartão de identificação (dl de Processo/Paciente/Enviado em) → 
+  `.superficie-apoio` (elev-0, fundo afundado): deixa de ser mais um cartão
+  branco idêntico.
+- Cartão do formulário de voto ganhou `.elev-2` — **único** da tela; o card
+  do PDF continua em elevação padrão (é leitura de apoio).
+- Estado vazio do chat → `.estado-vazio-compacto`. O `id="chatVazioAval"`
+  não mudou: `chat-solicitacao.js` só alterna `d-none` nele, nunca reescreve
+  o conteúdo interno.
+
+`app.css`: **única adição** — `.btn-resultado-attention` (fundo
+`--rs-gold-dark`), completando a família `.btn-resultado-ok/-danger` já
+existente. `btn-warning` do Bootstrap (fundo `--rs-gold` puro) sobre
+`--saur-surface-attention` some no próprio cartão; a variante `-dark` é a
+mesma regra de contraste do Anexo C do relatório.
+
+### Validação visual (obrigatória — a suíte não reprova nada disto)
+
+Conforme o §11 do relatório, as telas foram **renderizadas de verdade** com
+Playwright contra a aplicação real (H2/dev, fluxo completo: solicitação →
+triagem → conversão → envio → login do avaliador) e **inspecionadas**:
+`/avaliador` com pendência, `/avaliador` sem nenhuma pendência e
+`/avaliador/{id}` — cada uma em desktop (1440px) e celular (390px). Dois
+ajustes saíram dessa inspeção (a redundância da seção de pendentes e a
+calibragem do botão âmbar), nenhum deles visível na leitura do código. O IT
+de captura foi temporário e **não** ficou no repositório.
+
+### Testes
+
+- Suíte completa: **908 testes, 0 falhas** (JDK 21).
+- `FluxoCompletoProcessoIT` (E2E) percorre todo o Portal do Avaliador
+  alterado — PDF inline, modal de confirmação, voto real dos 2 médicos,
+  decisão automática — e falha só na linha 228, a **pré-existente e já
+  documentada** de SMTP local ausente.
+- **Bug pré-existente corrigido de graça:**
+  `AvaliadorPage.materialInline()` (E2E) procurava
+  `iframe[title^='Visualizacao do processo anonimizado']` **sem acento**,
+  enquanto o template usa "Visualização" desde a Fase 8 de acentuação — o
+  seletor casava **zero** elementos e `.first().isVisible()` devolvia
+  `false` em silêncio (assert falso, sem indicar que o seletor é que estava
+  errado). Confirmado por `git stash` que a falha existia igual no `main`
+  sem nenhuma mudança desta sessão.
