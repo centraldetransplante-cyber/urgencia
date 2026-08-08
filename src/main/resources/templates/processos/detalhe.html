@@ -902,13 +902,12 @@
                                      th:classappend="${existeConversaPorParecer.get(par.id)} ? 'show' : ''"
                                      th:attr="data-parecer-id=${par.id}">
                                     <div class="border rounded p-2 bg-light-subtle">
-                                        <div class="alert alert-warning py-2 mb-2 small">
-                                            <i class="bi bi-exclamation-triangle-fill"></i>
+                                        <p class="small text-muted mb-2">
                                             Esta mensagem será lida pelo médico avaliador. Refira-se ao
                                             paciente apenas pelas iniciais
                                             <strong th:text="${iniciais}">X.X.</strong>. Não cite o nome, a
                                             equipe solicitante nem os pareceres dos outros avaliadores.
-                                        </div>
+                                        </p>
                                         <div th:id="'chatVazioAval' + ${par.id}" class="text-muted small text-center py-2">
                                             Nenhuma mensagem ainda.
                                         </div>

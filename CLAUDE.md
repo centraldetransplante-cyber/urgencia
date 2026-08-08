@@ -3413,3 +3413,28 @@ Nenhum comportamento funcional mudou (poll AJAX, envio, expansão inicial
 via `existeConversaPorParecer` — tudo intocado), só a classe/ícone novos.
 Os outros dois pontos já estavam corretos e não precisaram de mudança.
 Suíte completa validada sem regressão (JDK 21).
+
+**Ajuste posterior no mesmo PR (mesmo dia): aviso de imparcialidade da
+thread menos chamativo.** O texto fixo dentro de cada thread de chat com
+avaliador ("Esta mensagem será lida pelo médico avaliador. Refira-se ao
+paciente apenas pelas iniciais... Não cite o nome, a equipe solicitante
+nem os pareceres dos outros avaliadores.") estava num
+`<div class="alert alert-warning py-2 mb-2 small">` com ícone
+`bi-exclamation-triangle-fill` — visualmente pesado para um aviso que
+aparece em toda thread, competindo com as mensagens de verdade do chat.
+**O texto foi mantido integralmente** (é a defesa documentada contra
+vazar nome/equipe/parecer nesse canal, complementar ao bloqueio
+automático por código do `VerificadorNomePaciente` — ver seção "Chat
+interno Avaliador ↔ Operador" acima) — só o destaque visual mudou: virou
+um `<p class="small text-muted mb-2">` simples, sem `alert-warning`, sem
+ícone, no mesmo padrão discreto já usado em vários outros avisos
+auxiliares do sistema (ex.: o texto de ajuda acima do accordion de
+"Textos de e-mail prontos", no mesmo template). Continua em fluxo normal
+do documento (sem `position: absolute`/z-index), como o primeiro elemento
+dentro do card da thread, antes da lista de mensagens/campo de
+digitar/botão enviar — confirmado por HTML renderizado de verdade (teste
+de integração `@SpringBootTest`+`MockMvc` temporário, descartado após a
+verificação) que o parágrafo não sobrepõe nenhum outro elemento do chat
+(`.chat-box`/`.chat-form-avaliador` não têm `position` absoluta em
+`app.css`, então qualquer conteúdo em fluxo normal nunca se sobreporia).
+Suíte completa revalidada: **879 testes, 0 falhas** (JDK 21).
