@@ -50,4 +50,28 @@ public interface MensagemAvaliadorRepository extends JpaRepository<MensagemAvali
     @Query("SELECT m FROM MensagemAvaliador m JOIN FETCH m.processo JOIN FETCH m.membro "
         + "ORDER BY m.dataEnvio DESC")
     List<MensagemAvaliador> findAllComProcessoEMembroOrderByDataEnvioDesc();
+
+    /**
+     * Nao lidas (do ponto de vista do OPERADOR) agrupadas por membro, para
+     * UM processo inteiro numa unica consulta - evita 1 SELECT por parecer no
+     * card "Respostas dos Avaliadores" (sempre 3 pareceres,
+     * {@code ProcessoService.AVALIADORES_POR_PROCESSO}, mas nao ha motivo pra
+     * manter o N+1 so porque N e baixo; ver CLAUDE.md, correcao de 2026-08-08).
+     * Membro sem nenhuma nao lida simplesmente nao aparece no resultado (GROUP
+     * BY nao gera linha zerada) - o chamador trata ausencia como zero.
+     */
+    @Query("SELECT m.membro.id, COUNT(m) FROM MensagemAvaliador m "
+        + "WHERE m.processo.id = :processoId AND m.lida = false AND m.remetente = :remetente "
+        + "GROUP BY m.membro.id")
+    List<Object[]> contarNaoLidasPorMembroAgrupado(@Param("processoId") Long processoId,
+                                                    @Param("remetente") RemetenteMensagemAvaliador remetente);
+
+    /**
+     * Ids dos membros que ja tem PELO MENOS 1 mensagem (de qualquer lado,
+     * lida ou nao) neste processo - versao em lote de
+     * {@code countByProcessoIdAndMembroId > 0}, mesma motivacao da consulta
+     * acima.
+     */
+    @Query("SELECT DISTINCT m.membro.id FROM MensagemAvaliador m WHERE m.processo.id = :processoId")
+    List<Long> membrosComConversa(@Param("processoId") Long processoId);
 }

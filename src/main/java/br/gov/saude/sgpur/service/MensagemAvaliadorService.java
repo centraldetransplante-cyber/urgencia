@@ -10,9 +10,11 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 /**
  * Camada de regra do chat AVALIADOR &lt;-&gt; OPERADOR, por processo (ver
@@ -91,6 +93,35 @@ public class MensagemAvaliadorService {
     @Transactional(readOnly = true)
     public boolean existeConversa(Long processoId, Long membroId) {
         return repository.countByProcessoIdAndMembroId(processoId, membroId) > 0;
+    }
+
+    /**
+     * Versao em lote de {@link #contarNaoLidasPorThreadParaOperador} +
+     * {@link #existeConversa}, para TODOS os avaliadores de UM processo de
+     * uma vez so - o card "Respostas dos Avaliadores"
+     * (`ProcessoDetalheController.detalhe`) chamava os dois metodos acima
+     * dentro de um loop sobre os pareceres (sempre 3,
+     * {@code ProcessoService.AVALIADORES_POR_PROCESSO}), gerando ate 6
+     * consultas extras por render. N e sempre baixo e fixo, mas nao ha motivo
+     * pra manter o N+1 so por isso (CLAUDE.md, correcao de 2026-08-08). Os
+     * dois mapas sao chaveados por {@code membro.id} (nao por
+     * {@code parecer.id} - esta camada nao conhece {@code Parecer}); o
+     * chamador remapeia para a chave que o template espera.
+     */
+    public record ResumoConversasProcesso(Map<Long, Long> naoLidasPorMembro, Map<Long, Boolean> existeConversaPorMembro) {}
+
+    @Transactional(readOnly = true)
+    public ResumoConversasProcesso resumoConversasDoProcesso(Long processoId) {
+        Map<Long, Long> naoLidasPorMembro = new LinkedHashMap<>();
+        for (Object[] linha : repository.contarNaoLidasPorMembroAgrupado(processoId, RemetenteMensagemAvaliador.AVALIADOR)) {
+            naoLidasPorMembro.put((Long) linha[0], (Long) linha[1]);
+        }
+        Set<Long> comConversa = new HashSet<>(repository.membrosComConversa(processoId));
+        Map<Long, Boolean> existeConversaPorMembro = new LinkedHashMap<>();
+        for (Long membroId : comConversa) {
+            existeConversaPorMembro.put(membroId, true);
+        }
+        return new ResumoConversasProcesso(naoLidasPorMembro, existeConversaPorMembro);
     }
 
     @Transactional
