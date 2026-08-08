@@ -13,6 +13,7 @@ import org.springframework.security.web.authentication.WebAuthenticationDetails;
 
 import java.io.IOException;
 import java.lang.reflect.Field;
+import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -21,14 +22,21 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 
 /**
  * O bloqueio por forca bruta foi removido do sistema (decisao de produto, ver
- * javadoc de {@link LoginAttemptService}); o que sobra - e o que estes testes
- * cobrem - e a trilha de auditoria: nenhuma tentativa de login pode derrubar a
- * autenticacao com excecao, e o IP precisa continuar sendo capturado pelo
- * filtro para aparecer no log.
+ * javadoc de {@link LoginAttemptService}); o que sobra e a trilha de
+ * auditoria (nenhuma tentativa de login pode derrubar a autenticacao com
+ * excecao, e o IP precisa continuar sendo capturado pelo filtro) MAIS o
+ * atraso progressivo (2026-08-07): varias falhas seguidas do mesmo usuario
+ * atrasam a resposta, mas NUNCA impedem o login (a senha certa sempre
+ * autentica).
+ *
+ * <p>Os testes de atraso usam constantes pequenas (1ms/tentativa, teto de
+ * 5ms) injetadas via construtor -- exercita a MESMA logica de producao (o
+ * calculo em si, {@code calcularAtrasoMsEContabilizarFalha}) sem deixar a
+ * suite lenta com sleeps reais de segundos.</p>
  */
 class LoginAttemptServiceTest {
 
-    private final LoginAttemptService service = new LoginAttemptService();
+    private final LoginAttemptService service = new LoginAttemptService(1, 5, 15);
 
     /**
      * Simula uma requisicao HTTP passando pelo filtro (que captura o IP no
@@ -141,5 +149,105 @@ class LoginAttemptServiceTest {
         assertThatCode(() ->
             service.aoFalhar(new AuthenticationFailureBadCredentialsEvent(auth, new BadCredentialsException("bad"))))
             .doesNotThrowAnyException();
+    }
+
+    // -----------------------------------------------------------------
+    // Atraso progressivo (2026-08-07) - NAO e bloqueio.
+    // -----------------------------------------------------------------
+
+    /** service com constantes de producao (usado so para checar os valores default). */
+    private final LoginAttemptService serviceComConstantesDeProducao =
+            new LoginAttemptService(1000, 5000, 15);
+
+    @Test
+    void primeirasFalhasNaoGeramAtraso() {
+        assertThat(serviceComConstantesDeProducao
+                .calcularAtrasoMsEContabilizarFalha("usuario-primeiras-falhas")).isZero();
+        assertThat(serviceComConstantesDeProducao
+                .calcularAtrasoMsEContabilizarFalha("usuario-primeiras-falhas")).isZero();
+    }
+
+    @Test
+    void falhasSeguintesAumentamOAtrasoProgressivamente() {
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15);
+        String u = "usuario-atraso-crescente";
+        s.calcularAtrasoMsEContabilizarFalha(u); // 1a - sem atraso
+        s.calcularAtrasoMsEContabilizarFalha(u); // 2a - sem atraso (LIMIAR_INICIAL)
+        long terceira = s.calcularAtrasoMsEContabilizarFalha(u);
+        long quarta = s.calcularAtrasoMsEContabilizarFalha(u);
+        long quinta = s.calcularAtrasoMsEContabilizarFalha(u);
+
+        assertThat(terceira).isEqualTo(1000);
+        assertThat(quarta).isEqualTo(2000);
+        assertThat(quinta).isEqualTo(3000);
+    }
+
+    @Test
+    void atrasoNuncaUltrapassaOTeto() {
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15);
+        String u = "usuario-muitas-falhas";
+        long ultimoAtraso = 0;
+        for (int i = 0; i < 50; i++) {
+            ultimoAtraso = s.calcularAtrasoMsEContabilizarFalha(u);
+        }
+
+        assertThat(ultimoAtraso).isEqualTo(5000);
+    }
+
+    @Test
+    void loginComSucessoZeraOContadorDeAtraso() {
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15);
+        String u = "usuario-reseta-apos-sucesso";
+        for (int i = 0; i < 10; i++) {
+            s.calcularAtrasoMsEContabilizarFalha(u);
+        }
+        // Antes do sucesso, ja estaria atrasando bastante.
+        assertThat(s.calcularAtrasoMsEContabilizarFalha(u)).isGreaterThan(0);
+
+        var auth = new UsernamePasswordAuthenticationToken(u, "senha-certa");
+        auth.setDetails(new WebAuthenticationDetails(criarRequestComIp("10.0.0.1")));
+        s.aoLogarComSucesso(new AuthenticationSuccessEvent(auth));
+
+        // Depois do sucesso, volta a ser tratado como as primeiras falhas.
+        assertThat(s.calcularAtrasoMsEContabilizarFalha(u)).isZero();
+    }
+
+    @Test
+    void janelaExpiradaReiniciaAContagemSemAtraso() {
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 1);
+        AtomicReference<Instant> agora = new AtomicReference<>(Instant.now());
+        s.usarRelogioParaTeste(agora::get);
+        String u = "usuario-janela-expira";
+
+        s.calcularAtrasoMsEContabilizarFalha(u);
+        s.calcularAtrasoMsEContabilizarFalha(u);
+        long comFalhasRecentes = s.calcularAtrasoMsEContabilizarFalha(u);
+        assertThat(comFalhasRecentes).isGreaterThan(0);
+
+        // Avanca o "relogio" alem da janela de 1 minuto: a proxima falha
+        // reinicia a contagem, como se fosse a primeira de novo.
+        agora.set(agora.get().plusSeconds(120));
+        assertThat(s.calcularAtrasoMsEContabilizarFalha(u)).isZero();
+    }
+
+    /**
+     * REGRA CENTRAL: mesmo com o contador de falhas alto, o login com a
+     * senha certa em si NUNCA e recusado por este mecanismo - so mais
+     * devagar. O metodo que aplica o atraso (aoFalhar) so roda no caminho de
+     * FALHA; aoLogarComSucesso nunca chama calcularAtraso/dorme.
+     */
+    @Test
+    void sucessoNuncaEAtrasadoMesmoAposMuitasFalhas() {
+        for (int i = 0; i < 20; i++) {
+            falhar("usuario-nao-bloqueia", "10.0.0.1");
+        }
+
+        long antes = System.currentTimeMillis();
+        assertThatCode(() -> logarComSucesso("usuario-nao-bloqueia", "10.0.0.1"))
+                .doesNotThrowAnyException();
+        long duracaoMs = System.currentTimeMillis() - antes;
+
+        // aoLogarComSucesso nao dorme - deve ser praticamente instantaneo.
+        assertThat(duracaoMs).isLessThan(500);
     }
 }

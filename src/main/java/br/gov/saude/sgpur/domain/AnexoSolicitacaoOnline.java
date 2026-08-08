@@ -38,6 +38,16 @@ public class AnexoSolicitacaoOnline {
     @Column(name = "data_upload", nullable = false)
     private LocalDateTime dataUpload = LocalDateTime.now();
 
+    /**
+     * Lock otimista. Adicionado em 2026-08-07, junto com {@link Anexo}. Exige
+     * backfill manual em producao apos o deploy (ver CLAUDE.md, pitfall de
+     * {@code @Version} novo em entidade ja populada):
+     * {@code UPDATE anexo_solicitacao_online SET versao = 0 WHERE versao IS NULL;}
+     */
+    @Version
+    @Column(name = "versao")
+    private Long versao;
+
     public AnexoSolicitacaoOnline() {
     }
 
@@ -95,5 +105,13 @@ public class AnexoSolicitacaoOnline {
 
     public void setDataUpload(LocalDateTime dataUpload) {
         this.dataUpload = dataUpload;
+    }
+
+    public Long getVersao() {
+        return versao;
+    }
+
+    public void setVersao(Long versao) {
+        this.versao = versao;
     }
 }

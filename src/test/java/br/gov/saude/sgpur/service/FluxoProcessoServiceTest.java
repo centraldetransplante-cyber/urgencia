@@ -489,6 +489,8 @@ class FluxoProcessoServiceTest {
         registrarEnvioCompleto(p);
         p.getPareceres().get(0).getMembro().setCoordenador(true);
         registrarMaioria(p, ResultadoParecer.FAVORAVEL); // pareceres 0 (coordenador) e 1 favoraveis
+        // Snapshot do papel no momento do voto (ver Parecer.eraCoordenadorNoVoto).
+        p.getPareceres().get(0).setEraCoordenadorNoVoto(true);
         Parecer par2 = p.getPareceres().get(2);
         par2.setId(3L);
         par2.setResultado(ResultadoParecer.SOLICITA_INFORMACAO);

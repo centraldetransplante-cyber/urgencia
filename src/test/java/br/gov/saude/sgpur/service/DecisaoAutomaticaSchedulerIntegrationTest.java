@@ -337,6 +337,10 @@ class DecisaoAutomaticaSchedulerIntegrationTest {
         par.setResultado(resultado);
         par.setDataResposta(LocalDate.of(2026, 5, 3));
         par.setOrigem(OrigemParecer.AVALIADOR_SISTEMA);
+        // Snapshot do papel no momento do voto (Parecer.eraCoordenadorNoVoto),
+        // mesmo comportamento de AvaliadorController.registrarVoto -- este
+        // helper simula um voto atual autenticado, nao um parecer legado.
+        par.setEraCoordenadorNoVoto(membro.isCoordenador());
         return parecerRepo.saveAndFlush(par);
     }
 }
