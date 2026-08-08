@@ -3906,3 +3906,126 @@ ofício, cada um verificando por `content().string(...)` que a frase de
 
 **PR:** `fix/mensagem-comprovante-snt-contraditoria` (branch dedicada a
 partir de `main`, sem outra mudança de regra de negócio).
+
+## Redesign visual do Portal do Solicitante (V1–V6) — registro atrasado + reparo final (2026-08-08)
+
+**Leia isto antes de abrir `docs/RELATORIO-REDESIGN-VISUAL-SOLICITANTE-2026-08.md`:
+aquele relatório JÁ FOI IMPLEMENTADO por inteiro.** Da §1 à §7 ele descreve o
+estado **anterior**, não o código de hoje.
+
+### O que aconteceu (e por que este registro chega atrasado)
+
+O relatório (2026-08-06) respondeu a uma queixa textual do dono do produto —
+*"o visual é tão simples e feio"* — sobre o Portal do Solicitante. Diagnosticou
+seis causas verificáveis (escala tipográfica de 2 degraus, cor institucional
+ausente do conteúdo, dourado semanticamente ocupado por "atenção", um único
+nível de sombra para 9 cartões, escala de espaçamento criada e não usada,
+estados vazios sem ação), propôs seis movimentos (M1–M6) e um plano faseado
+V1–V6, com mockups em `docs/mockups/`.
+
+As 7 decisões de produto do §10 foram **aprovadas explicitamente** pelo dono do
+produto no mesmo dia (decisão 1 → opção A; decisão 2 → sem elemento
+comemorativo; decisão 3 → só bootstrap-icons; e um *"suas recomendações são
+autorizadas"* que fechou as decisões 4–7 na opção recomendada de cada uma). As
+**seis fases foram implementadas e mescladas em `main` pelo PR #42**
+(`feat/redesign-visual-solicitante`), merge em 2026-08-06 14:40 UTC, um commit
+por fase (`58ca923` V1 → `7583829` V6).
+
+**O que falhou foi só o registro:** o CLAUDE.md nunca citou o relatório, e a
+nota do §10 continuou dizendo que a implementação seria *"um passo separado, a
+ser retomado quando solicitado"* — verdadeiro quando escrito, falso poucas
+horas depois. Resultado: uma vistoria de 2026-08-08 concluiu que o relatório
+*"nunca foi implementado e está esfriando"* e uma sessão foi aberta para
+implementá-lo de novo. **Nada foi reimplementado** — a sessão verificou o
+código real (os 12 tokens do Anexo B e as 10 classes previstas estão todos no
+`app.css`; as 4 telas consomem todos eles) e corrigiu a documentação.
+
+### O que está no código hoje (V1–V6, todas em produção)
+
+- **V1** — tokens: `--saur-elev-0/1/2`, `--saur-font-2xl`, e os pares
+  `--saur-surface-{ok,danger,attention,info}` / `--saur-on-*`. Nenhum matiz
+  novo: cada um aponta para um `--rs-*` que já existia.
+- **V2** — `.estado-vazio`/`.estado-vazio-icone` nos 4 pontos que não tinham
+  tratamento; a lista vazia do primeiro acesso ganhou o botão primário
+  "Enviar minha primeira solicitação".
+- **V3** — `.pagina-cabecalho` (faixa de identidade que emenda na navbar) +
+  escala tipográfica real: `.pagina-titulo`, `.secao-titulo` (1,25rem, cor de
+  texto real — não mais `h6 text-muted` de 1rem), `.secao-rotulo`. A marca
+  Gota+Cruz passou a existir dentro do conteúdo, como marca d'água
+  (`.pc-marca`, 6% na variante suave, 10% na sólida).
+- **V4** — `.cartao-resultado`: superfície tintada em largura total no lugar
+  da borda esquerda de 4px, ícone em token circular, `.chip-protocolo` com o
+  número do processo. **Simetria estrutural com assimetria cromática**
+  (decisão 2): Deferido e Indeferido usam exatamente o mesmo layout, mudando
+  só cor e ícone — sem nenhum elemento comemorativo.
+- **V5** — faixa de resumo recalibrada: "Aguardando triagem" e "Em análise"
+  deixaram de ser âmbar (viraram azul informativo), porque não exigem ação
+  nenhuma do solicitante. Só "Devolvidas" continua âmbar — o dourado voltou a
+  significar "você precisa agir".
+- **V6** — `nova.html` com ritmo visual real no lugar dos quatro `<hr>`, e a
+  zona de upload deixando de parecer mais um campo de texto.
+
+**Contraste:** em superfície tintada o texto usa **sempre** a variante `-dark`
+(Anexo C do relatório: `--rs-gold` sobre `--rs-gold-light` dá 1,85:1 e
+`--rs-green` sobre `--rs-green-light` dá 4,11:1 — os dois reprovam em WCAG AA).
+Não trocar por conta própria a variante base numa superfície clara.
+
+### Reparo desta sessão (o único item que faltava)
+
+`solicitante/indisponivel.html` usava `bi-tools` (ferramentas), que comunica
+"sistema quebrado / em manutenção", quando a mensagem real da tela é "seu
+perfil ainda não foi habilitado, continue usando o e-mail de sempre". Trocado
+por `bi-envelope-paper` (§5.4 do relatório, o reparo de 1 linha que tinha
+ficado de fora do PR #42). Ícone conferido contra o webjar antes da troca —
+`IconesBootstrapTest` reprova ícone inexistente.
+
+### Guarda automatizado novo: `RedesignVisualSolicitanteIT`
+
+A §11 do relatório é explícita: *"as asserções da suíte e o E2E podem ficar
+inteiramente verdes com o Portal visualmente quebrado"* — os testes normais
+verificam status HTTP, model attributes e presença de texto/id, **nunca** cor,
+tamanho, espaçamento ou sombra. O redesign inteiro entrou em produção sem
+nenhum guarda: bastava trocar `.secao-titulo` de volta por `h6 text-muted`
+para o Portal voltar ao estado que gerou a queixa, sem uma única falha.
+
+`src/test/java/br/gov/saude/sgpur/e2e/RedesignVisualSolicitanteIT.java`
+(Playwright, profile `e2e`, mesmo padrão de `ChatVisualVerificacaoIT`) mede o
+**CSS computado pelo navegador**, não o texto do template, e cada asserção
+mira um achado nominal do diagnóstico: título de seção estritamente **maior**
+que o corpo de texto (§4.1), faixa de cabeçalho com fundo que de fato pinta
+nas duas variantes (§4.2), estado vazio com ícone e ação (§4.6), e a marca
+dentro do conteúdo (§4.7). Gera screenshots em `target/e2e-screenshots/`
+também em viewport de celular — **não substitui** a revisão visual humana que
+o §11 exige, só garante que ela tenha o que olhar e que o básico não regrediu.
+
+### O que continua PENDENTE DE DECISÃO do dono do produto
+
+Nada disto foi implementado, e nenhum é bug — são caminhos que o próprio
+relatório deixou explicitamente em aberto:
+
+1. **Estender o redesign ao Portal do Avaliador** (decisão 6). Foi aprovada a
+   opção A: aplicar **só** ao Solicitante e *"avaliar o Avaliador depois, com
+   o aprendizado"*. Esse "depois" nunca foi perguntado. As classes novas são
+   reaproveitáveis; o custo é dobrar a superfície de revisão visual.
+2. **Dourado como cor de marca** (decisão 1, opção B). Aprovada a opção A (o
+   dourado continua sendo "atenção"). A opção B exigiria uma cor nova na
+   paleta e revisão de **todos** os `alert-warning`/badge âmbar do sistema,
+   inclusive das telas do operador — é um projeto de identidade visual
+   próprio, não um redesenho de portal.
+3. **Ilustrações SVG próprias derivadas do logo** (decisão 3, opção b —
+   gota+relógio para "aguardando", gota+check para "deferido"). Aprovada a
+   opção (a): só bootstrap-icons ampliados em tokens circulares. A (b) exige
+   alguém com traquejo de ilustração e tem risco real de ficar amador.
+4. **Estender à área do operador** (decisão 6, opção C) — o relatório
+   **desaconselha**: ela acabou de passar por 5 fases de UI e usa densidade
+   `operacional`, com objetivos opostos aos do Portal.
+
+### Lição de processo (recaída conhecida)
+
+Esta é a **terceira** vez que uma vistoria conclui algo errado por causa de
+texto desatualizado num documento — as duas anteriores estão registradas em
+"Vistoria de 2026-07-31" (enums removidos ainda descritos como "legado, só
+leitura") e no header do relatório V2 do Relatório Final. **Ao terminar de
+implementar um relatório faseado, atualizar o header do próprio relatório e
+citar o resultado no CLAUDE.md faz parte da tarefa** — sem isso o trabalho
+some da memória do projeto e alguém propõe refazê-lo.
