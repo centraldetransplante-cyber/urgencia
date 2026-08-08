@@ -66,6 +66,18 @@ public class SolicitacaoOnlineService {
     }
 
     /**
+     * Nome real de quem enviou a solicitacao, para rotular o "outro lado" nos
+     * chats do operador (em vez do literal generico "Solicitante" usado ate
+     * 2026-08-07). Cai de volta em "Solicitante" se o nome vier nulo/em
+     * branco, sem quebrar a tela.
+     */
+    public String nomeSolicitante(Long solicitacaoOnlineId) {
+        return repository.findNomeSolicitanteById(solicitacaoOnlineId)
+            .filter(n -> n != null && !n.isBlank())
+            .orElse("Solicitante");
+    }
+
+    /**
      * Versao de {@link #buscar(Long)} para as TELAS DE DETALHE (portal do
      * solicitante e triagem do operador), que renderizam anexos e o processo
      * gerado. Com {@code open-in-view: false} o template roda fora da

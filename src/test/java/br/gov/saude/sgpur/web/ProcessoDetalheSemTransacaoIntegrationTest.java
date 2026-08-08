@@ -233,6 +233,18 @@ class ProcessoDetalheSemTransacaoIntegrationTest {
         mensagemRepo.saveAndFlush(msgDeOutro);
         mensagemDeOutroOperadorId = msgDeOutro.getId();
 
+        // Mensagem do SOLICITANTE, usada para conferir que o polling AJAX
+        // rotula o remetente com o NOME REAL dele (Usuario.nome), nao mais o
+        // literal generico "Solicitante" (corrigido em 2026-08-07).
+        MensagemSolicitacao msgDoSolicitante = new MensagemSolicitacao();
+        msgDoSolicitante.setSolicitacaoOnline(origem);
+        msgDoSolicitante.setRemetente(RemetenteMensagem.SOLICITANTE);
+        msgDoSolicitante.setRemetenteId(solicitante.getId());
+        msgDoSolicitante.setTexto("Mensagem do solicitante de verdade");
+        msgDoSolicitante.setDataEnvio(java.time.LocalDateTime.now());
+        msgDoSolicitante.setLida(false);
+        mensagemRepo.saveAndFlush(msgDoSolicitante);
+
         // Segundo processo, ja DEFERIDO e SEM comprovante SNT: usado para o
         // caminho de erro de negocio da aba Finalizacao.
         Processo deferido = new Processo();
@@ -408,5 +420,22 @@ class ProcessoDetalheSemTransacaoIntegrationTest {
 
         MensagemSolicitacao aindaLa = mensagemRepo.findById(mensagemDeOutroOperadorId).orElseThrow();
         assertThat(aindaLa.isDeletada()).isFalse();
+    }
+
+    /**
+     * Corrigido em 2026-08-07: o polling AJAX do chat (lado do operador)
+     * rotulava toda mensagem do solicitante com o literal generico
+     * "Solicitante", em vez do nome real de quem enviou. Confirma que o JSON
+     * devolvido por {@code GET /processos/{id}/mensagens} traz
+     * {@code Usuario.nome} de verdade ("Solicitante Detalhe Teste") e nao o
+     * literal antigo.
+     */
+    @Test
+    @WithMockUser(username = "operador-it", roles = "OPERADOR")
+    void mensagensAjaxRotulaMensagemDoSolicitanteComONomeRealENaoComLiteralGenerico() throws Exception {
+        mvc.perform(get("/processos/" + processoId + "/mensagens"))
+                .andExpect(status().isOk())
+                .andExpect(content().string(containsString("Solicitante Detalhe Teste")))
+                .andExpect(content().string(containsString("Mensagem do solicitante de verdade")));
     }
 }
