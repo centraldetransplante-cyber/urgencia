@@ -415,11 +415,18 @@ public class ProcessoDetalheController {
         // (CLAUDE.md, 2026-08-07): antes ficava sempre recolhido e o operador
         // podia nao perceber que ja havia conversa em andamento.
         java.util.Map<Long, Boolean> existeConversaPorParecer = new java.util.HashMap<>();
+        // Versao em lote (2 queries no total, nao ate 6): ver javadoc de
+        // MensagemAvaliadorService.resumoConversasDoProcesso (CLAUDE.md,
+        // correcao de N+1 de 2026-08-08). Os mapas vem chaveados por membroId;
+        // o template espera parecer.id, entao remapeamos aqui, no mesmo loop
+        // (sem consulta nova nenhuma dentro dele).
+        var resumoConversas = mensagemAvaliadorService.resumoConversasDoProcesso(p.getId());
         for (Parecer par : p.getPareceres()) {
+            Long membroId = par.getMembro().getId();
             naoLidasPorParecer.put(par.getId(),
-                mensagemAvaliadorService.contarNaoLidasPorThreadParaOperador(p.getId(), par.getMembro().getId()));
+                resumoConversas.naoLidasPorMembro().getOrDefault(membroId, 0L));
             existeConversaPorParecer.put(par.getId(),
-                mensagemAvaliadorService.existeConversa(p.getId(), par.getMembro().getId()));
+                resumoConversas.existeConversaPorMembro().getOrDefault(membroId, false));
         }
         model.addAttribute("naoLidasPorParecer", naoLidasPorParecer);
         model.addAttribute("existeConversaPorParecer", existeConversaPorParecer);
@@ -885,8 +892,7 @@ public class ProcessoDetalheController {
             return "redirect:/processos/" + id;
         }
         SolicitacaoOnline s = solicitacaoOnlineService.buscar(solicitacaoOrigemId);
-        Usuario operador = usuarioRepo.findByUsername(principal.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        Usuario operador = resolverOperador(principal);
         mensagemService.enviar(s, texto, MensagemSolicitacao.RemetenteMensagem.OPERADOR, operador.getId());
         auditoria.registrar("MENSAGEM_OPERADOR_ENVIADA",
             "Processo " + p.getNumero() + " - resposta do operador " + operador.getUsername());
@@ -902,8 +908,7 @@ public class ProcessoDetalheController {
     public String apagarMensagem(@PathVariable Long id, @PathVariable Long mensagemId,
                                   Principal principal, RedirectAttributes ra) {
         try {
-            Usuario operador = usuarioRepo.findByUsername(principal.getName())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+            Usuario operador = resolverOperador(principal);
             mensagemService.apagar(mensagemId, operador.getId(), MensagemSolicitacao.RemetenteMensagem.OPERADOR);
         } catch (IllegalArgumentException e) {
             ra.addFlashAttribute("erro", e.getMessage());
@@ -923,8 +928,7 @@ public class ProcessoDetalheController {
             resp.put("podeEnviar", false);
             return resp;
         }
-        Usuario operador = usuarioRepo.findByUsername(principal.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        Usuario operador = resolverOperador(principal);
         mensagemService.marcarComoLidas(solicitacaoOrigemId, MensagemSolicitacao.RemetenteMensagem.SOLICITANTE, operador.getId());
         String nomeSolicitante = solicitacaoOnlineService.nomeSolicitante(solicitacaoOrigemId);
         resp.put("mensagens", mensagemService.paraChat(
@@ -947,8 +951,7 @@ public class ProcessoDetalheController {
             return ResponseEntity.badRequest().body(java.util.Map.of("erro", "A mensagem não pode estar em branco."));
         }
         SolicitacaoOnline s = solicitacaoOnlineService.buscar(solicitacaoOrigemId);
-        Usuario operador = usuarioRepo.findByUsername(principal.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        Usuario operador = resolverOperador(principal);
         mensagemService.enviar(s, texto, MensagemSolicitacao.RemetenteMensagem.OPERADOR, operador.getId());
         auditoria.registrar("MENSAGEM_OPERADOR_ENVIADA",
             "Processo " + p.getNumero() + " - resposta do operador " + operador.getUsername());
@@ -960,8 +963,7 @@ public class ProcessoDetalheController {
     public ResponseEntity<java.util.Map<String, Object>> apagarMensagemAjax(@PathVariable Long id,
             @PathVariable Long mensagemId, Principal principal) {
         try {
-            Usuario operador = usuarioRepo.findByUsername(principal.getName())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+            Usuario operador = resolverOperador(principal);
             mensagemService.apagar(mensagemId, operador.getId(), MensagemSolicitacao.RemetenteMensagem.OPERADOR);
             return ResponseEntity.ok(java.util.Map.of("ok", true));
         } catch (IllegalArgumentException e) {
@@ -1005,8 +1007,7 @@ public class ProcessoDetalheController {
             resp.put("podeEnviar", false);
             return resp;
         }
-        Usuario operador = usuarioRepo.findByUsername(principal.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        Usuario operador = resolverOperador(principal);
         mensagemAvaliadorService.marcarComoLidas(id, membroId, RemetenteMensagemAvaliador.AVALIADOR, operador.getId());
         String nomeMedico = membroRepo.findById(membroId).map(m -> m.getRotulo()).orElse("Avaliador");
         resp.put("mensagens", mensagemAvaliadorService.paraChat(
@@ -1042,8 +1043,7 @@ public class ProcessoDetalheController {
         }
         MembroUrgenciaRenal membro = membroRepo.findById(membroId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Avaliador não encontrado."));
-        Usuario operador = usuarioRepo.findByUsername(principal.getName())
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+        Usuario operador = resolverOperador(principal);
         mensagemAvaliadorService.enviar(p, membro, texto, RemetenteMensagemAvaliador.OPERADOR, operador.getId());
         // Auditoria: SO id/numero do processo + rotulo do medico, NUNCA o texto
         // da mensagem nem o nome do paciente (mesmo padrao ja usado para
@@ -1058,8 +1058,7 @@ public class ProcessoDetalheController {
     public ResponseEntity<java.util.Map<String, Object>> apagarMensagemAvaliadorAjax(@PathVariable Long id,
             @PathVariable Long membroId, @PathVariable Long mensagemId, Principal principal) {
         try {
-            Usuario operador = usuarioRepo.findByUsername(principal.getName())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED));
+            Usuario operador = resolverOperador(principal);
             mensagemAvaliadorService.apagar(mensagemId, operador.getId(), RemetenteMensagemAvaliador.OPERADOR);
             return ResponseEntity.ok(java.util.Map.of("ok", true));
         } catch (IllegalArgumentException e) {
@@ -1105,6 +1104,28 @@ public class ProcessoDetalheController {
         anexoStorage.removerPastaProcesso(p);
         ra.addFlashAttribute("msg", "Processo " + numero + " excluído.");
         return "redirect:/processos";
+    }
+
+    /**
+     * Resolve o {@code Usuario} operador logado a partir do {@code Principal}.
+     *
+     * <p><b>Sessao orfa (mesmo bug ja corrigido em {@code AvaliadorController.
+     * resolverMembro}):</b> se o usuario correspondente ao username gravado na
+     * sessao nao existir mais no banco (ex.: um ADMIN trocou o {@code username}
+     * desse operador em {@code /usuarios}, ou excluiu a conta, enquanto ele
+     * tinha sessao ativa — o Spring Security nao rele o {@code UserDetails} a
+     * cada requisicao), lanca {@link SessaoInvalidaException} em vez de
+     * {@code ResponseStatusException(UNAUTHORIZED)}. O {@code
+     * GlobalExceptionHandler} trata esse tipo invalidando a sessao e
+     * redirecionando para {@code /login?erro=sessao-invalida}, em vez do 401
+     * cru que o navegador exibia antes (inclusive nos endpoints AJAX/JSON desta
+     * classe — o mesmo padrao ja funciona hoje nos endpoints {@code
+     * @ResponseBody} do Portal do Avaliador).
+     */
+    private Usuario resolverOperador(Principal principal) {
+        return usuarioRepo.findByUsername(principal.getName())
+            .orElseThrow(() -> new SessaoInvalidaException(
+                "Usuario da sessao (" + principal.getName() + ") nao encontrado no banco."));
     }
 
     /**
