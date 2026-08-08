@@ -147,6 +147,29 @@ function iniciarChatSolicitacao(cfg) {
         atualizarBadges(mensagens);
     }
 
+    /**
+     * Rola ate o card do chat (cfg.collapseAlvoSelector, se informado) e
+     * expande o collapse do Bootstrap se estiver fechado - acionado ao
+     * clicar no toast de "mensagem nova" (2026-08-07, chat do avaliador
+     * nasce recolhido quando ainda nao ha conversa nenhuma, entao o toast
+     * precisa poder abrir o card sozinho, sem o usuario precisar achar o
+     * card na tela). Sem cfg.collapseAlvoSelector, o toast so avisa (sem
+     * 3o argumento em mostrarToast) - retrocompativel com as 3 telas que ja
+     * mostravam o chat sempre expandido antes desta mudanca.
+     */
+    function irParaOChat() {
+        if (!cfg.collapseAlvoSelector) return;
+        var alvo = document.querySelector(cfg.collapseAlvoSelector);
+        if (!alvo) return;
+        alvo.scrollIntoView({behavior: 'smooth', block: 'center'});
+        if (typeof bootstrap !== 'undefined' && bootstrap.Collapse) {
+            bootstrap.Collapse.getOrCreateInstance(alvo, {toggle: false}).show();
+        } else {
+            alvo.classList.add('show');
+        }
+        if (input) input.focus({preventScroll: true});
+    }
+
     function detectarNovasMensagens(mensagens) {
         var idsDoOutroLado = mensagens.filter(function (m) { return !m.deVoce && !m.deletada; })
             .map(function (m) { return m.id; });
@@ -154,7 +177,9 @@ function iniciarChatSolicitacao(cfg) {
             var novas = idsDoOutroLado.filter(function (id) { return idsRecebidosConhecidos.indexOf(id) === -1; });
             if (novas.length > 0) {
                 if (typeof tocarNotificacao === 'function') tocarNotificacao();
-                if (typeof mostrarToast === 'function') mostrarToast(cfg.notifMensagem, 'info');
+                if (typeof mostrarToast === 'function') {
+                    mostrarToast(cfg.notifMensagem, 'info', cfg.collapseAlvoSelector ? irParaOChat : undefined);
+                }
             }
         }
         idsRecebidosConhecidos = idsDoOutroLado;

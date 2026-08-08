@@ -874,7 +874,7 @@
                                      pra nao manter ate 3 polls simultaneos numa mesma tela quando
                                      ninguem esta lendo nenhuma conversa (risco R5 do relatorio). -->
                                 <button type="button" class="btn btn-outline-primary btn-sm text-nowrap"
-                                        data-bs-toggle="collapse" th:attr="data-bs-target='#chatAval' + ${par.id}">
+                                        data-bs-toggle="collapse" th:attr="data-bs-target='#chatAval' + ${par.id}, aria-expanded=${existeConversaPorParecer.get(par.id)}">
                                     <i class="bi bi-chat-dots"></i> Conversa
                                     <span th:if="${naoLidasPorParecer.get(par.id) != null and naoLidasPorParecer.get(par.id) > 0}"
                                           class="badge bg-warning text-dark ms-1"
@@ -898,6 +898,7 @@
                         <tr>
                             <td colspan="5" class="pt-0 pb-3">
                                 <div class="collapse chat-avaliador-thread" th:id="'chatAval' + ${par.id}"
+                                     th:classappend="${existeConversaPorParecer.get(par.id)} ? 'show' : ''"
                                      th:attr="data-parecer-id=${par.id}">
                                     <div class="border rounded p-2 bg-light-subtle">
                                         <div class="alert alert-warning py-2 mb-2 small">
@@ -1365,17 +1366,21 @@
         emptySelector: '#chatVazio',
         badgeTotalSelector: '#chatBadgeTotal',
         badgeNaoLidaSelector: '#chatBadgeNaoLida',
+        collapseAlvoSelector: '#chatBodyProcesso',
         notifMensagem: 'Nova mensagem recebida do solicitante.',
         labelApagadaOutro: 'pelo solicitante',
         intervaloMs: 5000
     });
 
     // Conversas com os avaliadores (docs/RELATORIO-CHAT-MEMBROS-OPERADORES-2026-08.md):
-    // uma thread 1:1 por parecer, iniciada SO quando o operador expande a
-    // conversa (evento shown.bs.collapse) - evita ate 3 polls simultaneos
-    // rodando o tempo todo numa mesma tela quando ninguem esta lendo nenhuma
-    // conversa (risco R5 do relatorio). chat-solicitacao.js e reusado sem
-    // nenhuma modificacao (item 12.7 do relatorio).
+    // uma thread 1:1 por parecer. Nasce ja EXPANDIDA (classe "show" no HTML)
+    // quando ja existe conversa (existeConversaPorParecer, ver CLAUDE.md
+    // 2026-08-07) - nesse caso o poll comeca imediato, sem esperar clique.
+    // Sem conversa ainda, o card nasce recolhido e o poll so comeca quando o
+    // operador expande de fato (evento shown.bs.collapse) - evita ate 3 polls
+    // simultaneos rodando o tempo todo numa mesma tela quando ninguem esta
+    // lendo nenhuma conversa (risco R5 do relatorio). chat-solicitacao.js e
+    // reusado sem nenhuma modificacao (item 12.7 do relatorio).
     /*[# th:each="par : ${processo.pareceres}"]*/
     (function () {
         var parecerId = /*[[${par.id}]]*/ 0;
@@ -1385,7 +1390,7 @@
         var elCollapse = document.getElementById('chatAval' + parecerId);
         if (!elCollapse) return;
         var iniciado = false;
-        elCollapse.addEventListener('shown.bs.collapse', function () {
+        function iniciarThread() {
             if (iniciado) return;
             iniciado = true;
             iniciarChatSolicitacao({
@@ -1396,11 +1401,14 @@
                 inputSelector: 'input[name="texto"]',
                 chatBoxSelector: '#chatBoxAval' + parecerId,
                 emptySelector: '#chatVazioAval' + parecerId,
+                collapseAlvoSelector: '#chatAval' + parecerId,
                 notifMensagem: 'Nova mensagem do avaliador.',
                 labelApagadaOutro: 'pelo avaliador',
                 intervaloMs: 5000
             });
-        });
+        }
+        elCollapse.addEventListener('shown.bs.collapse', iniciarThread);
+        if (elCollapse.classList.contains('show')) iniciarThread();
     })();
     /*[/]*/
 </script>

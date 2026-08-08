@@ -2859,6 +2859,92 @@ visualmente** (não só assertivas de texto) nos 3 casos, com duas iterações d
 ajuste a partir do que se viu (tamanho do brasão, leading do painel,
 equilíbrio vertical). Suíte completa: **844 testes, 0 falhas** (JDK 21).
 
+## Acentuação em RelatorioAnualService e RelatorioAvaliadorService (2026-08-07)
+
+Mesmo tratamento já aplicado ao Relatório Final (R1b/R2, ver seção acima) —
+esses dois documentos tinham ficado de fora daquela leva. Corrigidos todos
+os literais de texto visíveis no PDF: título institucional
+("URGÊNCIA RENAL"), títulos dos documentos ("Relatório Geral de Urgência
+Renal", "Relatório do Avaliador"), rótulos de tabela ("Tempo médio", "Em
+análise", "Solicita informação", "Médico 1/2/3", "Decisão") e o cabeçalho
+"Nº/Ano" (era "No/Ano" — mesmo padrão "Nº" já usado no Relatório Final,
+R0).
+
+**`ResultadoParecer.descricao` continua INTOCADO** (decisão deliberada,
+documentada acima) — as duas linhas que exibiam
+`par.getResultado().getDescricao()` diretamente foram trocadas por
+`PdfRelatorioBuilder.descricaoResultado(...)`, o mesmo tradutor local
+(switch com literais acentuados) já usado pelo Relatório Final. Um segundo
+tradutor novo, `PdfRelatorioBuilder.descricaoStatus(StatusProcesso)`, foi
+criado no mesmo espírito para a coluna "Status" da lista de processos do
+Relatório Anual — `StatusProcesso.getDescricao()` também não foi acentuado
+(alimenta badges/telas do sistema, mudança de raio de impacto maior), só o
+texto impresso no PDF usa a versão acentuada.
+
+**Validação:** os dois PDFs foram **gerados de verdade e inspecionados
+visualmente** (renderizados em imagem via PyMuPDF, já que este ambiente não
+tinha `pdftoppm`/visualizador gráfico) — capa, resumo, tabela de tempo por
+avaliador e lista de processos, cobrindo Deferido/Indeferido/Solicita
+informação. Todos os acentos (Ê, Ó, É, Á, Ã, Ç) renderizaram corretamente
+com a fonte Helvetica padrão do OpenPDF (WinAnsi/Cp1252, mesmo mecanismo já
+usado no resto do sistema — nenhuma mudança de encoding foi necessária, só
+escrever os literais Java com os caracteres acentuados corretos). Suíte
+completa: **853 testes, 0 falhas** (JDK 21).
+
+## Atraso progressivo no login (2026-08-07) — NÃO é bloqueio
+
+Aprovado explicitamente pelo dono do produto: algo "leve, SEM bloqueio total
+de conta" — mantém o espírito da decisão de 2026-07-28 de nunca deixar um
+usuário legítimo trancado fora do sistema (que removeu o bloqueio de 15min
+por força bruta, ver seção "Login audit trail" acima), mas dá alguma fricção
+real contra um atacante tentando adivinhar a senha de um usuário específico.
+
+**Mecanismo (`LoginAttemptService`):** após `LIMIAR_INICIAL` (2) falhas
+seguidas do **mesmo username** dentro de uma janela de
+`app.login.rate-limit.janela-minutos` (default 15min), cada falha SEGUINTE
+soma `app.login.rate-limit.atraso-por-tentativa-ms` (default 1000ms) ao
+atraso, até um teto de `app.login.rate-limit.atraso-maximo-ms` (default
+5000ms) — ex.: 3ª falha atrasa 1s, 4ª atrasa 2s, 5ª+ atrasa sempre 5s (teto).
+O atraso é aplicado com `Thread.sleep` dentro de `aoFalhar` (o listener do
+evento de FALHA de autenticação do Spring Security), **antes** de a resposta
+de erro voltar ao navegador.
+
+**Por que NÃO é bloqueio, nunca:**
+- O atraso só existe no caminho de **falha**. `aoLogarComSucesso` nunca
+  chama o cálculo de atraso nem dorme — uma senha certa autentica **na
+  mesma velocidade de sempre**, mesmo logo após várias tentativas erradas.
+  Não há nenhum estado ("bloqueado") que impeça uma tentativa de acontecer.
+- O contador do username é **zerado no sucesso**
+  (`aoLogarComSucesso`/`limparContador`) — o atraso é sobre uma sequência de
+  erros, nunca uma penalidade permanente ou cumulativa entre sessões
+  distintas de tentativa.
+- Teto de 5s (configurável): mesmo com dezenas de falhas seguidas, o atraso
+  nunca cresce sem limite — evita virar, ele próprio, uma superfície de
+  negação de serviço (segurar a thread da requisição por tempo desmedido).
+- Janela de 15min: falha antiga fora da janela não conta mais na próxima
+  tentativa — o contador reinicia, então uma tentativa isolada muito depois
+  de outra não herda atraso nenhum.
+
+**Por username, não por IP:** o cenário mitigado é alguém tentando adivinhar
+a senha de UM usuário específico (credential stuffing/senha fraca) — um IP
+corporativo atrás de NAT, com vários usuários legítimos, nunca deve ser
+penalizado pelo erro de outro colega. Mapa em memória
+(`ConcurrentHashMap<String, Contador>`), chave = username normalizado
+(minúsculo, trim) — sem infraestrutura nova (Redis etc.), mesmo padrão leve
+já usado no projeto.
+
+**Testado sem sleep real longo:** os testes usam constantes pequenas
+(1ms/tentativa, teto de 5ms) injetadas por um construtor com `@Value`
+configurável, e um gancho `usarRelogioParaTeste` (só para teste) para
+simular a expiração da janela sem esperar minutos de verdade — a mesma
+lógica de produção (`calcularAtrasoMsEContabilizarFalha`) é exercitada
+diretamente. `LoginAttemptServiceTest` cobre: primeiras falhas sem atraso;
+atraso crescendo por falha; teto nunca ultrapassado; sucesso zera o
+contador; janela expirada reinicia a contagem; e a regra central — sucesso
+nunca é atrasado, mesmo após muitas falhas seguidas (medido por tempo de
+execução real, deve ficar bem abaixo de 500ms). Suíte completa: **859
+testes, 0 falhas** (JDK 21), sem aumento perceptível de tempo total.
+
 ## Achado 4 (snapshot do papel de coordenador no voto) — implementado (2026-08-07)
 
 A "Vistoria de bugs de 2026-08-03" (seção acima) tinha registrado o Achado 4
@@ -3114,3 +3200,191 @@ matcher próprio).
   `LocalDate`→limites do dia + aceitação de filtros nulos feita pelo
   service.
 - Suíte completa validada após a mudança: **848 testes, 0 falhas** (JDK 21).
+
+## Fix: botão "Enviar" do chat operador↔avaliador quebrava para a linha de
+baixo (bug real de CSS, 2026-08-07)
+
+Usuário relatou dois problemas juntos: "o CSS do chat do operador com
+membro está horrível, botão de enviar está no lado esquerdo" e um 502 ao
+tentar enviar mensagem. Investigados separadamente, com navegador de
+verdade (Playwright) contra o app local — não só releitura de código.
+
+**Causa raiz do CSS (confirmada navegando de verdade, não só lendo o CSS
+fonte):** não era bug de HTML/markup nem de JS — o form do chat por
+avaliador (card "Conversa", aba Respostas) é estruturalmente idêntico
+(`<input>` antes do `<button>`, dentro de `.input-group`) ao chat que já
+funciona corretamente (Portal do Solicitante). A diferença é que a thread
+de conversa por avaliador vive dentro de `<table><td><form>` (é uma linha
+da tabela de pareceres), e há uma regra genérica em `app.css` para
+controles soltos em célula de tabela: `.table td form .form-control {
+width: 100% }`. Essa regra tem especificidade MAIOR (2 classes + 2 tipos =
+`0,0,2,2`) que a própria regra do Bootstrap `.input-group>.form-control {
+width: 1% }` (2 classes = `0,0,2,0`) que normalmente faz o campo dividir a
+linha com o botão — e vencia mesmo vindo antes no arquivo (especificidade
+> ordem de declaração). Com o campo forçado a `width:100%` e
+`.input-group` tendo `flex-wrap: wrap` (padrão do Bootstrap), o algoritmo
+de quebra de linha do flexbox decide os cortes usando o tamanho-base
+(`flex-basis`, que herda do `width` quando `flex-basis:auto`) **antes** de
+aplicar o encolhimento — um campo cujo tamanho-base já é 100% do
+container sozinho já preenche a linha inteira, então o botão ao lado é
+empurrado para a linha seguinte, alinhado à esquerda por não sobrar espaço
+na linha de cima. Confirmado via `getComputedStyle` no navegador real:
+`flex-wrap: wrap` e o campo de texto com `width: 806px` (100% do
+container de 806px), com o botão "Enviar" caindo numa segunda linha.
+
+**Por que só esse chat e não os outros dois** (Portal do Solicitante,
+Portal do Avaliador): são os únicos dois forms de chat do sistema que
+**não** vivem dentro de uma `<table>` — a regra genérica de "controles
+soltos em célula de tabela" nunca se aplicava a eles.
+
+**Correção:** `src/main/resources/static/css/app.css` ganhou uma regra
+mais específica logo depois da genérica, restaurando explicitamente o
+`width: 1%` do Bootstrap dentro de `.input-group`:
+```css
+.table td form .input-group > .form-control { width: 1%; }
+```
+3 classes (`.table`, `.input-group`, `.form-control`) + 2 tipos (`td`,
+`form`) vence a regra genérica de 2 classes + 2 tipos. A regra genérica
+**continua existindo** — ela é legítima para os demais controles soltos em
+célula de tabela (ex.: selects/inputs de ação de parecer), só não deve
+mais vencer dentro de um `.input-group`.
+
+**Teste de regressão:** `ChatAvaliadorInputGroupCssTest` (arquivo, não
+`@WebMvcTest`/`MockMvc` — como já documentado para
+`DesignSystemFontSizeInlineTest`/`AcessibilidadeEstruturaTest`, um teste de
+controller nunca chega a calcular layout de CSS) garante que a regra
+genérica continua existindo e que a regra de correção continua presente
+**com especificidade estritamente maior** (mais classes no seletor) que a
+genérica — falha alto se alguém remover/reordenar sem perceber o efeito
+colateral. Validado com Playwright de verdade: antes da correção,
+`getComputedStyle` mostrava o botão numa segunda linha (`inputLeft: 388,
+btnLeft: 387` — sobrepostos, botão embaixo); depois, lado a lado
+(`inputLeft: 388, btnLeft: 1119`).
+
+**O 502 relatado era efeito colateral confirmado de deploys em sequência
+rápida, NÃO um bug de aplicação.** Investigado por SSH direto na VM de
+produção (`journalctl -u sgpur`, `/var/log/nginx/error.log` e
+`access.log`): no dia do relato houve 4 restarts do `sgpur.service` em
+~9 minutos (21:18, 21:22, 21:24, 21:27 UTC), cada um levando ~65s para
+voltar a escutar na porta (boot normal do Spring Boot contra o Postgres da
+VM). Todo `502` do nginx (`connect() failed (111: Unknown error) while
+connecting to upstream`) caiu **exatamente** dentro dessas janelas de
+restart, nas mesmas URLs do polling do chat (`GET /processos/{id}/
+mensagens`, `GET /processos/{id}/avaliador/{membroId}/mensagens`, `POST
+.../mensagem/ajax`) e também em `GET /login` (checado por `curl` externo
+no mesmo período) — inclusive o `/login` (sem relação nenhuma com chat)
+recebeu 502 nas mesmas janelas, provando que era o processo Java
+inteiro fora do ar, não um endpoint específico quebrado. Depois do último
+restart (21:27 + ~65s de boot), nenhum 502 novo apareceu nos logs; os
+logs de aplicação mostram logins e uso normal em seguida, sem nenhuma
+exceção nos endpoints de mensagem. **Não foi feita nenhuma alteração de
+código por causa do 502** — não havia bug de aplicação para corrigir, só a
+janela normal de indisponibilidade de um restart do systemd. Se voltar a
+acontecer FORA de uma janela de deploy, investigar de novo (memória de RAM
+apertada da VM compartilhada — ver seção "Vistoria de 2026-08-03" acima —
+é a suspeita mais provável de uma próxima causa real).
+
+## Fix: card de "Dúvida sobre este processo" (avaliador) nascia sempre
+recolhido, escondendo mensagem nova + toast de chat virou clicável
+(2026-08-07, mesma sessão do fix acima)
+
+Continuação do relato do usuário: além do botão desalinhado (corrigido
+acima), duas queixas adicionais confirmadas navegando de verdade com
+Playwright contra o app local (screenshot antes/depois, não só leitura de
+código):
+
+**Causa raiz 1 — card do avaliador sempre nascia fechado.** Em
+`avaliador/votar.html`, o card "Dúvida sobre este processo"
+(`#chatBodyAvaliador`) tinha `class="card-body collapse"` **sem** `show` —
+recolhido incondicionalmente no primeiro load, mesmo quando o operador já
+tinha mandado mensagem antes. O poll (`iniciarChatSolicitacao`) sempre
+rodou ali desde que essa tela existe (diferente do chat por-avaliador do
+lado do operador, que só inicia o poll ao expandir de fato — ver comentário
+"risco R5" no template) — ou seja, a mensagem **chegava** via AJAX (o badge
+"N total" atualizava), só ficava escondida dentro do `<div class="collapse">`
+fechado. Confirmado com Playwright: operador manda mensagem, avaliador
+recarrega a tela, card continua fechado por padrão até 2026-08-07.
+
+**Correção:** `MensagemAvaliadorRepository.countByProcessoIdAndMembroId` +
+`MensagemAvaliadorService.existeConversa(processoId, membroId)` (nova
+query de existência, não de contagem de não-lidas — decide só "já existe
+QUALQUER mensagem nesta thread, lida ou não"). `AvaliadorController.votar`
+expõe `existeConversaAval` ao model; `avaliador/votar.html` usa
+`th:classappend="${existeConversaAval} ? 'show' : ''"` no `card-body` e
+`th:attr="aria-expanded=${existeConversaAval}"` no cabeçalho — nasce
+recolhido **só** quando a conversa está genuinamente vazia (não compete
+com o formulário de voto, que é a ação primária da tela), e expandido
+sempre que já há histórico, mesmo com tudo lido. Mesmo padrão aplicado ao
+lado do operador: `ProcessoDetalheController.detalhe` calcula
+`existeConversaPorParecer` (`Map<Long, Boolean>`, um por avaliador) e
+`processos/detalhe.html` usa a mesma classe condicional na thread
+`.chat-avaliador-thread` de cada parecer — o botão "Conversa" tinha um
+badge de não-lidas, mas o card em si também nascia sempre fechado mesmo
+com conversa relida.
+
+**Causa raiz 2 — toast de "mensagem nova" não levava a lugar nenhum.**
+Pedido explícito do usuário: "o aviso que vem no canto direito da tela
+deveria ter um atalho pro local ideal do chat". `mostrarToast(mensagem,
+tipo)` (`static/js/toast.js`) ganhou um **3º parâmetro opcional**
+`onClick` — retrocompatível com as ~24 chamadas existentes sem esse
+argumento (nunca clicáveis). Quando informado, o toast ganha
+`role="button"`, `tabindex`, cursor de ponteiro (`.toast-sgpur-clicavel`
+em `app.css`) e dispara `onClick()` ao clicar/Enter/Espaço, além de se
+fechar. `chat-solicitacao.js` ganhou `irParaOChat()` (rola até
+`cfg.collapseAlvoSelector` com `scrollIntoView({block:'center'})` e
+expande o collapse via `bootstrap.Collapse.getOrCreateInstance(...).show()`
+se estiver fechado) — chamado por `detectarNovasMensagens` como o 3º
+argumento de `mostrarToast`, só quando `cfg.collapseAlvoSelector` foi
+informado. Os 5 pontos de chamada de `iniciarChatSolicitacao` do sistema
+(chat com o solicitante em `processos/detalhe.html`,
+`processos/solicitacoes-online-detalhe.html` e `solicitante/detalhe.html`;
+chat com o avaliador em `avaliador/votar.html` e por-parecer em
+`processos/detalhe.html`) passaram a informar `collapseAlvoSelector`
+apontando para o `id` do respectivo `.collapse` — nos 3 chats que já
+nasciam sempre expandidos (solicitante), o toast clicável ainda funciona
+(rola até o card, o `show()` do Bootstrap é idempotente se já estiver
+aberto).
+
+**Validado com Playwright real, não só os 841 testes de unidade** (novo
+teste `src/test/java/br/gov/saude/sgpur/e2e/ChatVisualVerificacaoIT.java`,
+roda via `mvn verify -Pe2e`/`.\e2e.ps1`, fora do `mvn test` do dia a dia):
+cria um processo com os 3 pareceres pendentes, operador manda mensagem
+real para o avaliador pela tabela de Respostas (confere via
+`getComputedStyle`/`boundingBox()` que o botão continua ao lado do campo,
+não regride o fix de CSS acima), avaliador abre `/avaliador/{id}` numa
+sessão própria e confere que o card já nasce expandido com a mensagem
+visível **sem nenhum clique**, avaliador responde, operador (página já
+aberta, poll de 5s rodando) recebe um toast clicável, clica nele sem gerar
+erro JS, e por fim confirma round-trip do chat com o solicitante também
+com o botão alinhado. Screenshots em `target/e2e-screenshots/`
+(`chat-operador-avaliador-alinhado.png`,
+`avaliador-chat-expandido-com-mensagem.png`,
+`operador-toast-clicavel-resposta-avaliador.png`,
+`solicitante-chat-recebendo-mensagem-operador.png`) confirmam visualmente
+os 4 pontos. Suíte completa (`mvn test`): **841 testes, 0 falhas** (JDK
+21) antes deste commit.
+
+**Reconfirmação independente (mesma sessão, revisão posterior):** os dois
+achados acima foram reproduzidos manualmente do zero com um script
+Playwright avulso (fora da suíte), rodando o app local via `java -jar` (H2
+limpo): criação dos usuários pelo próprio `/usuarios/novo`, envio real de
+solicitação pelo Portal do Solicitante, conversão/envio pelo operador,
+confirmando (a) `#chatBodyAvaliador` sem `show` no primeiro load sem
+conversa, (b) toast `.toast-sgpur-clicavel` aparecendo após o poll do
+avaliador e expandindo/rolando até o chat ao clicar, (c) reload da tela do
+avaliador já nascendo com `show` quando a conversa existe, e (d) reload
+"a frio" da tela do operador (sessão nova, sem ter clicado em "Conversa"
+antes) confirmando que o `<div class="chat-avaliador-thread">` já vem
+`show` do servidor. Também foram adicionados 3 testes de integração novos
+em `MensagemAvaliadorIntegrationTest`
+(`telaDeVotoDoAvaliadorNascecomChatRecolhidoQuandoAindaNaoHaConversa`,
+`telaDeVotoDoAvaliadorNascecomChatEXPANDIDOQuandoJaExisteConversa`,
+`telaDeDetalheDoProcessoNascecomThreadDoAvaliadorEXPANDIDAQuandoJaExisteConversa`)
+que leem o HTML renderizado (`MockMvc` + contexto real) e travam a presença/
+ausência da classe `collapse show` conforme exista ou não mensagem na
+thread — cobertura de regressão mais barata que o E2E Playwright para essa
+parte específica (o E2E continua sendo o único jeito de cobrir o toast
+clicável de verdade, que depende de JS rodando no navegador). Suíte
+completa após esses 3 testes novos: **864 testes** (861 + 3), única falha
+é a flakiness de precisão de timestamp já documentada em
+`LembreteAvaliadorTimestampIntegrationTest` (não relacionada).

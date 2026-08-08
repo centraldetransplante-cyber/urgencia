@@ -71,8 +71,8 @@ class RelatorioAnualServiceTest {
         assertThat(reader.getNumberOfPages()).isGreaterThanOrEqualTo(2);
         String pagina2 = new PdfTextExtractor(reader).getTextFromPage(2);
         assertThat(pagina2)
-            .contains("Central de Transplantes do Estado do Rio Grande do Sul - URGENCIA RENAL")
-            .contains("Relatorio Geral de Urgencia Renal - Ano 2026");
+            .contains("Central de Transplantes do Estado do Rio Grande do Sul - URGÊNCIA RENAL")
+            .contains("Relatório Geral de Urgência Renal - Ano 2026");
         reader.close();
     }
 
@@ -105,7 +105,7 @@ class RelatorioAnualServiceTest {
                 ? new PdfTextExtractor(reader).getTextFromPage(3) : "")
             .toString();
         assertThat(textoCompleto)
-            .contains("Tempo medio de resposta dos avaliadores")
+            .contains("Tempo médio de resposta dos avaliadores")
             .contains("3 dias")
             .contains("Tempo de resposta por avaliador")
             .contains("Dr. Teste");

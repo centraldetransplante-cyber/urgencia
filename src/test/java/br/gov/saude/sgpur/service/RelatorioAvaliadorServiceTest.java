@@ -103,7 +103,7 @@ class RelatorioAvaliadorServiceTest {
         reader.close();
 
         assertThat(pagina2)
-            .contains("Central de Transplantes do Estado do Rio Grande do Sul - URGENCIA RENAL")
-            .contains("Relatorio do Avaliador - HCPA - Dra. Ana - Ano 2026");
+            .contains("Central de Transplantes do Estado do Rio Grande do Sul - URGÊNCIA RENAL")
+            .contains("Relatório do Avaliador - HCPA - Dra. Ana - Ano 2026");
     }
 }
