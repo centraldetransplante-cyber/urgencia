@@ -126,12 +126,27 @@ public class AuditoriaController {
                 .body(bytes);
     }
 
-    /** Escapa um campo para CSV com separador ';' (aspas duplas quando necessario). */
+    /**
+     * Escapa um campo para CSV com separador ';' (aspas duplas quando
+     * necessario) e neutraliza CSV/Formula Injection.
+     *
+     * <p>Se o valor comecar com {@code =}, {@code +}, {@code -} ou
+     * {@code @}, o Excel/LibreOffice pode interpretar o campo como inicio de
+     * formula ao abrir o CSV (ex.: {@code =HYPERLINK(...)}), permitindo
+     * execucao de codigo/exfiltracao de dados a partir de um campo que
+     * deveria ser texto puro (usuario, acao, detalhe, IP). Mitigacao padrao
+     * OWASP: prefixar com um apostrofo {@code '} antes de aplicar o escape
+     * de {@code ;}/{@code "}/quebra de linha ja existente — o Excel exibe o
+     * valor como texto, sem interpretar formula.</p>
+     */
     private String csvCampo(String valor) {
         if (valor == null) {
             return "";
         }
         String v = valor.replace("\r", " ").replace("\n", " ");
+        if (v.startsWith("=") || v.startsWith("+") || v.startsWith("-") || v.startsWith("@")) {
+            v = "'" + v;
+        }
         if (v.contains(";") || v.contains("\"")) {
             v = "\"" + v.replace("\"", "\"\"") + "\"";
         }
