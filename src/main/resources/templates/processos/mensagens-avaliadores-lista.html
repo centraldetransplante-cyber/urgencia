@@ -39,7 +39,7 @@
                                 <span th:if="${t.naoLidas() > 0}" class="badge bg-warning text-dark me-2"
                                       th:text="${t.naoLidas()} + ' nova(s)'">0</span>
                                 <a class="btn btn-sm btn-outline-primary"
-                                   th:href="@{/processos/{id}(id=${t.processoId()})} + '#respostas'">
+                                   th:href="@{/processos/{id}(id=${t.processoId()}, aba='pane-respostas')}">
                                     <i class="bi bi-box-arrow-up-right"></i> Abrir processo
                                 </a>
                             </td>

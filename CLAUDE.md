@@ -4886,3 +4886,64 @@ de 1 — o cenário que exercitavam (equipe citada por inteiro) continua
 token isolado, que é exatamente a calibragem pretendida.
 
 Suíte completa: **926 testes, 0 falhas** (918 + 8 novos, JDK 21).
+
+### F2 — MESCLADA (S2 + S1, achados A1/A2 — a fase de maior risco do plano)
+
+Mexe em `processos/detalhe.html` (a tela mais complexa do sistema) e no
+`ProcessoDetalheController`. As duas sub-fases foram implementadas **juntas**
+(o próprio relatório explica por quê: entregar uma sem a outra deixa o furo
+aberto pela metade).
+
+- **S2 (achado A2):** `ProcessoDetalheController.detalhe` passou a aceitar
+  `@RequestParam(required = false) String aba` — quando vier um `paneId`
+  **real do wizard deste processo** (nunca uma string arbitrária da query
+  string; validado contra o `Set` de `paneId`s de `passosWizard`), usa esse
+  valor para `abaAtivaPaneId` em vez do cálculo automático (primeira etapa
+  não concluída). Sem o parâmetro, ou com um valor inválido, comportamento
+  idêntico a sempre. O link "Abrir processo" da caixa de entrada
+  (`mensagens-avaliadores-lista.html`) trocou a âncora morta `#respostas`
+  (não existia elemento com esse id — o painel real é `pane-respostas`, e
+  nenhum JS lia `location.hash`) por `@{/processos/{id}(id=...,
+  aba='pane-respostas')}`, um link expression Thymeleaf de verdade.
+- **S1 (achado A1):** o bug real — abrir `/processos/{id}` em **qualquer**
+  aba marcava a mensagem do avaliador como lida para **todos** os
+  operadores, porque `elCollapse.classList.contains('show')` (Bootstrap
+  Collapse) é independente de qual aba do Bootstrap Tab está visível. A tela
+  disparava o poll (que marca como lida no servidor) sempre que existia
+  conversa, mesmo com a aba "Respostas" oculta. Corrigido em duas camadas:
+  1. **JS** (`processos/detalhe.html`): nova função `tabRespostasEstaAtiva()`
+     (checa `#pane-respostas.classList.contains('active')`). A thread do
+     avaliador só inicia (`iniciarThread`) quando **as duas** condições
+     valem: `tabRespostasEstaAtiva()` **e** o collapse tem `show`. Registrado
+     também `shown.bs.tab` no botão `#tab-respostas` (id gerado
+     automaticamente a partir do `paneId`, ver `processos/detalhe.html`) —
+     quando o operador de fato entra na aba, as threads já expandidas (mas
+     ainda não iniciadas) começam a pollar naquele momento.
+  2. **Servidor (defesa em profundidade):** `GET .../avaliador/{membroId}/
+     mensagens` passou a exigir `?marcarLida=true` explícito para chamar
+     `marcarComoLidas` — sem o parâmetro (omitido ou `false`), devolve as
+     mensagens sem marcar nada. O `pollUrl` montado no Thymeleaf já embute
+     `marcarLida=true`, porque a instância só é criada quando a conversa
+     está de fato visível — não foi preciso modificar `chat-solicitacao.js`
+     (que continua proibido de ser bifurcado/reescrito), só o parâmetro
+     extra na URL montada no servidor.
+  Escopo confirmado: o canal **Avaliador↔Operador** (só o lado operador,
+  em `ProcessoDetalheController`) tinha esse defeito — o chat do
+  **Solicitante** não (fica sempre visível na barra lateral esquerda, REGRA
+  fixa do produto, sem tabs escondendo), e o lado do próprio **avaliador**
+  em `avaliador/votar.html` também não (página única, sem tabs escondendo o
+  chat).
+
+Testes novos em `MensagemAvaliadorIntegrationTest`: `?aba=pane-respostas`
+abre de fato no pane certo (com o pane Envio, que seria o padrão automático
+nesse fixture, confirmadamente INATIVO); `?aba` ausente preserva o cálculo
+automático de sempre; `?aba` com string arbitrária (`<script>...`) é
+ignorado com segurança (nunca refletido no HTML, cai no cálculo
+automático); abrir o detalhe em qualquer aba nunca marca mensagem do
+avaliador como lida sozinho; o poll AJAX sem `marcarLida=true` não altera
+nada; com `marcarLida=true`, marca de verdade.
+
+Suíte completa: **932 testes, 0 falhas** (926 + 6 novos, JDK 21). E2E
+dedicado (`ChatVisualVerificacaoIT`) verde; `FluxoCompletoProcessoIT` falha
+na mesma linha pré-existente e documentada (SMTP local ausente), não
+relacionada.
