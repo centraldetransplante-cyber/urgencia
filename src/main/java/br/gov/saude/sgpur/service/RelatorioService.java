@@ -1,6 +1,7 @@
 package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.Anexo;
+import br.gov.saude.sgpur.domain.HistoricoParecer;
 import br.gov.saude.sgpur.domain.Parecer;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.ResultadoParecer;
@@ -333,6 +334,36 @@ public class RelatorioService {
         if (fav != null) {
             fav.setSpacingBefore(4);
             doc.add(fav);
+        }
+
+        // F4 do relatorio de vistoria de brechas (2026-08-10) - Achado 7:
+        // pareceres ARQUIVADOS (pedido de informacao complementar sobreposto
+        // por uma retomada da analise) - preserva no documento oficial a
+        // justificativa clinica original, que o reset de
+        // ProcessoService.retomarAposInformacao apagava sem deixar rastro
+        // fora da auditoria (ADMIN-only, texto livre). So aparece quando ha
+        // ao menos 1 registro (nao polui o caso comum, sem nenhuma pausa).
+        List<HistoricoParecer> historico = processoService.historicoParecer(p.getId());
+        if (!historico.isEmpty()) {
+            Font fHistTitulo = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 9, CINZA);
+            Font fHistTexto = FontFactory.getFont(FontFactory.HELVETICA, 8, Color.BLACK);
+            Paragraph tituloHist = new Paragraph("Pareceres sobrepostos (histórico):", fHistTitulo);
+            tituloHist.setSpacingBefore(6);
+            doc.add(tituloHist);
+            for (HistoricoParecer h : historico) {
+                StringBuilder sb = new StringBuilder(h.getMembro().getRotulo())
+                    .append(" pediu informação complementar");
+                if (h.getDataHoraVoto() != null) {
+                    sb.append(" em ").append(h.getDataHoraVoto().format(DATA_HORA));
+                }
+                sb.append(" - análise retomada em ").append(h.getArquivadoEm().format(DATA_HORA)).append('.');
+                if (h.getJustificativa() != null && !h.getJustificativa().isBlank()) {
+                    sb.append(" Justificativa original: ").append(h.getJustificativa());
+                }
+                Paragraph linhaHist = new Paragraph(sb.toString(), fHistTexto);
+                linhaHist.setSpacingBefore(2);
+                doc.add(linhaHist);
+            }
         }
 
         // B4+A7 do relatorio V2 (tratados como item unico): a secao "3.

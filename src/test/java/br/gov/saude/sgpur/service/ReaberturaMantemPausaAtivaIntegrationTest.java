@@ -6,6 +6,7 @@ import br.gov.saude.sgpur.domain.Parecer;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.ResultadoParecer;
 import br.gov.saude.sgpur.domain.StatusProcesso;
+import br.gov.saude.sgpur.repository.HistoricoParecerRepository;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
@@ -64,6 +65,8 @@ class ReaberturaMantemPausaAtivaIntegrationTest {
     private ParecerRepository parecerRepo;
     @Autowired
     private MembroUrgenciaRenalRepository membroRepo;
+    @Autowired
+    private HistoricoParecerRepository historicoParecerRepo;
 
     /** Mockado so para nao depender de e-mail/SMTP nesta suite. */
     @MockitoBean
@@ -76,6 +79,12 @@ class ReaberturaMantemPausaAtivaIntegrationTest {
     @BeforeEach
     void preparar() {
         when(solicitacaoOnlineRepo.findByProcessoGeradoId(anyLong())).thenReturn(Optional.empty());
+        // F4 do relatorio de vistoria de brechas (2026-08-10): retomarAposInformacao
+        // agora arquiva um HistoricoParecer (FK para processo_id) antes de
+        // resetar o parecer - precisa ser limpo ANTES de excluir os
+        // processos, senao a FK bloqueia o deleteAll() de processoRepo numa
+        // segunda execucao de teste desta classe no mesmo H2.
+        historicoParecerRepo.deleteAll();
         parecerRepo.deleteAll();
         processoRepo.deleteAll();
         membroRepo.deleteAll();

@@ -1,6 +1,7 @@
 package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.*;
+import br.gov.saude.sgpur.repository.HistoricoParecerRepository;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
@@ -35,6 +36,8 @@ class ProcessoServiceTest {
     EmailSenderService emailSenderService;
     @Mock
     AnexoStorageService anexoStorageService;
+    @Mock
+    HistoricoParecerRepository historicoParecerRepository;
     ProcessoService service;
 
     // Usa o ProcessoValidator real (funcoes puras): as regras de negocio vivem
@@ -42,7 +45,8 @@ class ProcessoServiceTest {
     @BeforeEach
     void setUp() {
         service = new ProcessoService(processoRepository, membroRepository, new ProcessoValidator(), parecerRepository,
-                solicitacaoOnlineRepository, emailTemplateService, emailSenderService, anexoStorageService);
+                solicitacaoOnlineRepository, emailTemplateService, emailSenderService, anexoStorageService,
+                historicoParecerRepository);
     }
 
     private Parecer parecer(ResultadoParecer r) {

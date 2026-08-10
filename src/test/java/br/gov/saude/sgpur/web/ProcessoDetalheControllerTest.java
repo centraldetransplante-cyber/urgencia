@@ -641,6 +641,40 @@ class ProcessoDetalheControllerTest {
             .andExpect(content().string(org.hamcrest.Matchers.containsString("3")));
     }
 
+    /**
+     * F4 do relatorio de vistoria de brechas (2026-08-10) - Achado 7: o
+     * card Respostas mostra o histórico de pareceres sobrepostos (com a
+     * justificativa original preservada) so quando existe algum, sem poluir
+     * a tela no caso comum (processo sem nenhuma pausa sobreposta).
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void detalheMostraHistoricoDeParecerSobrepostoQuandoExiste() throws Exception {
+        MembroUrgenciaRenal m1 = membro(1L, "HCPA", "Ana");
+        processo.addParecer(parecer(processo, m1, ResultadoParecer.FAVORAVEL,
+            LocalDate.now(), OrigemParecer.AVALIADOR_SISTEMA));
+
+        mvc.perform(get("/processos/1"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Histórico de pareceres sobrepostos"))));
+
+        MembroUrgenciaRenal membroHist = membro(2L, "HSL", "Bruno");
+        Parecer parecerArquivado = new Parecer(membroHist);
+        parecerArquivado.setResultado(ResultadoParecer.SOLICITA_INFORMACAO);
+        parecerArquivado.setJustificativa("Justificativa clínica original preservada");
+        br.gov.saude.sgpur.domain.HistoricoParecer h =
+            br.gov.saude.sgpur.domain.HistoricoParecer.deParecer(parecerArquivado,
+                "Retomada da análise após pedido de informação complementar");
+        when(processoService.historicoParecer(1L)).thenReturn(List.of(h));
+
+        mvc.perform(get("/processos/1"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Histórico de pareceres sobrepostos")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "Justificativa clínica original preservada")));
+    }
+
     @Test
     @WithMockUser(roles = "OPERADOR")
     void detalheExpoeProcessoVeioDoPortalFalseParaProcessoLegadoSemVinculo() throws Exception {

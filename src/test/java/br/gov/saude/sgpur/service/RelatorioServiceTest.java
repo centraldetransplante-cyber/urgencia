@@ -54,6 +54,17 @@ class RelatorioServiceTest {
     @TempDir
     Path tempDir;
 
+    @org.junit.jupiter.api.BeforeEach
+    void semHistoricoPorPadrao() {
+        // F4 do relatorio de vistoria de brechas (2026-08-10): gerar() sempre
+        // consulta o historico de pareceres sobrepostos - lenient() porque
+        // nem todo teste desta classe precisa dele (a maioria testa outras
+        // secoes do documento), e MockitoExtension usa strict stubs por
+        // padrao.
+        org.mockito.Mockito.lenient().when(processoService.historicoParecer(org.mockito.ArgumentMatchers.anyLong()))
+            .thenReturn(List.of());
+    }
+
     private RelatorioService novoService() {
         AnexoStorageService anexoStorage = new AnexoStorageService(null, tempDir.toString());
         return new RelatorioService(fluxoService, processoService, anexoStorage);
@@ -542,6 +553,36 @@ class RelatorioServiceTest {
         String texto = extrairTexto(novoService().gerar(jaReaberto));
         assertThat(texto).contains("Reaberturas");
         assertThat(texto).contains("2 vez(es)");
+    }
+
+    /**
+     * F4 do relatorio de vistoria de brechas (2026-08-10) - Achado 7: a
+     * secao "Pareceres sobrepostos (histórico)" so aparece quando
+     * ProcessoService.historicoParecer devolve algo, e imprime a
+     * justificativa clinica original preservada.
+     */
+    @Test
+    void gerarMostraSecaoDeHistoricoDePareceresSobrepostosQuandoExiste() throws Exception {
+        Processo p = processoBase(StatusProcesso.DEFERIDO);
+        when(fluxoService.montarEtapas(any())).thenReturn(List.of());
+        when(processoService.contarFavoraveis(any())).thenReturn(1L);
+
+        MembroUrgenciaRenal membroHist = new MembroUrgenciaRenal("HSL", "Dr. Sobreposto", null);
+        Parecer parecerOriginal = new Parecer(membroHist);
+        parecerOriginal.setProcesso(p);
+        parecerOriginal.setResultado(ResultadoParecer.SOLICITA_INFORMACAO);
+        parecerOriginal.setDataHoraVoto(java.time.LocalDateTime.of(2026, 1, 3, 9, 0));
+        parecerOriginal.setJustificativa("Faltou exame de imagem.");
+        br.gov.saude.sgpur.domain.HistoricoParecer h =
+            br.gov.saude.sgpur.domain.HistoricoParecer.deParecer(parecerOriginal,
+                "Retomada da análise após pedido de informação complementar");
+        when(processoService.historicoParecer(any())).thenReturn(List.of(h));
+
+        String texto = extrairTexto(novoService().gerar(p));
+
+        assertThat(texto).contains("Pareceres sobrepostos");
+        assertThat(texto).contains("Dr. Sobreposto");
+        assertThat(texto).contains("Faltou exame de imagem.");
     }
 
     @Test

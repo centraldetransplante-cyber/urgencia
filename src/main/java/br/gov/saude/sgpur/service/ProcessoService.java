@@ -1,6 +1,7 @@
 package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.*;
+import br.gov.saude.sgpur.repository.HistoricoParecerRepository;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
@@ -45,6 +46,7 @@ public class ProcessoService {
     private final EmailTemplateService emailTemplateService;
     private final EmailSenderService emailSenderService;
     private final AnexoStorageService anexoStorage;
+    private final HistoricoParecerRepository historicoParecerRepository;
 
     public ProcessoService(ProcessoRepository processoRepository,
                            MembroUrgenciaRenalRepository membroRepository,
@@ -53,7 +55,8 @@ public class ProcessoService {
                            SolicitacaoOnlineRepository solicitacaoOnlineRepository,
                            EmailTemplateService emailTemplateService,
                            EmailSenderService emailSenderService,
-                           AnexoStorageService anexoStorage) {
+                           AnexoStorageService anexoStorage,
+                           HistoricoParecerRepository historicoParecerRepository) {
         this.processoRepository = processoRepository;
         this.membroRepository = membroRepository;
         this.validator = validator;
@@ -62,6 +65,7 @@ public class ProcessoService {
         this.emailTemplateService = emailTemplateService;
         this.emailSenderService = emailSenderService;
         this.anexoStorage = anexoStorage;
+        this.historicoParecerRepository = historicoParecerRepository;
     }
 
     public org.springframework.data.domain.Page<Processo> buscar(
@@ -328,6 +332,14 @@ public class ProcessoService {
         p.getPareceres().stream()
             .filter(par -> par.getResultado() == ResultadoParecer.SOLICITA_INFORMACAO)
             .forEach(par -> {
+                // F4 do relatorio de vistoria de brechas (2026-08-10) -
+                // Achado 7: arquiva o TEXTO COMPLETO do parecer (incluindo a
+                // justificativa clinica do pedido) ANTES do reset, decisao
+                // de produto ja aprovada (opcao "a" do relatorio). O reset
+                // em si, logo abaixo, continua EXATAMENTE identico -
+                // preserva o nao-repudio do voto definitivo.
+                historicoParecerRepository.save(HistoricoParecer.deParecer(par,
+                    "Retomada da análise após pedido de informação complementar"));
                 // Reset COMPLETO para pendencia limpa: o parecer volta a ser uma
                 // pendencia genuina, sem metadados obsoletos do voto "Solicita
                 // informacao" antigo (preserva o nao-repudio do voto definitivo).
@@ -625,6 +637,19 @@ public class ProcessoService {
      */
     public br.gov.saude.sgpur.service.dto.RegraDecisao regraAplicada(Processo processo) {
         return validator.regraAplicada(processo);
+    }
+
+    /**
+     * Historico de pareceres ARQUIVADOS deste processo (mais recente
+     * primeiro) - F4 do relatorio de vistoria de brechas (2026-08-10,
+     * Achado 7). Hoje so acontece quando um parecer em "Solicita informacao"
+     * e sobreposto por {@link #retomarAposInformacao}, mas o dado ja nasce
+     * generico o bastante para outros motivos de arquivamento no futuro.
+     * Consumido pelo card Respostas e pelo Relatorio Final.
+     */
+    @Transactional(readOnly = true)
+    public List<HistoricoParecer> historicoParecer(Long processoId) {
+        return historicoParecerRepository.findByProcessoIdOrderByArquivadoEmDesc(processoId);
     }
 
     /** Registra a decisao final manual do servidor. */

@@ -1,6 +1,7 @@
 package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.*;
+import br.gov.saude.sgpur.repository.HistoricoParecerRepository;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
@@ -38,11 +39,13 @@ class FluxoProcessoServiceTest {
     EmailSenderService emailSenderService;
     @Mock
     AnexoStorageService anexoStorageService;
+    @Mock
+    HistoricoParecerRepository historicoParecerRepository;
 
     private FluxoProcessoService fluxo() {
         ProcessoService ps = new ProcessoService(processoRepository, membroRepository, new ProcessoValidator(),
                 parecerRepository, solicitacaoOnlineRepository, emailTemplateService, emailSenderService,
-                anexoStorageService);
+                anexoStorageService, historicoParecerRepository);
         // Por padrao nenhum processo veio do Portal do Solicitante nesses
         // testes (comportamento identico ao existente antes da excecao do
         // Portal); testes especificos sobrescrevem esse stub. Note que desde
@@ -456,7 +459,7 @@ class FluxoProcessoServiceTest {
         // ENVIADO e limpa (reabre) apenas o parecer que pediu informacao.
         ProcessoService ps = new ProcessoService(processoRepository, membroRepository, new ProcessoValidator(),
                 parecerRepository, solicitacaoOnlineRepository, emailTemplateService, emailSenderService,
-                anexoStorageService);
+                anexoStorageService, historicoParecerRepository);
         org.mockito.Mockito.when(processoRepository.findById(org.mockito.ArgumentMatchers.anyLong()))
                 .thenReturn(java.util.Optional.of(p));
         org.mockito.Mockito.when(processoRepository.save(org.mockito.ArgumentMatchers.any()))

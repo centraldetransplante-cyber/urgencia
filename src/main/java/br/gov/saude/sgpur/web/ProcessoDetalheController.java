@@ -478,6 +478,11 @@ public class ProcessoDetalheController {
         // de vistoria de brechas, 2026-08-10) - consumida pelo fragment
         // layout :: badgeRegraDecisao e pelo rotulo de parecer dispensado.
         model.addAttribute("regraDecisao", processoService.regraAplicada(p));
+        // F4 do relatorio de vistoria de brechas (2026-08-10) - Achado 7:
+        // pareceres ARQUIVADOS (ex.: pedido de "Solicita informacao"
+        // sobreposto por uma retomada da analise) - card Respostas mostra
+        // esse rastro, que antes so existia na auditoria (ADMIN-only).
+        model.addAttribute("historicoParecer", processoService.historicoParecer(id));
         model.addAttribute("emails", emailTemplateService.gerar(p));
         // IDs dos pareceres votados diretamente pelo avaliador autenticado no portal.
         // Esses pareceres sao IMUTAVEIS pelo operador: o campo de resultado fica
