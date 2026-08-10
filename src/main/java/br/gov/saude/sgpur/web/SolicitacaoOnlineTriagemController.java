@@ -197,6 +197,11 @@ public class SolicitacaoOnlineTriagemController {
             ra.addFlashAttribute("erro", "A mensagem nao pode estar em branco.");
             return "redirect:/processos/solicitacoes-online/" + id;
         }
+        if (texto.length() > MensagemSolicitacaoService.TEXTO_MAX_LENGTH) {
+            ra.addFlashAttribute("erro", "A mensagem excede o limite de "
+                + MensagemSolicitacaoService.TEXTO_MAX_LENGTH + " caracteres.");
+            return "redirect:/processos/solicitacoes-online/" + id;
+        }
         mensagemService.enviar(s, texto, MensagemSolicitacao.RemetenteMensagem.OPERADOR, operador.getId());
         auditoria.registrar("MENSAGEM_OPERADOR_ENVIADA",
                 "Solicitacao " + id + " - resposta do operador " + operador.getUsername());
@@ -230,6 +235,8 @@ public class SolicitacaoOnlineTriagemController {
                 .orElseThrow(() -> new SessaoInvalidaException("Sua sessao nao e mais valida. Faca login novamente."));
         try {
             mensagemService.apagar(mensagemId, operador.getId(), MensagemSolicitacao.RemetenteMensagem.OPERADOR);
+            auditoria.registrar("MENSAGEM_APAGADA",
+                "Solicitacao " + id + " - mensagem " + mensagemId + " apagada pelo operador " + operador.getUsername());
         } catch (IllegalArgumentException e) {
             ra.addFlashAttribute("erro", e.getMessage());
         }
@@ -272,6 +279,11 @@ public class SolicitacaoOnlineTriagemController {
             return org.springframework.http.ResponseEntity.badRequest()
                 .body(Map.of("erro", "A mensagem nao pode estar em branco."));
         }
+        if (texto.length() > MensagemSolicitacaoService.TEXTO_MAX_LENGTH) {
+            return org.springframework.http.ResponseEntity.badRequest()
+                .body(Map.of("erro", "A mensagem excede o limite de "
+                    + MensagemSolicitacaoService.TEXTO_MAX_LENGTH + " caracteres."));
+        }
         mensagemService.enviar(s, texto, MensagemSolicitacao.RemetenteMensagem.OPERADOR, operador.getId());
         auditoria.registrar("MENSAGEM_OPERADOR_ENVIADA",
             "Solicitacao " + id + " - resposta do operador " + operador.getUsername());
@@ -291,6 +303,8 @@ public class SolicitacaoOnlineTriagemController {
             .orElseThrow(() -> new SessaoInvalidaException("Sua sessao nao e mais valida. Faca login novamente."));
         try {
             mensagemService.apagar(mensagemId, operador.getId(), MensagemSolicitacao.RemetenteMensagem.OPERADOR);
+            auditoria.registrar("MENSAGEM_APAGADA",
+                "Solicitacao " + id + " - mensagem " + mensagemId + " apagada pelo operador " + operador.getUsername());
             return org.springframework.http.ResponseEntity.ok(Map.of("ok", true));
         } catch (IllegalArgumentException e) {
             return org.springframework.http.ResponseEntity.badRequest().body(Map.of("erro", e.getMessage()));

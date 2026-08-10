@@ -4767,3 +4767,58 @@ Nenhum teste trava a cor desses botões (confirmado por grep antes da
 mudança) — mudança só de classe CSS no template, sem impacto em
 `id`/`name`/rota. `ProcessoDetalhePage` (E2E) localiza esse botão por texto
 ("Relatório Final (PDF)"), não por classe, então não foi afetado.
+
+## Vistoria dos dois sistemas de chat (2026-08-10) — plano faseado F1-F6
+
+`docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md` — vistoria completa dos dois
+canais de mensagem em produção (Solicitante↔Operador, `MensagemSolicitacao`;
+Avaliador↔Operador, `MensagemAvaliador`), com 15 achados (A1-A15) e um plano
+de 6 fases executáveis (F1-F6, F7 adiada de propósito — dívida, não
+defeito). Executando sequencialmente, cada fase seu próprio PR, squash
+merge, base 908 testes.
+
+### F1 — MESCLADA (S3 + S5 + S6 + S9, achados A3/A6/A7/A15)
+
+Lote de correções de baixo risco, sem decisão de produto pendente:
+
+- **S3 (achado A3):** `AvaliadorController.votar()` ganhou
+  `model.addAttribute("chatAtivoNestaTela", true)` — a tela de voto já tem
+  seu próprio poll de chat (5s); sem esse atributo, o poll GLOBAL de
+  mensagens do avaliador (`layout.html`, 20s) também rodava ali, duplicando
+  som/toast com textos diferentes, e o toast global levava o médico de
+  volta para `/avaliador` no clique, descartando o formulário de voto em
+  preenchimento. Mesmo contrato já usado em `SolicitanteController`/
+  `SolicitacaoOnlineTriagemController`/`ProcessoDetalheController`.
+- **S5 (achado A6):** o caminho de SUCESSO do soft delete não tinha
+  NENHUM teste em nenhum dos 2 canais — as 6 asserções existentes só
+  cobriam a recusa (mensagem de outro remetente). Exatamente a classe de
+  bug que chegou a produção em 2026-07-28 (`texto NOT NULL` quebrando o
+  soft delete) e passou pelos 526 testes da época. Testes novos, `@SpringBootTest`
+  + H2 real (nunca mock, convenção do projeto para escrita irreversível):
+  `MensagemAvaliadorIntegrationTest` (avaliador apaga a própria + operador
+  apaga a própria, no canal do avaliador) e `MensagemSolicitacaoChatIntegrationTest`
+  (novo arquivo — solicitante apaga a própria + operador apaga a própria
+  via triagem, no canal do solicitante). Todos releem do banco e conferem
+  `deletada=true`, `texto=null`, `deletadaEm != null`, `remetenteId`
+  preservado e a contagem de linhas inalterada (a linha não some).
+- **S6 (achado A7):** limite de 2000 caracteres passou a ser imposto no
+  SERVIDOR nos 8 pontos de escrita (`enviar`, clássico e AJAX, dos dois
+  canais) — antes só existia `maxlength="2000"` no HTML, trivialmente
+  burlável via DevTools/curl (uma mensagem de 200 mil caracteres era aceita
+  inteira, coluna `TEXT` sem erro). Constante `TEXTO_MAX_LENGTH = 2000`
+  criada em `MensagemSolicitacaoService` e em `MensagemAvaliadorService`
+  (uma em cada, de propósito — as duas entidades são deliberadamente
+  separadas, ver "duplicação aceita" abaixo); cada controller valida
+  explicitamente ANTES de chamar `enviar` (mesmo padrão já usado para
+  "texto em branco"), devolvendo o mesmo formato de erro (flash nos
+  endpoints clássicos, JSON `{"erro": "..."}` nos AJAX) que
+  `chat-solicitacao.js` já sabe exibir via `mostrarToast`.
+- **S9 (achado A15):** os 8 endpoints de apagar mensagem passaram a
+  registrar auditoria — `MENSAGEM_APAGADA` (canal do solicitante) e
+  `MENSAGEM_AVALIADOR_APAGADA` (canal do avaliador), só com id da
+  mensagem/processo/solicitação + quem apagou, **nunca o texto nem o nome
+  completo do paciente** (mesma regra já endurecida em 2026-07-28 e
+  2026-08-03 para outros vazamentos do mesmo tipo). Antes, apagar mensagem
+  não deixava nenhum rastro em `/auditoria` — só o enviar era auditado.
+
+Suíte completa validada: **918 testes, 0 falhas** (908 + 10 novos, JDK 21).

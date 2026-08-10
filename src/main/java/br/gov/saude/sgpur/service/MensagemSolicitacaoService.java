@@ -15,6 +15,19 @@ import java.util.Set;
 @Service
 public class MensagemSolicitacaoService {
 
+    /**
+     * Limite de tamanho de mensagem, imposto no SERVIDOR (S6,
+     * docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A7). Os 4 campos de
+     * texto de chat ja anunciam {@code maxlength="2000"} no HTML, mas isso e
+     * so UX - trivialmente burlavel via DevTools/curl. Sem checagem aqui, uma
+     * mensagem de 200 mil caracteres era aceita inteira (coluna TEXT, sem
+     * erro de banco), pesando no poll a cada 5s e no render do balao. Cada
+     * controller valida ANTES de chamar {@link #enviar}, no mesmo padrao ja
+     * usado para o "texto em branco" - nao lanca excecao aqui, para nao
+     * exigir try/catch nos 8 call-sites (classicos e AJAX, dos dois canais).
+     */
+    public static final int TEXTO_MAX_LENGTH = 2000;
+
     private final MensagemSolicitacaoRepository repository;
 
     public MensagemSolicitacaoService(MensagemSolicitacaoRepository repository) {

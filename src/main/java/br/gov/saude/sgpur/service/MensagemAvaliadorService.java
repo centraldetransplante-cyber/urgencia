@@ -27,6 +27,16 @@ import java.util.Set;
 @Service
 public class MensagemAvaliadorService {
 
+    /**
+     * Mesma constante/racional de {@link MensagemSolicitacaoService#TEXTO_MAX_LENGTH}
+     * (S6, docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A7) - nao
+     * duplicada por acidente: as duas entidades sao propositalmente
+     * separadas (ver CLAUDE.md, "duplicacao aceita"), entao cada servico tem
+     * a sua propria constante em vez de compartilhar uma classe utilitaria
+     * so por isto.
+     */
+    public static final int TEXTO_MAX_LENGTH = 2000;
+
     private final MensagemAvaliadorRepository repository;
 
     public MensagemAvaliadorService(MensagemAvaliadorRepository repository) {

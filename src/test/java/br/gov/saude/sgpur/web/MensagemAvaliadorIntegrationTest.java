@@ -1,5 +1,6 @@
 package br.gov.saude.sgpur.web;
 
+import br.gov.saude.sgpur.domain.LogAuditoria;
 import br.gov.saude.sgpur.domain.MembroUrgenciaRenal;
 import br.gov.saude.sgpur.domain.MensagemAvaliador;
 import br.gov.saude.sgpur.domain.MensagemAvaliador.RemetenteMensagemAvaliador;
@@ -8,11 +9,13 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.repository.LogAuditoriaRepository;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.MensagemAvaliadorRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
+import br.gov.saude.sgpur.service.MensagemAvaliadorService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -67,6 +70,8 @@ class MensagemAvaliadorIntegrationTest {
     private MembroUrgenciaRenalRepository membroRepo;
     @Autowired
     private MensagemAvaliadorRepository mensagemRepo;
+    @Autowired
+    private LogAuditoriaRepository auditoriaRepo;
 
     private Long processoId;
     private Long membroId;
@@ -378,5 +383,143 @@ class MensagemAvaliadorIntegrationTest {
 
         mvc.perform(get("/avaliador/" + outro.getId() + "/mensagens"))
                 .andExpect(status().isForbidden());
+    }
+
+    // -------------------------------------------------------------------
+    // F1 / S5 - caminho de SUCESSO do soft delete (achado A6 da vistoria
+    // 2026-08-10, docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md): as 6
+    // asserções existentes na suíte cobriam só a RECUSA de apagar. Nenhum
+    // teste, em nenhum dos 2 canais, apagava uma mensagem LEGITIMAMENTE e
+    // conferia que a linha sobreviveu com texto=null - exatamente a classe
+    // de bug que chegou a producao em 2026-07-28 (texto NOT NULL quebrava
+    // o soft delete) e passou pelos 526 testes da epoca.
+    // -------------------------------------------------------------------
+
+    @Test
+    @WithMockUser(username = "avaliador-msg-it", roles = "AVALIADOR")
+    void avaliadorApagaAPropriaMensagemComSucessoSoftDeleteRelidoDoBanco() throws Exception {
+        var msg = new MensagemAvaliador();
+        msg.setProcesso(processoRepo.findById(processoId).orElseThrow());
+        msg.setMembro(membroRepo.findById(membroId).orElseThrow());
+        msg.setRemetente(RemetenteMensagemAvaliador.AVALIADOR);
+        Usuario avaliadorUsuario = usuarioRepo.findByUsername("avaliador-msg-it").orElseThrow();
+        msg.setRemetenteId(avaliadorUsuario.getId());
+        msg.setTexto("O laudo nao abriu no meu celular.");
+        msg.setDataEnvio(java.time.LocalDateTime.now());
+        msg = mensagemRepo.saveAndFlush(msg);
+        long totalAntes = mensagemRepo.count();
+
+        mvc.perform(post("/avaliador/" + processoId + "/mensagem/" + msg.getId() + "/apagar/ajax")
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true));
+
+        MensagemAvaliador relida = mensagemRepo.findById(msg.getId()).orElseThrow();
+        assertThat(relida.isDeletada()).isTrue();
+        assertThat(relida.getTexto()).isNull();
+        assertThat(relida.getDeletadaEm()).isNotNull();
+        assertThat(relida.getRemetenteId()).isEqualTo(avaliadorUsuario.getId());
+        assertThat(relida.getRemetente()).isEqualTo(RemetenteMensagemAvaliador.AVALIADOR);
+        // A linha NAO sumiu - continua existindo na tabela, so com o texto limpo.
+        assertThat(mensagemRepo.count()).isEqualTo(totalAntes);
+
+        // S9 (achado A15): a exclusao aparece na auditoria, sem o texto da
+        // mensagem nem o nome do paciente.
+        List<LogAuditoria> logs = auditoriaRepo.findAll();
+        assertThat(logs).anySatisfy(l -> {
+            assertThat(l.getAcao()).isEqualTo("MENSAGEM_AVALIADOR_APAGADA");
+            assertThat(l.getDetalhe())
+                    .doesNotContain("laudo")
+                    .doesNotContain("Mariana");
+        });
+    }
+
+    @Test
+    @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
+    void operadorApagaAPropriaMensagemNoCanalDoAvaliadorComSucessoSoftDeleteRelidoDoBanco() throws Exception {
+        var msg = new MensagemAvaliador();
+        msg.setProcesso(processoRepo.findById(processoId).orElseThrow());
+        msg.setMembro(membroRepo.findById(membroId).orElseThrow());
+        msg.setRemetente(RemetenteMensagemAvaliador.OPERADOR);
+        Usuario operadorUsuario = usuarioRepo.findByUsername("operador-msg-it").orElseThrow();
+        msg.setRemetenteId(operadorUsuario.getId());
+        msg.setTexto("Ja estamos verificando o anexo.");
+        msg.setDataEnvio(java.time.LocalDateTime.now());
+        msg = mensagemRepo.saveAndFlush(msg);
+        long totalAntes = mensagemRepo.count();
+
+        mvc.perform(post("/processos/" + processoId + "/avaliador/" + membroId + "/mensagem/" + msg.getId() + "/apagar/ajax")
+                        .with(csrf()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(true));
+
+        MensagemAvaliador relida = mensagemRepo.findById(msg.getId()).orElseThrow();
+        assertThat(relida.isDeletada()).isTrue();
+        assertThat(relida.getTexto()).isNull();
+        assertThat(relida.getDeletadaEm()).isNotNull();
+        assertThat(relida.getRemetenteId()).isEqualTo(operadorUsuario.getId());
+        assertThat(mensagemRepo.count()).isEqualTo(totalAntes);
+
+        List<LogAuditoria> logs = auditoriaRepo.findAll();
+        assertThat(logs).anySatisfy(l -> {
+            assertThat(l.getAcao()).isEqualTo("MENSAGEM_AVALIADOR_APAGADA");
+            assertThat(l.getDetalhe()).doesNotContain("anexo");
+        });
+    }
+
+    // -------------------------------------------------------------------
+    // F1 / S6 - limite de tamanho de mensagem imposto no SERVIDOR (achado
+    // A7): o maxlength="2000" do HTML e so UX, trivialmente burlavel via
+    // DevTools/curl.
+    // -------------------------------------------------------------------
+
+    @Test
+    @WithMockUser(username = "avaliador-msg-it", roles = "AVALIADOR")
+    void avaliadorNaoConsegueEnviarMensagemAcimaDoLimiteDeTamanho() throws Exception {
+        String textoGigante = "a".repeat(MensagemAvaliadorService.TEXTO_MAX_LENGTH + 1);
+
+        mvc.perform(post("/avaliador/" + processoId + "/mensagem/ajax")
+                        .with(csrf())
+                        .param("texto", textoGigante))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erro").exists());
+
+        assertThat(mensagemRepo.findByProcessoIdAndMembroIdOrderByDataEnvioAsc(processoId, membroId)).isEmpty();
+    }
+
+    @Test
+    @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
+    void operadorNaoConsegueEnviarMensagemAcimaDoLimiteDeTamanhoParaOAvaliador() throws Exception {
+        String textoGigante = "b".repeat(MensagemAvaliadorService.TEXTO_MAX_LENGTH + 1);
+
+        mvc.perform(post("/processos/" + processoId + "/avaliador/" + membroId + "/mensagem/ajax")
+                        .with(csrf())
+                        .param("texto", textoGigante))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.erro").exists());
+
+        assertThat(mensagemRepo.findByProcessoIdAndMembroIdOrderByDataEnvioAsc(processoId, membroId)).isEmpty();
+    }
+
+    // -------------------------------------------------------------------
+    // F1 / S3 - a tela de voto ja tem seu proprio poll de chat (5s); sem
+    // chatAtivoNestaTela=true, o poll GLOBAL de mensagens do avaliador
+    // (layout.html, 20s) tambem rodava ali, duplicando som/toast (achado
+    // A3) - e o toast global levava o medico de volta para /avaliador,
+    // descartando o voto em preenchimento.
+    // -------------------------------------------------------------------
+
+    @Test
+    @WithMockUser(username = "avaliador-msg-it", roles = "AVALIADOR")
+    void telaDeVotoNaoRendaOPollGlobalDeMensagensDoAvaliador() throws Exception {
+        String html = mvc.perform(get("/avaliador/" + processoId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        // O poll LOCAL da propria tela (5s, iniciarChatSolicitacao) continua
+        // presente - so o poll GLOBAL (20s, chave de sessionStorage abaixo)
+        // deve estar ausente.
+        assertThat(html).contains("iniciarChatSolicitacao");
+        assertThat(html).doesNotContain("saur_nl_avaliador_msg");
     }
 }

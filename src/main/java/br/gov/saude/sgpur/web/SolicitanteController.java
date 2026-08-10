@@ -571,6 +571,11 @@ public class SolicitanteController {
             ra.addFlashAttribute("erro", "A mensagem não pode estar em branco.");
             return "redirect:/solicitante/" + id;
         }
+        if (texto.length() > MensagemSolicitacaoService.TEXTO_MAX_LENGTH) {
+            ra.addFlashAttribute("erro", "A mensagem excede o limite de "
+                + MensagemSolicitacaoService.TEXTO_MAX_LENGTH + " caracteres.");
+            return "redirect:/solicitante/" + id;
+        }
         if (s.getStatus() == StatusSolicitacaoOnline.CANCELADA || s.getStatus() == StatusSolicitacaoOnline.PROCESSO_EXCLUIDO) {
             ra.addFlashAttribute("erro", "Não é possível enviar mensagem para esta solicitação no estado atual.");
             return "redirect:/solicitante/" + id;
@@ -595,6 +600,10 @@ public class SolicitanteController {
         Usuario usuario = resolverUsuario(principal);
         try {
             mensagemService.apagar(mensagemId, usuario.getId(), MensagemSolicitacao.RemetenteMensagem.SOLICITANTE);
+            // Auditoria de exclusao (S9, achado A15): so id da mensagem/solicitacao
+            // + quem apagou, NUNCA o texto nem o nome completo do paciente.
+            auditoria.registrar("MENSAGEM_APAGADA",
+                "Solicitacao " + id + " - mensagem " + mensagemId + " apagada pelo solicitante");
         } catch (IllegalArgumentException e) {
             ra.addFlashAttribute("erro", e.getMessage());
         }
@@ -634,6 +643,10 @@ public class SolicitanteController {
         if (texto == null || texto.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("erro", "A mensagem não pode estar em branco."));
         }
+        if (texto.length() > MensagemSolicitacaoService.TEXTO_MAX_LENGTH) {
+            return ResponseEntity.badRequest().body(Map.of("erro", "A mensagem excede o limite de "
+                + MensagemSolicitacaoService.TEXTO_MAX_LENGTH + " caracteres."));
+        }
         if (s.getStatus() == StatusSolicitacaoOnline.CANCELADA || s.getStatus() == StatusSolicitacaoOnline.PROCESSO_EXCLUIDO) {
             return ResponseEntity.badRequest().body(Map.of("erro",
                 "Não é possível enviar mensagem para esta solicitação no estado atual."));
@@ -657,6 +670,8 @@ public class SolicitanteController {
         Usuario usuario = resolverUsuario(principal);
         try {
             mensagemService.apagar(mensagemId, usuario.getId(), MensagemSolicitacao.RemetenteMensagem.SOLICITANTE);
+            auditoria.registrar("MENSAGEM_APAGADA",
+                "Solicitacao " + id + " - mensagem " + mensagemId + " apagada pelo solicitante");
             return ResponseEntity.ok(Map.of("ok", true));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("erro", e.getMessage()));

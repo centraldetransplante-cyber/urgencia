@@ -853,15 +853,15 @@ isoladamente e com a suíte completa verde antes do merge (base atual:
 **908 testes**). Nenhuma fase toca regra de decisão, `ProcessoValidator`,
 `ProcessoService`, imparcialidade do PDF ou o fluxo de 5 passos.
 
-| Fase | Conteúdo | Achados | Risco | Depende de decisão? | Revisão humana antes de produção? |
-|---|---|---|---|---|---|
-| **F1** | **S3** (`chatAtivoNestaTela` na tela de voto) + **S5** (testes de soft delete nos 2 canais) + **S6** (limite de 2000 no servidor) + **S9** (auditoria de exclusão) | A3, A6, A7, A15 | **Baixo** | Não | Não |
-| **F2** | **S2** (`?aba=` + link da caixa de entrada) + **S1** (marcar como lida só com a conversa visível) | **A1, A2** | **Médio** | Não | **Sim** — mexe em `processos/detalhe.html` |
-| **F3** | **S4** (calibragem do `VerificadorNomePaciente` + testes de borda) | A4, A5 | **Médio** | **SIM (Q3)** | **Sim** |
-| **F4** | **S8** (badges sempre no DOM, badge de mensagem do avaliador, `assinatura()`, `aria-live`/`aria-controls`) + **S7.2** (`toggle` do formulário) | A9, A10, A11, A12 | **Baixo** | Não (Q5 é só confirmação) | Sim (leve) |
-| **F5** | **S7.1** (simetria de `podeEnviar` no canal do solicitante) | A8 | **Baixo-médio** | **SIM (Q4)** | Sim (leve) |
-| **F6** | **S10** (índices + `marcarComoLidas` em lote) | A13 | **Baixo-médio** | Não | Não |
-| **F7** *(adiar)* | **S11** (recorte da caixa de entrada) | A14 | Baixo | Não | Não |
+| Fase | Conteúdo | Achados | Risco | Depende de decisão? | Revisão humana antes de produção? | Status |
+|---|---|---|---|---|---|---|
+| **F1** | **S3** (`chatAtivoNestaTela` na tela de voto) + **S5** (testes de soft delete nos 2 canais) + **S6** (limite de 2000 no servidor) + **S9** (auditoria de exclusão) | A3, A6, A7, A15 | **Baixo** | Não | Não | **MESCLADA** (2026-08-10, ver CLAUDE.md) |
+| **F2** | **S2** (`?aba=` + link da caixa de entrada) + **S1** (marcar como lida só com a conversa visível) | **A1, A2** | **Médio** | Não | **Sim** — mexe em `processos/detalhe.html` | Pendente |
+| **F3** | **S4** (calibragem do `VerificadorNomePaciente` + testes de borda) | A4, A5 | **Médio** | **SIM (Q3)** | **Sim** | Pendente |
+| **F4** | **S8** (badges sempre no DOM, badge de mensagem do avaliador, `assinatura()`, `aria-live`/`aria-controls`) + **S7.2** (`toggle` do formulário) | A9, A10, A11, A12 | **Baixo** | Não (Q5 é só confirmação) | Sim (leve) | Pendente |
+| **F5** | **S7.1** (simetria de `podeEnviar` no canal do solicitante) | A8 | **Baixo-médio** | **SIM (Q4)** | Sim (leve) | Pendente |
+| **F6** | **S10** (índices + `marcarComoLidas` em lote) | A13 | **Baixo-médio** | Não | Não | Pendente |
+| **F7** *(adiar)* | **S11** (recorte da caixa de entrada) | A14 | Baixo | Não | Não | Adiada de propósito |
 
 **Por que F2 é a fase de maior risco:** mexe em `processos/detalhe.html`
 (1.296 linhas, wizard + 4 abas + timeline + o chat do solicitante que carrega a

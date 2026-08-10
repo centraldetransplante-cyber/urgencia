@@ -304,6 +304,15 @@ public class AvaliadorController {
         // (CLAUDE.md, 2026-08-07). Antes o card nascia SEMPRE recolhido, o que
         // escondia mensagens do operador ja recebidas (bug relatado em producao).
         model.addAttribute("existeConversaAval", mensagemAvaliadorService.existeConversa(processoId, membro.getId()));
+        // Esta tela ja tem seu proprio poll de chat (iniciarChatSolicitacao,
+        // 5s) - sem este atributo, o poll GLOBAL de mensagens do avaliador
+        // (layout.html, 20s) tambem rodava aqui, duplicando som/toast com
+        // textos diferentes e, pior, o toast global levava o medico de volta
+        // para /avaliador, descartando o formulario de voto em preenchimento
+        // (achado A3, docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md). Mesmo
+        // contrato ja usado em SolicitanteController/
+        // SolicitacaoOnlineTriagemController/ProcessoDetalheController.
+        model.addAttribute("chatAtivoNestaTela", true);
         return "avaliador/votar";
     }
 
@@ -595,6 +604,10 @@ public class AvaliadorController {
         if (texto == null || texto.isBlank()) {
             return ResponseEntity.badRequest().body(Map.of("erro", "A mensagem não pode estar em branco."));
         }
+        if (texto.length() > MensagemAvaliadorService.TEXTO_MAX_LENGTH) {
+            return ResponseEntity.badRequest().body(Map.of("erro", "A mensagem excede o limite de "
+                + MensagemAvaliadorService.TEXTO_MAX_LENGTH + " caracteres."));
+        }
         Usuario usuario = usuarioLogado(principal);
         mensagemAvaliadorService.enviar(parecer.getProcesso(), membro, texto,
             RemetenteMensagemAvaliador.AVALIADOR, usuario.getId());
@@ -613,6 +626,10 @@ public class AvaliadorController {
             MembroUrgenciaRenal membro = resolverMembro(principal);
             Usuario usuario = usuarioLogado(principal);
             mensagemAvaliadorService.apagar(mensagemId, usuario.getId(), RemetenteMensagemAvaliador.AVALIADOR);
+            // Auditoria de exclusao (S9, achado A15): id do processo/mensagem +
+            // rotulo do medico, NUNCA o texto nem o nome do paciente.
+            auditoria.registrar("MENSAGEM_AVALIADOR_APAGADA",
+                "Processo " + processoId + " - mensagem " + mensagemId + " apagada por " + membro.getRotulo());
             return ResponseEntity.ok(Map.of("ok", true));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(Map.of("erro", e.getMessage()));

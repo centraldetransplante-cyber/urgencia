@@ -896,6 +896,11 @@ public class ProcessoDetalheController {
             ra.addFlashAttribute("erro", "A mensagem não pode estar em branco.");
             return "redirect:/processos/" + id;
         }
+        if (texto.length() > MensagemSolicitacaoService.TEXTO_MAX_LENGTH) {
+            ra.addFlashAttribute("erro", "A mensagem excede o limite de "
+                + MensagemSolicitacaoService.TEXTO_MAX_LENGTH + " caracteres.");
+            return "redirect:/processos/" + id;
+        }
         SolicitacaoOnline s = solicitacaoOnlineService.buscar(solicitacaoOrigemId);
         Usuario operador = resolverOperador(principal);
         mensagemService.enviar(s, texto, MensagemSolicitacao.RemetenteMensagem.OPERADOR, operador.getId());
@@ -915,6 +920,10 @@ public class ProcessoDetalheController {
         try {
             Usuario operador = resolverOperador(principal);
             mensagemService.apagar(mensagemId, operador.getId(), MensagemSolicitacao.RemetenteMensagem.OPERADOR);
+            // Auditoria de exclusao (S9, achado A15): so id do processo/mensagem
+            // + quem apagou, NUNCA o texto nem o nome completo do paciente.
+            auditoria.registrar("MENSAGEM_APAGADA",
+                "Processo " + id + " - mensagem " + mensagemId + " apagada pelo operador " + operador.getUsername());
         } catch (IllegalArgumentException e) {
             ra.addFlashAttribute("erro", e.getMessage());
         }
@@ -955,6 +964,10 @@ public class ProcessoDetalheController {
         if (texto == null || texto.isBlank()) {
             return ResponseEntity.badRequest().body(java.util.Map.of("erro", "A mensagem não pode estar em branco."));
         }
+        if (texto.length() > MensagemSolicitacaoService.TEXTO_MAX_LENGTH) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("erro", "A mensagem excede o limite de "
+                + MensagemSolicitacaoService.TEXTO_MAX_LENGTH + " caracteres."));
+        }
         SolicitacaoOnline s = solicitacaoOnlineService.buscar(solicitacaoOrigemId);
         Usuario operador = resolverOperador(principal);
         mensagemService.enviar(s, texto, MensagemSolicitacao.RemetenteMensagem.OPERADOR, operador.getId());
@@ -970,6 +983,8 @@ public class ProcessoDetalheController {
         try {
             Usuario operador = resolverOperador(principal);
             mensagemService.apagar(mensagemId, operador.getId(), MensagemSolicitacao.RemetenteMensagem.OPERADOR);
+            auditoria.registrar("MENSAGEM_APAGADA",
+                "Processo " + id + " - mensagem " + mensagemId + " apagada pelo operador " + operador.getUsername());
             return ResponseEntity.ok(java.util.Map.of("ok", true));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(java.util.Map.of("erro", e.getMessage()));
@@ -1038,6 +1053,10 @@ public class ProcessoDetalheController {
         if (texto == null || texto.isBlank()) {
             return ResponseEntity.badRequest().body(java.util.Map.of("erro", "A mensagem não pode estar em branco."));
         }
+        if (texto.length() > MensagemAvaliadorService.TEXTO_MAX_LENGTH) {
+            return ResponseEntity.badRequest().body(java.util.Map.of("erro", "A mensagem excede o limite de "
+                + MensagemAvaliadorService.TEXTO_MAX_LENGTH + " caracteres."));
+        }
         var verificacao = verificadorNomePaciente.verificar(texto, p.getPacienteNome(), p.getSolicitanteEquipe());
         if (verificacao.nivel() != VerificadorNomePaciente.Nivel.LIVRE) {
             return ResponseEntity.badRequest().body(java.util.Map.of("erro",
@@ -1065,6 +1084,12 @@ public class ProcessoDetalheController {
         try {
             Usuario operador = resolverOperador(principal);
             mensagemAvaliadorService.apagar(mensagemId, operador.getId(), RemetenteMensagemAvaliador.OPERADOR);
+            // Auditoria de exclusao no canal Avaliador<->Operador (S9, achado
+            // A15): id do processo/membro/mensagem + quem apagou, NUNCA o
+            // texto nem o nome do paciente.
+            auditoria.registrar("MENSAGEM_AVALIADOR_APAGADA",
+                "Processo " + id + " - avaliador " + membroId + " - mensagem " + mensagemId
+                    + " apagada pelo operador " + operador.getUsername());
             return ResponseEntity.ok(java.util.Map.of("ok", true));
         } catch (IllegalArgumentException e) {
             return ResponseEntity.badRequest().body(java.util.Map.of("erro", e.getMessage()));
