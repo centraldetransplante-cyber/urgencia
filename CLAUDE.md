@@ -4886,3 +4886,53 @@ de 1 — o cenário que exercitavam (equipe citada por inteiro) continua
 token isolado, que é exatamente a calibragem pretendida.
 
 Suíte completa: **926 testes, 0 falhas** (918 + 8 novos, JDK 21).
+
+### F5 — PR aberto (S7.1, simetria de `podeEnviar` no canal do solicitante, achado A8)
+
+**Decisão de produto confirmada pelo usuário (Q4 do relatório): caminho
+OPOSTO ao sugerido pela recomendação original.** O relatório propunha, como
+opção padrão, restringir o lado do OPERADOR (bloquear `podeEnviar` também
+quando a solicitação/processo já foi cancelado) para ficar simétrico ao
+lado do solicitante, que já bloqueava. **O usuário escolheu afrouxar o lado
+do SOLICITANTE** para ficar simétrico ao operador, que sempre foi
+permissivo (sempre `true`) — o solicitante pode continuar enviando mensagem
+para a equipe mesmo depois de cancelar o próprio pedido (ex.: explicar o
+motivo do cancelamento, confirmar algo, etc.).
+
+`SolicitanteController` ganhou um método privado único,
+`podeEnviarMensagem(StatusSolicitacaoOnline status)`, fonte única da regra
+— usado no poll (`GET .../mensagens`, campo `podeEnviar` do JSON) e nos
+dois endpoints de envio (`POST .../mensagem`, clássico, e `POST
+.../mensagem/ajax`). Antes, os 3 pontos bloqueavam em `CANCELADA` **e**
+`PROCESSO_EXCLUIDO`; agora só bloqueiam em `PROCESSO_EXCLUIDO`.
+
+**`PROCESSO_EXCLUIDO` continua bloqueado, decisão tomada lendo o código
+real** (`ProcessoService.excluir`, `SolicitanteController
+.montarSituacaoPedido`) — não presumido. É um estado estruturalmente mais
+definitivo que `CANCELADA`: é o `Processo` gerado a partir desta
+`SolicitacaoOnline` ter sido **excluído pelo ADMIN** (`processoGerado` é
+desvinculado, seta `null`, e a solicitação fica órfã) — diferente de um
+cancelamento, que é uma decisão do próprio fluxo normal (solicitante ou
+operador registrando `CANCELADO` via `ProcessoService.decidir`). A própria
+mensagem que a tela já mostra ao solicitante nesse estado
+(`montarSituacaoPedido`) orienta a enviar uma **nova** solicitação, não a
+continuar esta conversa — não há mais processo/equipe ativa do outro lado
+desta thread específica. Nenhum outro estado (`DEVOLVIDA`, `APROVADA`,
+`REPROVADA`, `CONVERTIDA`, `ENVIADA`) já bloqueava antes desta mudança, e
+nenhum passou a bloquear — só a condição de `CANCELADA` foi removida.
+
+**Não mexido:** `ProcessoDetalheController`/
+`SolicitacaoOnlineTriagemController` (lado do OPERADOR, já permissivo,
+sempre `true` — não precisou de nenhuma mudança) e `solicitante/detalhe.html`
+(não havia nenhum texto do tipo "você não pode mais enviar mensagem porque
+cancelou" para ajustar — conferido antes de codar).
+
+Testes novos (`SolicitanteChatPodeEnviarSimetriaIntegrationTest`,
+`@SpringBootTest` + H2 real, sem mock — convenção do projeto para escrita
+irreversível): poll devolve `podeEnviar: true` para `CANCELADA` e `false`
+para `PROCESSO_EXCLUIDO`; envio com sucesso via AJAX e via endpoint
+clássico para uma solicitação `CANCELADA` (mensagem persistida, relida do
+banco); recusa (400/flash de erro, sem persistir nada) nos dois endpoints
+para `PROCESSO_EXCLUIDO`.
+
+Suíte completa: **932 testes, 0 falhas** (926 + 6 novos, JDK 21).
