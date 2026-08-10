@@ -160,8 +160,15 @@
                               class="badge rounded-pill bg-danger"
                               style="font-size:var(--saur-font-xs);"
                               th:text="${pendentesTriagemOnline}">0</span>
-                        <span id="navBadgeMsgNaoLida" th:if="${mensagensNaoLidasOperador > 0}"
+                        <!-- S8.1 (docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A10):
+                             SEMPRE renderizado (sem th:if), com d-none quando zero, para o
+                             poll global (:261 abaixo) conseguir FAZER o badge aparecer ao
+                             vivo - antes, com th:if, o elemento nem existia no DOM quando a
+                             contagem comecava em zero (o caso normal), e getElementById
+                             devolvia null pro resto da sessao. -->
+                        <span id="navBadgeMsgNaoLida"
                               class="badge rounded-pill bg-warning text-dark"
+                              th:classappend="${mensagensNaoLidasOperador == 0} ? 'd-none' : ''"
                               style="font-size:var(--saur-font-xs);"
                               th:text="${mensagensNaoLidasOperador}">0</span>
                     </a>
@@ -171,8 +178,10 @@
                        th:classappend="${uri.startsWith('/processos/mensagens-avaliadores')} ? 'active'"
                        th:href="@{/processos/mensagens-avaliadores}">
                         <i class="bi bi-chat-square-text-fill"></i> Mensagens dos avaliadores
-                        <span id="navBadgeMsgAvaliadorNaoLida" th:if="${mensagensAvaliadorNaoLidasOperador > 0}"
+                        <!-- Mesma correcao S8.1 do badge acima - ver comentario la. -->
+                        <span id="navBadgeMsgAvaliadorNaoLida"
                               class="badge rounded-pill bg-warning text-dark"
+                              th:classappend="${mensagensAvaliadorNaoLidasOperador == 0} ? 'd-none' : ''"
                               style="font-size:var(--saur-font-xs);"
                               th:text="${mensagensAvaliadorNaoLidasOperador}">0</span>
                     </a>
@@ -192,6 +201,30 @@
                         <span th:if="${pendentesAvaliador > 0}"
                               class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
                               th:text="${pendentesAvaliador}">0</span>
+                    </a>
+                </li>
+                <!-- S8.2 (docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A10):
+                     badge de MENSAGENS proprio do avaliador - distinto do sino acima,
+                     que conta PARECERES pendentes de voto, nao mensagens de chat. Aponta
+                     para /avaliador (nao ha uma "caixa de entrada" separada do lado do
+                     avaliador - as conversas ficam dentro de cada processo, na propria
+                     tela de voto). Mesmo padrao S8.1: sempre no DOM, d-none quando zero,
+                     atualizado pelo MESMO poll global de 20s de /avaliador/nao-lidas-count
+                     (mais abaixo neste fragmento) - nao cria uma segunda chamada de rede
+                     para a mesma informacao. IMPORTANTE: este comentario, ao contrario do
+                     poll em si, NAO fica dentro do th:if="${chatAtivoNestaTela != true}" -
+                     nunca citar aqui a chave de sessionStorage daquele poll (string usada
+                     por MensagemAvaliadorIntegrationTest.
+                     telaDeVotoNaoRendaOPollGlobalDeMensagensDoAvaliador para confirmar a
+                     AUSENCIA do poll global na tela de voto). -->
+                <li class="nav-item me-2" sec:authorize="hasRole('AVALIADOR')">
+                    <a class="nav-link position-relative" th:href="@{/avaliador}"
+                       title="Mensagens da equipe CET-RS">
+                        <i class="bi bi-chat-square-text-fill"></i>
+                        <span id="navBadgeMsgAvaliadorPortalNaoLida"
+                              class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-warning text-dark"
+                              th:classappend="${mensagensNaoLidasAvaliador == 0} ? 'd-none' : ''"
+                              th:text="${mensagensNaoLidasAvaliador}">0</span>
                     </a>
                 </li>
                 <li class="nav-item me-2" sec:authorize="hasRole('SOLICITANTE')" th:if="${solicitanteHabilitado}">
@@ -341,6 +374,13 @@
                     }
                     anterior = String(atual);
                     sessionStorage.setItem(chave, anterior);
+                    // S8.2: mesma chamada de rede tambem atualiza o badge de
+                    // mensagens do avaliador na navbar (nao cria um poll novo).
+                    var badge = document.getElementById('navBadgeMsgAvaliadorPortalNaoLida');
+                    if (badge) {
+                        badge.textContent = atual;
+                        badge.classList.toggle('d-none', atual <= 0);
+                    }
                 })
                 .catch(function () { /* falha pontual de rede - proxima tentativa em breve */ });
         }

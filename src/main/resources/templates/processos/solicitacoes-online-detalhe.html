@@ -83,7 +83,8 @@
                 Nenhuma mensagem do solicitante ainda.
             </div>
             <!-- Renderizado por chat-solicitacao.js (poll AJAX). -->
-            <div id="chatBox" th:classappend="${mensagens.isEmpty()} ? 'd-none'" class="mb-3 chat-box"></div>
+            <div id="chatBox" th:classappend="${mensagens.isEmpty()} ? 'd-none'" class="mb-3 chat-box"
+                 role="log" aria-live="polite" aria-relevant="additions"></div>
             <form id="chatForm" th:action="@{/processos/solicitacoes-online/{id}/mensagem/ajax(id=${solicitacao.id})}" method="post">
                 <div class="input-group">
                     <input type="text" name="texto" class="form-control" placeholder="Responder ao solicitante..."

@@ -165,6 +165,33 @@ public class GlobalModelAdvice {
     }
 
     /**
+     * Contagem de mensagens do OPERADOR ainda nao lidas pelo MEMBRO AVALIADOR
+     * logado, somando todos os processos em que ele avalia - badge proprio
+     * do avaliador na navbar (F4, S8.2 do
+     * docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A10 - "o AVALIADOR
+     * nao tem badge de mensagem nenhum"). NAO confundir com
+     * {@link #pendentesAvaliador()}: aquele conta PARECERES pendentes de
+     * voto; este conta MENSAGENS de chat nao lidas - dois conceitos
+     * diferentes, dois badges diferentes na navbar.
+     */
+    @ModelAttribute("mensagensNaoLidasAvaliador")
+    @Transactional(readOnly = true)
+    public long mensagensNaoLidasAvaliador() {
+        if (mensagemAvaliadorService == null) {
+            return 0;
+        }
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        if (auth == null || !auth.isAuthenticated() || !temPapelAvaliador(auth)) {
+            return 0;
+        }
+        return usuarioRepo.findByUsername(auth.getName())
+                .map(Usuario::getMembro)
+                .map(MembroUrgenciaRenal::getId)
+                .map(mensagemAvaliadorService::contarNaoLidasParaMembro)
+                .orElse(0L);
+    }
+
+    /**
      * Para onde o botao "voltar ao inicio" deve apontar para o usuario logado.
      *
      * <p><b>Motivacao (auditoria de UI, 2026-08-04).</b> A pagina de erro tinha

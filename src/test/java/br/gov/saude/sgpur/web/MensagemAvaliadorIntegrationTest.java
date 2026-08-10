@@ -677,4 +677,64 @@ class MensagemAvaliadorIntegrationTest {
         assertThat(html).contains("iniciarChatSolicitacao");
         assertThat(html).doesNotContain("saur_nl_avaliador_msg");
     }
+
+    // -------------------------------------------------------------------
+    // F4 / S8.2 (achado A10): badge PROPRIO de mensagens do AVALIADOR na
+    // navbar (distinto do sino de PARECERES pendentes, GlobalModelAdvice
+    // .pendentesAvaliador()) - antes desta fase o avaliador nao tinha
+    // NENHUM indicador persistente de mensagem nao lida, so o toast do poll
+    // global (que passa e some). Renderiza uma pagina de verdade (nao
+    // @WebMvcTest de status) porque o achado e sobre presenca/ausencia de
+    // uma classe CSS no HTML final.
+    // -------------------------------------------------------------------
+
+    @Test
+    @WithMockUser(username = "avaliador-msg-it", roles = "AVALIADOR")
+    void navbarDoAvaliadorMostraOBadgeDeMensagensVisivelQuandoHaNaoLida() throws Exception {
+        var msg = new MensagemAvaliador();
+        msg.setProcesso(processoRepo.findById(processoId).orElseThrow());
+        msg.setMembro(membroRepo.findById(membroId).orElseThrow());
+        msg.setRemetente(RemetenteMensagemAvaliador.OPERADOR);
+        msg.setRemetenteId(999L);
+        msg.setTexto("Poderia revisar o laudo anexado?");
+        msg.setDataEnvio(java.time.LocalDateTime.now());
+        mensagemRepo.saveAndFlush(msg);
+
+        String html = mvc.perform(get("/avaliador"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(html).contains("id=\"navBadgeMsgAvaliadorPortalNaoLida\"");
+        int idx = html.indexOf("id=\"navBadgeMsgAvaliadorPortalNaoLida\"");
+        // A tag <span ...> inteira, do "<span" ate o proximo ">" fechando a
+        // abertura da tag (nao o </span> de fechamento).
+        int inicioTag = html.lastIndexOf("<span", idx);
+        int fimTag = html.indexOf('>', idx);
+        String tag = html.substring(inicioTag, fimTag + 1);
+        assertThat(tag)
+                .as("Com 1 mensagem nao lida do operador, o badge deve estar visivel (sem "
+                        + "'d-none') e mostrar a contagem.")
+                .doesNotContain("d-none");
+        // O conteudo textual do <span> (entre a tag de abertura e </span>) tem a contagem.
+        int fimConteudo = html.indexOf("</span>", fimTag);
+        assertThat(html.substring(fimTag + 1, fimConteudo).trim()).isEqualTo("1");
+    }
+
+    @Test
+    @WithMockUser(username = "avaliador-msg-it", roles = "AVALIADOR")
+    void navbarDoAvaliadorEscondeOBadgeDeMensagensQuandoNaoHaNaoLida() throws Exception {
+        String html = mvc.perform(get("/avaliador"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(html).contains("id=\"navBadgeMsgAvaliadorPortalNaoLida\"");
+        int idx = html.indexOf("id=\"navBadgeMsgAvaliadorPortalNaoLida\"");
+        int inicioTag = html.lastIndexOf("<span", idx);
+        int fimTag = html.indexOf('>', idx);
+        String tag = html.substring(inicioTag, fimTag + 1);
+        assertThat(tag)
+                .as("Sem nenhuma mensagem nao lida, o badge continua no DOM (sempre "
+                        + "renderizado - S8.1/S8.2) mas escondido via 'd-none'.")
+                .contains("d-none");
+    }
 }

@@ -119,11 +119,21 @@ function iniciarChatSolicitacao(cfg) {
      * qualquer selecao de texto em andamento. Cobre tudo que renderMensagem
      * usa e pode mudar entre polls (texto editado nunca muda hoje, mas
      * "deletada" e "lida" mudam).
+     *
+     * S8.3 (docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A11):
+     * delimitador "|" entre campos e entre mensagens - sem ele (join('') com
+     * string vazia), dois estados distintos podem produzir a MESMA string
+     * concatenada (ex.: id=1 + flags "000" + texto "0023" e id=10 + flags
+     * "000" + texto "023" geram ambos "10000023"), fazendo o chat deixar de
+     * re-renderizar uma mudanca real (uma mensagem apagada continuaria
+     * aparecendo ate o proximo poll que mudasse a assinatura). Nao precisa
+     * ser a prova de colisao adversarial (o texto em si pode conter "|"
+     * livremente) - so eliminar o caso trivial do relatorio.
      */
     function assinatura(mensagens) {
         return mensagens.map(function (m) {
-            return [m.id, m.deletada ? 1 : 0, m.lida ? 1 : 0, m.podeApagar ? 1 : 0, m.texto].join('');
-        }).join('');
+            return [m.id, m.deletada ? 1 : 0, m.lida ? 1 : 0, m.podeApagar ? 1 : 0, m.texto].join('|');
+        }).join('|');
     }
 
     function atualizarTela(mensagens) {
@@ -193,7 +203,13 @@ function iniciarChatSolicitacao(cfg) {
                 var mensagens = data.mensagens || [];
                 detectarNovasMensagens(mensagens);
                 atualizarTela(mensagens);
-                if (form && data.podeEnviar === false) form.classList.add('d-none');
+                // S7.2 (docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A9):
+                // toggle (nao so add) - o formulario precisa REAPARECER se
+                // podeEnviar voltar a true no meio da sessao (ex.: ADMIN reabre
+                // o processo enquanto o operador esta com a tela aberta). Antes
+                // (so add('d-none')), o campo ficava escondido para sempre ate
+                // um reload manual.
+                if (form) form.classList.toggle('d-none', data.podeEnviar === false);
             })
             .catch(function () { /* falha de rede pontual - proxima tentativa em breve, sem incomodar o usuario */ });
     }

@@ -4947,3 +4947,102 @@ Suíte completa: **932 testes, 0 falhas** (926 + 6 novos, JDK 21). E2E
 dedicado (`ChatVisualVerificacaoIT`) verde; `FluxoCompletoProcessoIT` falha
 na mesma linha pré-existente e documentada (SMTP local ausente), não
 relacionada.
+
+### F4 — MESCLADA (S8 + S7.2, achados A9/A10/A11/A12)
+
+Lote de baixo risco (higiene de notificação + acessibilidade), sem decisão
+de produto pendente além da confirmação leve de Q5 (badge de mensagens para
+o avaliador — recomendado pelo relatório, sem objeção).
+
+- **S8.1 (achado A10):** os dois badges globais da navbar
+  (`#navBadgeMsgNaoLida`, mensagens do solicitante; `#navBadgeMsgAvaliadorNaoLida`,
+  mensagens de avaliador do lado operador) eram renderizados com `th:if="${...
+  > 0}"` — **não existiam no DOM** quando a contagem começava em zero (o
+  caso normal ao carregar a página), então o poll global em JS (`document.
+  getElementById(...)`) nunca conseguia fazê-los **aparecer pela primeira
+  vez**, só atualizar um que já existisse. Os dois passaram a ser **sempre**
+  renderizados, com `th:classappend="${contagem == 0} ? 'd-none' : ''"`; os
+  dois blocos de poll (20s, dentro do fragment `navbar`) passaram a fazer
+  `badge.classList.toggle('d-none', atual <= 0)` além de atualizar o texto.
+- **S8.2 (achado A10, "o AVALIADOR não tem badge de mensagens"):** o sino que
+  já existia para o AVALIADOR na navbar (`th:if="${pendentesAvaliador > 0}"`)
+  conta **pareceres pendentes de voto** — um conceito totalmente diferente de
+  mensagem de chat não lida. Antes desta fase, uma mensagem do operador só
+  gerava um toast (que passa) — nenhum indicador persistente. Novo
+  `@ModelAttribute("mensagensNaoLidasAvaliador")` em `GlobalModelAdvice`
+  (mesmo padrão de `pendentesAvaliador()`: resolve o `Usuario` autenticado →
+  `Usuario.getMembro()` → `MensagemAvaliadorService.contarNaoLidasParaMembro
+  (membroId)`, já existente, `0` se não autenticado/sem papel AVALIADOR/
+  serviço nulo em `@WebMvcTest`). Novo item de navbar (`sec:authorize=
+  "hasRole('AVALIADOR')"`), `id="navBadgeMsgAvaliadorPortalNaoLida"`
+  (nome escolhido de propósito para não colidir com
+  `#navBadgeMsgAvaliadorNaoLida`, que é o badge do **lado OPERADOR** dentro
+  do link "Mensagens dos avaliadores") — mesmo padrão S8.1 (sempre no DOM,
+  `d-none` quando zero). **Reaproveita a MESMA chamada de rede** do poll
+  global já existente do avaliador (`GET /avaliador/nao-lidas-count`, 20s,
+  chave de sessionStorage `saur_nl_avaliador_msg`) — não cria um segundo
+  poll para a mesma informação, só passou a também fazer
+  `document.getElementById('navBadgeMsgAvaliadorPortalNaoLida')` e alternar
+  `d-none`/texto a cada resposta. **Cuidado que custou uma rodada de teste
+  quebrado:** o comentário HTML que documenta esse reaproveitamento fica
+  FORA do `th:if="${chatAtivoNestaTela != true}"` que envolve o próprio
+  bloco de poll (S3/F1) — citar ali, sem pensar, a *string literal* da chave
+  de sessionStorage daquele poll (`saur_nl_avaliador_msg`) quebrou
+  `MensagemAvaliadorIntegrationTest.telaDeVotoNaoRendaOPollGlobalDeMensagensDoAvaliador`,
+  que confirma a **ausência** dessa string no HTML da tela de voto (onde o
+  poll global é propositalmente suprimido). Corrigido reescrevendo o
+  comentário para descrever o mecanismo sem citar a chave literal.
+- **S8.3 (achado A11):** `chat-solicitacao.js`, função `assinatura()` —
+  concatenava `[id, deletada, lida, podeApagar, texto].join('')` **sem
+  delimitador** entre os campos e entre mensagens, então dois estados
+  distintos podiam produzir a MESMA string (`id=1` + flags `000` + texto
+  `"0023"` e `id=10` + flags `000` + texto `"023"` geravam ambos
+  `"10000023"`), fazendo o chat deixar de re-renderizar uma mudança real.
+  Corrigido para `.join('|')` (interno e externo). **Achado ao editar:** o
+  código já em produção (herdado de uma sessão anterior não documentada)
+  usava, no lugar de um delimitador visível, os **bytes de controle brutos**
+  `\x01`/`\x02` (SOH/STX) escritos direto dentro das aspas do literal
+  JavaScript — tecnicamente funcionava como delimitador (nunca aparece em
+  texto digitado por humano), mas é invisível em qualquer diff/editor e
+  extremamente frágil a qualquer ferramenta que normalize encoding. Trocado
+  pelo delimitador visível `|` recomendado pelo plano.
+- **S8.4 (achado A12, acessibilidade):** os 5 contêineres de chat que
+  recebem conteúdo via `innerHTML` (`#chatBox` em `processos/detalhe.html`,
+  `solicitante/detalhe.html` e `solicitacoes-online-detalhe.html`;
+  `#chatBoxAval` no avaliador; `#chatBoxAval{parecerId}`, dinâmico, por
+  avaliador em `processos/detalhe.html`) ganharam `role="log" aria-live=
+  "polite" aria-relevant="additions"` — antes, mensagem nova era
+  completamente silenciosa para leitor de tela (só o toast, fora de
+  qualquer região `aria-live` declarada no chat). O botão "Conversa"
+  (`processos/detalhe.html`, tabela de pareceres) tinha `data-bs-target` e
+  `aria-expanded` mas **não** `aria-controls` apontando para
+  `chatAval{parecerId}` — adicionado (`th:attr` com a mesma expressão do
+  `id`). `AcessibilidadeEstruturaTest` (já existente, valida que toda
+  referência `aria-controls`/`aria-labelledby` aponta para um `id`
+  realmente presente) confirmado verde sem ajuste.
+- **S7.2 (achado A9):** `chat-solicitacao.js` — quando `podeEnviar` vinha
+  `false` do poll, o form era escondido com `form.classList.add('d-none')`
+  mas **nunca reaparecia** se `podeEnviar` voltasse a `true` (ex.: ADMIN
+  reabre o processo enquanto o operador está com a tela aberta). Trocado
+  para `form.classList.toggle('d-none', data.podeEnviar === false)` — o
+  formulário reaparece sozinho no próximo poll (5s) sem precisar de reload
+  manual. Correção pontual explicitamente prevista no plano (S7.2), dentro
+  do escopo permitido de mexer em `chat-solicitacao.js` (o módulo continua
+  proibido de ser bifurcado/reescrito para o resto do sistema).
+
+**Testes:** `MensagemAvaliadorIntegrationTest` ganhou
+`navbarDoAvaliadorMostraOBadgeDeMensagensVisivelQuandoHaNaoLida` e
+`navbarDoAvaliadorEscondeOBadgeDeMensagensQuandoNaoHaNaoLida` — renderizam
+`GET /avaliador` de verdade (não `@WebMvcTest` de status) e conferem a
+presença/ausência da classe `d-none` no `<span id=
+"navBadgeMsgAvaliadorPortalNaoLida">`, com e sem mensagem não lida do
+operador.
+
+**Validação:** suíte completa **914 testes, 0 falhas/erros** (JDK 21,
+`mvn test` isolado). `AcessibilidadeEstruturaTest` verde sem ajuste. E2E:
+`ChatVisualVerificacaoIT` verde (51,6s); `FluxoCompletoProcessoIT` falha na
+MESMA linha 228 já documentada (SMTP local ausente,
+`SGPUR_MAIL_USER`/`SGPUR_MAIL_FROM` não configurados nesta máquina), sem
+nenhuma relação com esta fase — confirmado pelo log
+(`EmailSender: remetente (from) nao configurado`), idêntico ao já registrado
+nas sessões anteriores.

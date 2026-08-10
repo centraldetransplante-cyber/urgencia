@@ -259,7 +259,8 @@
                         Nenhuma mensagem ainda.
                     </div>
                     <!-- Renderizado por chat-solicitacao.js (poll AJAX). -->
-                    <div id="chatBox" th:classappend="${mensagens.isEmpty()} ? 'd-none'" class="mb-3 chat-box"></div>
+                    <div id="chatBox" th:classappend="${mensagens.isEmpty()} ? 'd-none'" class="mb-3 chat-box"
+                         role="log" aria-live="polite" aria-relevant="additions"></div>
                     <form id="chatForm" th:action="@{/processos/{id}/mensagem/ajax(id=${processo.id})}" method="post">
                         <div class="input-group">
                             <input type="text" name="texto" class="form-control" placeholder="Responder ao solicitante..."
@@ -879,7 +880,8 @@
                                      pra nao manter ate 3 polls simultaneos numa mesma tela quando
                                      ninguem esta lendo nenhuma conversa (risco R5 do relatorio). -->
                                 <button type="button" class="btn btn-outline-primary btn-sm text-nowrap"
-                                        data-bs-toggle="collapse" th:attr="data-bs-target='#chatAval' + ${par.id}, aria-expanded=${existeConversaPorParecer.get(par.id)}">
+                                        data-bs-toggle="collapse"
+                                        th:attr="data-bs-target='#chatAval' + ${par.id}, aria-expanded=${existeConversaPorParecer.get(par.id)}, aria-controls='chatAval' + ${par.id}">
                                     <i class="bi bi-chat-dots"></i> Conversa
                                     <span th:if="${naoLidasPorParecer.get(par.id) != null and naoLidasPorParecer.get(par.id) > 0}"
                                           class="badge bg-warning text-dark ms-1"
@@ -916,7 +918,8 @@
                                         <div th:id="'chatVazioAval' + ${par.id}" class="text-muted small text-center py-2">
                                             Nenhuma mensagem ainda.
                                         </div>
-                                        <div th:id="'chatBoxAval' + ${par.id}" class="mb-2 chat-box d-none"></div>
+                                        <div th:id="'chatBoxAval' + ${par.id}" class="mb-2 chat-box d-none"
+                                             role="log" aria-live="polite" aria-relevant="additions"></div>
                                         <form th:id="'chatFormAval' + ${par.id}" method="post" class="chat-form-avaliador">
                                             <div class="input-group input-group-sm">
                                                 <input type="text" name="texto" class="form-control"
