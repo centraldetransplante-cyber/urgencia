@@ -136,6 +136,7 @@ public class ProcessoDecisaoController {
     @PostMapping("/{id}/retomar-analise")
     public String retomarAnalise(@PathVariable Long id,
                                  @RequestParam(value = "arquivo", required = false) MultipartFile arquivo,
+                                 HttpServletRequest request,
                                  RedirectAttributes ra) {
         Processo p = processoService.buscar(id);
         if (bloqueadoPorEncerrado(p, ra)) {
@@ -172,9 +173,14 @@ public class ProcessoDecisaoController {
         if (pRetomado.getStatus().isFinalizado()) {
             try { gerarDocumentosFinais(id); }
             catch (IllegalStateException e) { ra.addFlashAttribute("erro", e.getMessage()); }
+            // F3 do relatorio de vistoria de brechas (2026-08-10): mesmo
+            // formato padronizado de decidir()/AvaliadorController - IP
+            // registrado (havia um ator humano por tras: o clique em
+            // "retomar analise"), regra citada explicitamente.
             auditoria.registrar("PROCESSO_DECIDIDO",
-                "Processo " + pRetomado.getNumero() + " - decisao automatica: "
-                + pRetomado.getStatus().getDescricao());
+                auditoria.formatarDetalheProcessoDecidido(pRetomado,
+                    "decisão automática ao retomar a pausa", processoService.regraAplicada(pRetomado)),
+                request.getRemoteAddr());
             ra.addFlashAttribute("msg",
                 "Informação complementar recebida. Análise retomada e decisão automática aplicada: "
                 + pRetomado.getStatus().getDescricao() + ".");
@@ -333,8 +339,12 @@ public class ProcessoDecisaoController {
         Processo p = processoService.decidir(id, decisao, motivoIndeferimento);
         try { gerarDocumentosFinais(id); }
         catch (IllegalStateException e) { ra.addFlashAttribute("erro", e.getMessage()); }
+        // F3 do relatorio de vistoria de brechas (2026-08-10): detalhe
+        // padronizado com a REGRA que decidiu (fonte unica RegraDecisao),
+        // mesmo formato dos outros 2 pontos que gravam PROCESSO_DECIDIDO
+        // (retomarAnalise, AvaliadorController.registrarVoto).
         auditoria.registrar("PROCESSO_DECIDIDO",
-            "Processo " + p.getNumero() + " - " + decisao.getDescricao(),
+            auditoria.formatarDetalheProcessoDecidido(p, "decisão manual", processoService.regraAplicada(p)),
             request.getRemoteAddr());
         ra.addFlashAttribute("msg", "Decisão registrada: " + decisao.getDescricao());
         return "redirect:/processos/" + id;

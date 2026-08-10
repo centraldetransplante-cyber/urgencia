@@ -733,13 +733,23 @@ class ProcessoDetalheControllerTest {
     @Test
     @WithMockUser(roles = "ADMIN")
     void reabrirComSucesso() throws Exception {
+        // F3 do relatorio de vistoria de brechas (2026-08-10) - Achado 8:
+        // reabrir() agora captura a decisao/regra ANTES de chamar
+        // processoService.reabrir(id), para registrar na auditoria qual
+        // decisao foi anulada. processoService e mockado aqui, entao
+        // regraAplicada precisa de stub explicito (sem ele o Mockito
+        // devolve null e o controller lancaria NPE ao formatar o detalhe).
+        when(processoService.regraAplicada(processo))
+            .thenReturn(br.gov.saude.sgpur.service.dto.RegraDecisao.MAIORIA_SIMPLES);
+
         mvc.perform(post("/processos/1/reabrir").with(csrf()))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/processos/1"))
             .andExpect(flash().attribute("msg", org.hamcrest.Matchers.containsString("reaberto")));
 
         verify(processoService).reabrir(1L);
-        verify(auditoria).registrar(eq("PROCESSO_REABERTO"), anyString());
+        // 3 argumentos agora (com IP) - antes era so acao+detalhe.
+        verify(auditoria).registrar(eq("PROCESSO_REABERTO"), anyString(), any());
     }
 
     @Test

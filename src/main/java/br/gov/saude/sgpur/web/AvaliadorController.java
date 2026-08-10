@@ -494,9 +494,15 @@ public class AvaliadorController {
                 log.warn("Falha ao gerar documentos finais do processo {} apos decisao automatica no portal: {}",
                     pDecidido.getNumero(), e.getMessage());
             }
+            // F3 do relatorio de vistoria de brechas (2026-08-10): detalhe
+            // padronizado com a REGRA que decidiu (fonte unica RegraDecisao)
+            // e IP do ator humano por tras da decisao automatica (o proprio
+            // voto que a disparou) - mesmo formato de ProcessoDecisaoController
+            // (decidir/retomarAnalise).
             auditoria.registrar("PROCESSO_DECIDIDO",
-                "Processo " + pDecidido.getNumero() + " - decisao automatica portal: "
-                + pDecidido.getStatus().getDescricao());
+                auditoria.formatarDetalheProcessoDecidido(pDecidido,
+                    "decisão automática no portal (voto do avaliador)", processoService.regraAplicada(pDecidido)),
+                request.getRemoteAddr());
         }
 
         ra.addFlashAttribute("msg",

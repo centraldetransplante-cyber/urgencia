@@ -29,6 +29,7 @@ import br.gov.saude.sgpur.repository.ProcessoRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
 import br.gov.saude.sgpur.service.auditoria.Auditavel;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import jakarta.validation.Valid;
@@ -889,12 +890,34 @@ public class ProcessoDetalheController {
      * classe).
      */
     @PostMapping("/{id}/reabrir")
-    public String reabrir(@PathVariable Long id, RedirectAttributes ra) {
-        Processo p = processoService.buscar(id);
+    public String reabrir(@PathVariable Long id, HttpServletRequest request, RedirectAttributes ra) {
+        // F3/Achado 8 do relatorio de vistoria de brechas (2026-08-10): usa
+        // findByIdComPareceres (fetch join), NAO processoService.buscar (so
+        // findById puro) - regraAplicada navega processo.pareceres, e uma
+        // entidade sem fetch join fica DETACHED assim que este metodo devolve
+        // (spring.jpa.open-in-view: false), lancando LazyInitializationException
+        // ao tentar ler a colecao logo abaixo. Bug real pego pelo teste de
+        // integracao (H2 real), nunca pelos testes com repositorio mockado.
+        Processo p = processoRepo.findByIdComPareceres(id)
+            .orElseThrow(() -> new IllegalArgumentException("Processo nao encontrado: " + id));
         String numero = p.getNumero();
         try {
+            // Captura a decisao ANTES de reabrir apagar status/dataDecisao -
+            // `p` continua com o snapshot de ANTES mesmo depois de
+            // processoService.reabrir(id) mutar uma instancia nova
+            // internamente (cada chamada de servico abre sua propria
+            // transacao/persistence context). Antes, PROCESSO_REABERTO so
+            // dizia "voltou para Enviado", sem registrar QUAL decisao foi
+            // anulada - o ADMIN precisava cruzar com a linha
+            // PROCESSO_DECIDIDO anterior na trilha (nem sempre a mais
+            // recente, se houve reaberturas sucessivas) para descobrir.
+            StatusProcesso decisaoAnulada = p.getStatus();
+            var regraAnulada = processoService.regraAplicada(p);
             processoService.reabrir(id);
-            auditoria.registrar("PROCESSO_REABERTO", "Processo " + numero + " reaberto (voltou para Enviado)");
+            auditoria.registrar("PROCESSO_REABERTO",
+                "Processo " + numero + " reaberto (voltou para Enviado) - decisão anulada: "
+                + decisaoAnulada.getDescricao() + " (regra: " + regraAnulada.getRotuloCurto() + ")",
+                request.getRemoteAddr());
             ra.addFlashAttribute("msg", "Processo " + numero + " reaberto. Status voltou para Enviado.");
         } catch (IllegalStateException e) {
             ra.addFlashAttribute("erro", e.getMessage());

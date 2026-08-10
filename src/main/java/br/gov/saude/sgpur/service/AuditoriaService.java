@@ -1,7 +1,9 @@
 package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.LogAuditoria;
+import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.repository.LogAuditoriaRepository;
+import br.gov.saude.sgpur.service.dto.RegraDecisao;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
@@ -43,6 +45,28 @@ public class AuditoriaService {
             // ficar totalmente invisivel - loga para nao perder o rastro.
             log.warn("Falha ao registrar auditoria (acao={}): {}", acao, e.getMessage());
         }
+    }
+
+    /**
+     * Formata o detalhe padrao da acao {@code PROCESSO_DECIDIDO}, citando a
+     * ORIGEM da decisao (manual / automatica ao retomar a pausa / automatica
+     * no portal apos voto) e a REGRA que decidiu ({@link RegraDecisao},
+     * mesma fonte unica do badge/documento/PDF - ver {@code
+     * ProcessoValidator.regraAplicada}). F3 do relatorio de vistoria de
+     * brechas (2026-08-10): antes os 3 pontos que gravam esta acao (decisao
+     * manual, automatica na retomada, automatica no portal) escreviam textos
+     * livres diferentes, sem nunca citar QUAL regra decidiu (maioria simples
+     * ou o voto isolado do coordenador) - o ADMIN precisava cruzar com a
+     * linha PARECER_VOTADO e saber de cor quem era coordenador naquela data.
+     *
+     * <p><b>NUNCA inclui nome de paciente nem justificativa clinica</b> - so
+     * numero do processo, decisao e regra (recaidas desse tipo ja ocorreram
+     * duas vezes, ver CLAUDE.md: PROCESSO_CADASTRADO em 2026-07-28 e a
+     * exportacao de dossie em 2026-08-03).</p>
+     */
+    public String formatarDetalheProcessoDecidido(Processo p, String origem, RegraDecisao regra) {
+        return "Processo " + p.getNumero() + " - " + p.getStatus().getDescricao()
+            + " (" + origem + "; regra: " + regra.getRotuloCurto() + ")";
     }
 
     public Page<LogAuditoria> listar(Pageable pageable) {
