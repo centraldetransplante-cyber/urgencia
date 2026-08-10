@@ -1829,10 +1829,13 @@ issue/branch aberta para isso, só o registro no relatório.
    ausência do arquivo já usado em `PdfRelatorioBuilder`/
    `RelatorioAnualService`) e ganhou `Processo.numeroOficio` (`String`,
    nullable, formato `NNNN/AAAA`, sequencial anual reiniciando a cada ano,
-   **independente** do número do processo CET-RS) — inspirado no documento
-   real de referência encontrado na raiz do repositório
-   (`Of nº 1398 Julho 2026 SNT.doc`, um ofício de verdade emitido pela
-   Central de Transplantes ao SNT). O próximo número é calculado em
+   **independente** do número do processo CET-RS) — inspirado num documento
+   real de referência (`Of nº 1398 Julho 2026 SNT.doc`, um ofício de verdade
+   emitido pela Central de Transplantes ao SNT) que na época estava na raiz
+   do repositório como material de apoio; **esse arquivo não existe mais no
+   disco nem foi versionado** (`.doc`, gitignored) — confirmado ausente em
+   vistoria de 2026-08-10. Se precisar dele de novo como referência de
+   estrutura, peça ao usuário. O próximo número é calculado em
    `DecisaoFinalService` no momento da geração automática, lendo o maior
    `numeroOficio` já usado no ano via `ProcessoRepository` e comparando
    **numericamente** (não como string — "999/2026" não pode perder de
@@ -1952,11 +1955,12 @@ cobre, e um PDF gerado pelo sistema não é editável.
   automático.
 
 **Não confundir com o item 8 do `docs/RELATORIO-OFICIO-COMPROVANTE-SNT-2026-08.md`
-(ofício ao SNT).** O modelo `Of nº 1398 Julho 2026 SNT.doc` na raiz do
-repositório é um ofício **à Coordenadora-Geral do SNT em Brasília** (pedido de
-alteração de status de paciente) — documento diferente do ofício de
-indeferimento, que vai à equipe solicitante. Esse item continua **não
-implementado**; o modelo foi usado aqui só como referência de estrutura
+(ofício ao SNT).** O modelo `Of nº 1398 Julho 2026 SNT.doc` (não existe mais
+no disco — ver nota acima, seção anterior) era um ofício **à
+Coordenadora-Geral do SNT em Brasília** (pedido de alteração de status de
+paciente) — documento diferente do ofício de indeferimento, que vai à
+equipe solicitante. Esse item continua **não implementado**; o modelo foi
+usado aqui só como referência de estrutura
 (numeração, cabeçalho do departamento, bloco do destinatário).
 
 ### Bug corrigido: rascunho RTF sem acentuação (2026-08-08)
