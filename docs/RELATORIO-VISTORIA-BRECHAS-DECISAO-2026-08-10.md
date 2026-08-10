@@ -1,9 +1,14 @@
 # Vistoria de brechas de visibilidade nas decisões excepcionais (2026-08-10)
 
-**Status: DIAGNÓSTICO. Nada foi implementado.** Este documento não altera nenhuma
-regra de negócio, endpoint ou comportamento — é leitura de código + verificação
-contra uma instância real do SAUR. Aguarda revisão do dono do produto antes de
-qualquer implementação.
+**Status: CONCLUÍDO. As 6 fases (F1-F6) foram implementadas e mescladas em
+`main` no mesmo dia** (PRs #89 a #94, um por fase, cada um com a suíte
+completa verde antes do merge — ver tabela da §4 abaixo para o número de
+cada PR). Este documento passou de diagnóstico para registro do que foi
+feito; as seções abaixo descrevem o estado **anterior** a esta
+implementação — quem for mexer nesta área de novo deve conferir o código
+real antes de assumir que um achado ainda se aplica. Nenhuma regra de
+decisão foi alterada em nenhuma fase (ver a "Regra de ouro" abaixo, que foi
+respeitada à risca).
 
 **Pergunta que guiou a vistoria:** *se eu for um operador/ADMIN olhando qualquer
 tela, PDF, e-mail ou log deste sistema, dá para saber que ESTA decisão não seguiu
@@ -130,18 +135,21 @@ disso.
 
 ## 1. Quadro-resumo dos achados
 
-| # | Achado | Severidade | Depende de decisão de produto? |
-|---|---|---|---|
-| 1 | Relatório Final e dossiê atribuem a exceção do coordenador ao **médico errado** | **ALTA** | **SIM — aprovação explícita obrigatória** (§4, Fase F1) |
-| 2 | Dossiê afirma *"1 favorável (regra: 2 de 3 defere)"* num processo **deferido** | **ALTA** | Não — é bug |
-| 3 | *"Maioria formada"* / *"regra 2 de 3 favoráveis"* em processo decidido por **1 voto** | **ALTA** | Não — é bug |
-| 4 | *"Dispensado pela maioria"* onde **não houve maioria** nenhuma | MÉDIA | Não — é bug de texto |
-| 5 | `PROCESSO_DECIDIDO` na auditoria **não distingue** qual regra foi aplicada | MÉDIA | Parcial |
-| 6 | Badge do coordenador existe em **1 tela só** (o gatilho original do usuário) | MÉDIA | Sim (onde exibir) |
-| 7 | Pausa sobreposta pela retomada não deixa rastro; **justificativa é apagada** | MÉDIA | Sim |
-| 8 | Reabertura: **nenhuma tela** mostra que o processo já foi decidido antes | MÉDIA | Sim |
-| 9 | Relatório Final **obsoleto** continua anexado após reabrir | BAIXA | Não |
-| 10 | Avaliador que não votou: o processo **some** do portal sem aviso | BAIXA | Sim |
+**Todos os 11 achados acionáveis (1-10, exceto o 12 informativo) foram
+corrigidos** — ver a coluna "Corrigido em" e a §4 para o PR de cada fase.
+
+| # | Achado | Severidade | Depende de decisão de produto? | Corrigido em |
+|---|---|---|---|---|
+| 1 | Relatório Final e dossiê atribuem a exceção do coordenador ao **médico errado** | **ALTA** | **SIM — aprovação explícita obrigatória** (§4, Fase F1) | F1, PR #89 |
+| 2 | Dossiê afirma *"1 favorável (regra: 2 de 3 defere)"* num processo **deferido** | **ALTA** | Não — é bug | F2, PR #90 |
+| 3 | *"Maioria formada"* / *"regra 2 de 3 favoráveis"* em processo decidido por **1 voto** | **ALTA** | Não — é bug | F2, PR #90 |
+| 4 | *"Dispensado pela maioria"* onde **não houve maioria** nenhuma | MÉDIA | Não — é bug de texto | F2, PR #90 |
+| 5 | `PROCESSO_DECIDIDO` na auditoria **não distingue** qual regra foi aplicada | MÉDIA | Parcial | F3, PR #91 |
+| 6 | Badge do coordenador existe em **1 tela só** (o gatilho original do usuário) | MÉDIA | Sim (onde exibir) | F2, PR #90 |
+| 7 | Pausa sobreposta pela retomada não deixa rastro; **justificativa é apagada** | MÉDIA | Sim — opção "a" (guardar o texto) aprovada | F4, PR #93 |
+| 8 | Reabertura: **nenhuma tela** mostra que o processo já foi decidido antes | MÉDIA | Sim | F5, PR #92 |
+| 9 | Relatório Final **obsoleto** continua anexado após reabrir | BAIXA | Não | F5, PR #92 |
+| 10 | Avaliador que não votou: o processo **some** do portal sem aviso | BAIXA | Sim — aprovado | F6, PR #94 |
 | 11 | Nenhuma tela marca **qual** parecer é o do coordenador | BAIXA | Sim |
 | 12 | Cancelamento: **sem regressão** (verificado) | — | — |
 
@@ -663,7 +671,7 @@ votos. Acréscimo de método de *leitura* (ex. `parecerDoCoordenador`) é permit
 alteração de predicado existente, não. Toda fase deve terminar com os **932
 testes** verdes e, em especial, com as 169 da tabela da §0 intactas.
 
-### F1 — Nome do coordenador no documento oficial  ·  Achado 1
+### F1 — Nome do coordenador no documento oficial  ·  Achado 1  ·  ✅ CONCLUÍDO (PR #89)
 
 > ### ⚠ RISCO ALTA · EXIGE APROVAÇÃO EXPLÍCITA DO DONO DO PRODUTO ANTES DE CODAR
 
@@ -720,7 +728,7 @@ para depois e implementar antes só o **Achado 9** (remover o Relatório Final
 obsoleto na reabertura), que é independente, pequeno e não encosta em nada da
 votação.
 
-### F2 — `RegraDecisao` derivada + badge reutilizável  ·  Achados 2, 3, 4, 6
+### F2 — `RegraDecisao` derivada + badge reutilizável  ·  Achados 2, 3, 4, 6  ·  ✅ CONCLUÍDO (PR #90)
 O grosso do valor, ainda sem mudança de schema.
 - `service/dto/RegraDecisao.java` + `ProcessoValidator.regraAplicada`.
 - Fragment `layout :: badgeRegraDecisao`; aplicar em detalhe, lista, arquivo, Painel.
@@ -738,7 +746,7 @@ O grosso do valor, ainda sem mudança de schema.
 - **Atenção:** o E2E localiza botões por texto exato — conferir
   `ProcessoDetalhePage` antes do merge (armadilha já materializada duas vezes).
 
-### F3 — Auditoria estruturada da decisão  ·  Achado 5
+### F3 — Auditoria estruturada da decisão  ·  Achado 5  ·  ✅ CONCLUÍDO (PR #91)
 - Padronizar o detalhe de `PROCESSO_DECIDIDO` nos 3 call-sites com o rótulo de
   `RegraDecisao`; passar o IP nos dois que hoje não passam.
 - Enriquecer `PROCESSO_REABERTO` com a decisão anulada + IP.
@@ -747,14 +755,14 @@ O grosso do valor, ainda sem mudança de schema.
   de `LogAuditoria` do banco (escrita irreversível → sem mock do serviço).
 - **Risco:** baixo.
 
-### F4 — Rastro da pausa sobreposta  ·  Achado 7  ·  **exige decisão de produto**
-Escolher entre `HistoricoParecer` (guarda a justificativa) e campos no `Processo`
-(guarda só o fato). Expor no card Respostas e no Relatório Final.
+### F4 — Rastro da pausa sobreposta  ·  Achado 7  ·  **exige decisão de produto**  ·  ✅ CONCLUÍDO (PR #93)
+**Decisão aprovada: opção "a" — `HistoricoParecer`, guardando o texto completo.**
+Expõe no card Respostas e no Relatório Final.
 - **Teste:** integração que percorre pausa → retomada → decisão automática e
   confirma que o rastro sobreviveu ao reset de `retomarAposInformacao`.
 - **Risco:** médio (entidade/campos novos; se enum, revisar CHECK constraint).
 
-### F5 — Histórico de reaberturas + relatório obsoleto  ·  Achados 8 e 9
+### F5 — Histórico de reaberturas + relatório obsoleto  ·  Achados 8 e 9  ·  ✅ CONCLUÍDO (PR #92)
 - Badge *"Reaberto Nx"* nas mesmas superfícies da F2 e linha no Relatório Final.
 - `reabrir` passa a remover (ou marcar) o `RELATORIO_FINAL` da decisão anulada.
 - **Teste:** integração que decide → reabre → confirma que nenhum anexo
@@ -763,16 +771,19 @@ Escolher entre `HistoricoParecer` (guarda a justificativa) e campos no `Processo
   ser antecipada para antes de tudo, inclusive como primeiro PR, já que não
   encosta em nenhum ponto da regra de votação.
 
-### F6 — Aviso ao avaliador dispensado  ·  Achado 10  ·  **exige decisão de produto**
-Linha no histórico do Portal do Avaliador, preservando a imparcialidade (sem
-resultado, sem co-avaliadores, só iniciais).
-- **Risco:** baixo, mas mexe na tela mais sensível do ponto de vista de
-  vazamento — revisar contra `ProcessoVotoView`/`ParecerVotoView`, que existem
-  exatamente para fechar esse risco por design.
+### F6 — Aviso ao avaliador dispensado  ·  Achado 10  ·  **exige decisão de produto**  ·  ✅ CONCLUÍDO (PR #94)
+**Decisão aprovada: sim, adicionar o aviso.** Linha no histórico do Portal do
+Avaliador ("Processos decididos sem o seu voto"), preservando a
+imparcialidade (sem resultado, sem co-avaliadores, só numero do processo +
+iniciais). Reaproveitou `ProcessoVotoView`/`ParecerVotoView` como modelo -
+não criou caminho novo de exposição de dado.
 
 **Fora do plano, mas recomendado junto da F1:** atualizar o `CLAUDE.md`, que
 ainda descreve o Achado 4 da vistoria de 2026-08-03 como pendente de decisão de
-produto quando ele já foi implementado no commit `3dac941` (ver §0).
+produto quando ele já foi implementado no commit `3dac941` (ver §0). **Feito**
+na mesma sessão em que F2-F6 foram implementadas — ver a seção "F2-F6 do
+relatório de vistoria de brechas" do `CLAUDE.md`, que também corrige essa
+menção desatualizada.
 
 ---
 

@@ -1390,9 +1390,14 @@ sessão (branch `fix/vistoria-anexo-pausa-metricas-versao`):
    do avaliador que já tinha votado, contando o prazo dele de novo a partir
    do reenvio. Corrigido: só os pareceres com `resultado == null` (ainda sem
    voto) têm `dataEnvio` atualizada.
-4. **`ProcessoValidator.temVotoCoordenadorFavoravel` lê `coordenador` ao
-   vivo, não no momento do voto** (achado, **NÃO corrigido** de propósito —
-   requer decisão de produto). Cenário: se o coordenador votar Favorável, o
+4. **`ProcessoValidator.temVotoCoordenadorFavoravel` lia `coordenador` ao
+   vivo, não no momento do voto** (achado desta sessão, na época **não
+   corrigido** de propósito — exigia decisão de produto). **Corrigido em
+   2026-08-07** — ver a seção "Achado 4 (snapshot do papel de coordenador no
+   voto) — implementado" mais abaixo neste arquivo: `Parecer.eraCoordenadorNoVoto`
+   (snapshot gravado no instante do voto) resolve exatamente o cenário
+   descrito abaixo. **Texto original do achado, mantido como histórico:**
+   Cenário: se o coordenador votar Favorável, o
    processo é deferido com esse voto sozinho; mas se ELE deixar de ser
    coordenador depois (outro médico assume o cargo) e o processo ainda não
    foi decidido, o voto antigo dele deixa de contar como "voto de coordenador"
@@ -1400,7 +1405,7 @@ sessão (branch `fix/vistoria-anexo-pausa-metricas-versao`):
    de votar como membro comum ganha retroativamente o peso de coordenador.
    Corrigir exigiria uma coluna nova em `Parecer` (snapshot do papel no
    momento do voto) com decisão explícita sobre a semântica correta — fora de
-   escopo desta sessão, fica pendente de definição do usuário.
+   escopo daquela sessão, ficou pendente de definição do usuário até 2026-08-07.
 5. **`ControleUrgencia` era a única entidade "quente" do sistema sem
    `@Version`** (lock otimista). Cenário real: operador A abre a tela de
    edição (carrega a `dataVencimento` atual); operador B clica "Renovar"
@@ -5158,3 +5163,156 @@ mensagem para marcar (não quebra). Todos releem cada linha do banco depois
 da chamada e conferem `isLida()` campo a campo, nunca confiando em mock.
 
 Suíte completa validada: **924 testes, 0 falhas** (918 + 6 novos, JDK 21).
+
+## Vistoria de brechas de visibilidade nas decisões excepcionais — F2 a F6 implementadas (2026-08-10)
+
+`docs/RELATORIO-VISTORIA-BRECHAS-DECISAO-2026-08-10.md` (diagnóstico +
+plano faseado, seguindo a pergunta "se eu for um operador/ADMIN olhando
+qualquer tela/PDF/e-mail/log deste sistema, dá para saber que ESTA decisão
+não seguiu o caminho padrão de maioria simples 2-de-3?") teve as 6 fases
+(F1-F6) implementadas e mescladas no mesmo dia, uma por PR (#89 a #94),
+cada uma com a suíte completa verde antes do merge. **Regra de ouro
+respeitada em todas as fases:** nenhuma alterou `ProcessoValidator`
+(contagens, `sugerirDecisao`, `validarDecisao`, `validarContagemVotos`,
+`validarPausaDecisao`, `temVotoCoordenadorFavoravel`,
+`favoraveisNecessariosParaDeferir`) nem `ProcessoService.decidir`/
+`tentarDecisaoAutomatica` em nada que mude **qual decisão sai** de um
+conjunto de votos — tudo é aditivo ou de apresentação/auditoria. F1 (achado
+1, nome do coordenador no PDF) foi tratada em paralelo por outro agente/PR
+(`#89`), isolada por ser a única fase que encostava no conceito de "quem é
+o coordenador para efeito de voto" (ainda que só na *impressão do nome*, a
+regra em si já usava o snapshot desde 2026-08-07 — ver seção "Achado 4" mais
+acima, cujo texto original ficou desatualizado até esta sessão corrigir a
+menção). F2-F6 foram implementadas em sequência por este agente, cada uma
+como branch/PR própria a partir do `main` já atualizado pela fase anterior.
+
+**F2 — fonte única `RegraDecisao` + badge do voto do coordenador (PR #90,
+achados 2/3/4/6).** `service/dto/RegraDecisao.java` (enum novo,
+vocabulário fechado: `MAIORIA_SIMPLES`, `VOTO_COORDENADOR`, `CANCELAMENTO`,
+`NAO_DECIDIDO`) + `ProcessoValidator.regraAplicada(Processo)` (método de
+LEITURA, reusa `temVotoCoordenadorFavoravel` sem duplicar/alterar o
+predicado) + wrapper fino `ProcessoService.regraAplicada`. Corrige: dossiê
+exportado dizendo *"1 favorável (regra: 2 de 3 defere)"* num processo
+deferido pelo coordenador (achado 2, `ExportacaoProcessoService`);
+`FluxoProcessoService` dizendo *"Maioria formada"*/"regra 2 de 3
+favoráveis" num processo já decidido ou decidido por 1 voto só (achado 3);
+rótulo *"Dispensado pela maioria"* onde não houve maioria nenhuma (achado
+4, `RelatorioService`/`processos/detalhe.html`); e o badge "Deferido pelo
+Coordenador da CET-RS" existindo só na tela de detalhe (achado 6) — novo
+fragment `layout :: badgeRegraDecisao(regra, classes)`, aplicado também em
+`processos/lista.html`, `arquivo/lista.html` e `dashboard.html`. **Decisão
+de arquitetura importante:** o fragment recebe o `RegraDecisao` **já
+calculado pelo controller** (não chama `@processoValidator...` direto do
+template) — chamar um bean de serviço de dentro de um fragment Thymeleaf
+quebraria qualquer `@WebMvcTest` que renderize essas 4 telas sem subir o
+contexto completo do Spring (`ArquivoController`/`HomeController` ganharam
+`ProcessoValidator` injetado só para isso). Testes: unitário de
+`regraAplicada` (5 cenários), 3 cenários novos em
+`FluxoProcessoServiceTest`, render em `ProcessoDetalheControllerTest`/
+`ProcessoListaControllerTest`, e um teste de integração real
+(`ProcessoExportacaoIntegrationTest`) que **gera o PDF e o ZIP de
+verdade** de um processo deferido pelo coordenador e confirma ausência de
+"regra: 2 de 3"/"Maioria formada" em ambos.
+
+**F3 — auditoria estruturada da decisão (PR #91, achado 5).**
+`AuditoriaService.formatarDetalheProcessoDecidido(Processo, origem,
+RegraDecisao)`: fonte única de formatação, reusada pelos 3 pontos que
+gravam `PROCESSO_DECIDIDO` (`ProcessoDecisaoController.decidir`/
+`retomarAnalise`, `AvaliadorController.registrarVoto` — decisão automática
+no portal). IP passou a ser gravado nos 2 pontos automáticos que não
+gravavam antes (havia um ator humano por trás: o clique em "retomar
+análise" ou o próprio voto). `PROCESSO_REABERTO` passou a registrar a
+decisão anulada (status + regra). **Nunca inclui nome de paciente nem
+justificativa clínica** — só número do processo, decisão e regra. **Bug
+real corrigido no caminho** (achado só pelo teste de integração H2, nunca
+pelos testes com mock): `ProcessoDetalheController.reabrir` usava
+`processoService.buscar(id)` (`findById` puro); como a entidade fica
+*detached* logo em seguida (`spring.jpa.open-in-view: false`), ler
+`processo.pareceres` (necessário para `regraAplicada`) lançava
+`LazyInitializationException` e a reabertura falhava silenciosamente
+(nunca chegava a chamar `processoService.reabrir`). Corrigido usando
+`processoRepo.findByIdComPareceres` (fetch join). Teste:
+`DecisaoAuditoriaEstruturadaIntegrationTest` (`@SpringBootTest` + H2 real,
+sem mock), 3 cenários relendo `LogAuditoria` do banco.
+
+**F5 — histórico de reaberturas + relatório obsoleto removido (PR #92,
+achados 8 e 9; implementada antes da F4 de propósito, por ter menor
+risco/dependência).** `Processo.reaberturas` (`Integer`, nullable — sem
+backfill, mesmo padrão de `ultimoLembreteSntEm`/`numeroOficio`;
+`getReaberturasOuZero()` trata `null` como 0). `ProcessoService.reabrir`
+incrementa o contador e **remove o anexo `RELATORIO_FINAL`** da decisão
+anulada (`anexoStorage.removerAntigosDoTipo(p, TipoAnexo.RELATORIO_FINAL,
+null)`) — o relatório é sempre DERIVADO (regenerado por
+`DecisaoFinalService.gerarDocumentos` na próxima decisão), então continuar
+oferecendo para download um documento institucional afirmando "RESULTADO:
+DEFERIDO" de um processo que voltou para ENVIADO era uma janela real (dias,
+ou permanente se nunca redecidido). Fragment `layout ::
+badgeReaberturas(p, classes)` — "Reaberto Nx", leitura pura de
+`Processo.reaberturasOuZero` (sem bean de serviço, ao contrário do
+`badgeRegraDecisao` da F2 — aqui não precisou porque o dado já está na
+própria entidade), aplicado nas mesmas 4 superfícies. Linha "Reaberturas"
+condicional no Relatório Final. Teste:
+`ReaberturaRemoveRelatorioObsoletoIntegrationTest` (H2 real, sem mock)
+decide pelo coordenador, confirma o PDF acessível, reabre, confirma 404 no
+download + contador incrementado.
+
+**F4 — histórico de pareceres sobrepostos pela pausa (PR #93, achado 7 —
+decisão de produto já aprovada: opção "a", guardar o texto completo).**
+`domain/HistoricoParecer.java` (entidade nova, tabela `historico_parecer`):
+staging/append-only, no espírito de `SolicitacaoOnline`/
+`AnexoSolicitacaoOnline` — nunca se mistura ao ciclo de vida do `Parecer`
+real. `HistoricoParecer.deParecer(par, motivo)` constrói o snapshot (com a
+justificativa clínica completa) **antes** de
+`ProcessoService.retomarAposInformacao` zerar os campos do parecer que
+pediu informação — o reset em si continua **exatamente** o mesmo de
+sempre, ganhou só um passo adicional antes dele.
+`ProcessoService.historicoParecer(processoId)` (wrapper) alimenta o card
+Respostas (colapsável, só quando há algum registro) e uma seção nova do
+Relatório Final. Como é tabela **nova** (sem linhas antigas), os 2 enums
+reusados (`ResultadoParecer`/`OrigemParecer`) não têm nenhum risco de CHECK
+constraint desatualizada. Teste: `HistoricoParecerIntegrationTest` (H2
+real, sem mock) percorre pausa → retomada → decisão automática e confirma
+que o rastro (incluindo a justificativa original) sobreviveu ao reset,
+relendo do banco — e que o parecer VIVO continua resetado por completo.
+`ReaberturaMantemPausaAtivaIntegrationTest` precisou de um ajuste de
+limpeza (`historicoParecerRepo.deleteAll()` antes de `processoRepo.deleteAll()`
+no `@BeforeEach`) por causa da FK nova.
+
+**F6 — aviso ao avaliador dispensado pela decisão (PR #94, achado 10 —
+decisão de produto já aprovada: sim, adicionar o aviso).**
+`ParecerRepository.findDispensadosComProcesso(membroId, statusFinal)`:
+pareceres nunca votados (`resultado is null`) cujo processo já foi decidido
+— o avaliador foi dispensado por maioria simples ou pela exceção do
+coordenador antes de conseguir votar. Antes, esse processo simplesmente
+"evaporava" da tela do avaliador: sumia de "Pendentes" (status deixou de
+aceitar voto) e nunca aparecia no "Histórico" (que exige `resultado !=
+null`). Nova seção "Processos decididos sem o seu voto" no Portal do
+Avaliador, projetada num record novo (`AvaliadorController.ParecerDispensadoView`)
+com **somente** número do processo + iniciais — deliberadamente sem
+resultado da decisão nem identidade/voto de outros avaliadores (mesmo
+padrão de `ProcessoVotoView`/`ParecerVotoView`, reaproveitado, não um
+caminho novo de exposição de dado). **Revisão extra de imparcialidade**
+(é a tela mais sensível a vazamento do sistema): além do teste de render
+condicional em `AvaliadorControllerTest`,
+`AvaliadorDispensadoIntegrationTest` (`@SpringBootTest` + H2 real, HTTP
+real) monta um cenário completo (2 avaliadores decidem por maioria, o 3º
+nunca vota) e confirma por asserção **negativa** que a resposta renderizada
+não contém o nome completo do paciente, o resultado da decisão
+("Deferido"/"Indeferido") nem os nomes dos outros 2 avaliadores — só
+número do processo + iniciais.
+
+**Validação final:** suíte completa em **977 testes, 0 falhas** (JDK 21,
+partindo da base de 946 antes desta sessão). `mvn verify -Pe2e
+-Dsaur.e2e.headed=false` rodado ao final de cada fase que tocou
+templates/rótulos visíveis (F2, F5, F4, F6) — sem regressão em nenhuma,
+única falha observada é a pré-existente de SMTP local
+(`FluxoCompletoProcessoIT:228`, `SGPUR_MAIL_USER`/`SGPUR_MAIL_FROM`
+ausentes neste ambiente, já documentada em sessões anteriores deste
+arquivo).
+
+Corrigida nesta mesma sessão a menção desatualizada no `CLAUDE.md` ao
+"Achado 4" da vistoria de 2026-08-03 (`temVotoCoordenadorFavoravel` lendo
+o cargo "ao vivo") como pendente de decisão de produto — já estava
+implementado desde o commit `3dac941` (2026-08-07), só o texto do guia
+não tinha sido atualizado (ver a correção logo acima, na mesma seção
+"Vistoria de bugs de 2026-08-03").
