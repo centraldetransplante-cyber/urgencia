@@ -576,14 +576,48 @@ public class SolicitanteController {
                 + MensagemSolicitacaoService.TEXTO_MAX_LENGTH + " caracteres.");
             return "redirect:/solicitante/" + id;
         }
-        if (s.getStatus() == StatusSolicitacaoOnline.CANCELADA || s.getStatus() == StatusSolicitacaoOnline.PROCESSO_EXCLUIDO) {
-            ra.addFlashAttribute("erro", "Não é possível enviar mensagem para esta solicitação no estado atual.");
+        if (!podeEnviarMensagem(s.getStatus())) {
+            ra.addFlashAttribute("erro", "Não é possível enviar mensagem para esta solicitação no estado atual "
+                + "(o processo gerado foi excluído).");
             return "redirect:/solicitante/" + id;
         }
         mensagemService.enviar(s, texto, MensagemSolicitacao.RemetenteMensagem.SOLICITANTE, usuario.getId());
         auditoria.registrar("MENSAGEM_SOLICITANTE_ENVIADA",
             "Solicitacao " + id + " - " + Iniciais.de(s.getPacienteNome()));
         return "redirect:/solicitante/" + id;
+    }
+
+    /**
+     * Fonte unica da regra de "o solicitante pode continuar enviando
+     * mensagem para este pedido?" - usada tanto no poll (podeEnviar no JSON)
+     * quanto nos dois endpoints de envio (classico e AJAX).
+     *
+     * <p><b>Simetria com o lado do operador (F5 do plano de vistoria de
+     * chat, 2026-08-10, achado A8/decisao Q4 confirmada pelo usuario):</b> o
+     * lado do OPERADOR (ProcessoDetalheController/
+     * SolicitacaoOnlineTriagemController) sempre permitiu enviar mensagem,
+     * mesmo com a solicitacao/processo ja CANCELADA - o operador podia
+     * escrever "recebemos, vamos verificar" numa conversa em que o
+     * solicitante ficava travado sem poder responder. A correcao escolhida
+     * pelo usuario foi o caminho OPOSTO ao sugerido pelo relatorio original
+     * (que propunha restringir o operador): afrouxar o lado do solicitante
+     * para ficar simetrico ao operador, que ja e permissivo - o solicitante
+     * pode continuar conversando com a equipe mesmo depois de cancelar o
+     * proprio pedido (ex.: explicar o motivo do cancelamento, confirmar
+     * algo, etc.).
+     *
+     * <p><b>{@code PROCESSO_EXCLUIDO} continua bloqueado</b> - estado
+     * distinto e mais definitivo que CANCELADA: e o {@link Processo} gerado
+     * a partir desta solicitacao ter sido EXCLUIDO pelo ADMIN
+     * ({@code ProcessoService.excluir}), que desvincula a solicitacao do
+     * processo (seta {@code processoGerado = null}) e a deixa orfa - a
+     * propria mensagem exibida ao solicitante nesse estado
+     * ({@link #montarSituacaoPedido}) ja orienta a enviar uma NOVA
+     * solicitacao, nao a continuar esta conversa. Nao ha mais processo/
+     * equipe ativa do outro lado desta thread especifica.
+     */
+    private boolean podeEnviarMensagem(StatusSolicitacaoOnline status) {
+        return status != StatusSolicitacaoOnline.PROCESSO_EXCLUIDO;
     }
 
     /**
@@ -624,8 +658,7 @@ public class SolicitanteController {
         mensagemService.marcarComoLidas(id, MensagemSolicitacao.RemetenteMensagem.OPERADOR, usuario.getId());
         List<MensagemSolicitacaoService.MensagemChatView> mensagens = mensagemService.paraChat(
             id, MensagemSolicitacao.RemetenteMensagem.SOLICITANTE, usuario.getId(), "Voce", "Equipe CET-RS");
-        boolean podeEnviar = s.getStatus() != StatusSolicitacaoOnline.CANCELADA
-            && s.getStatus() != StatusSolicitacaoOnline.PROCESSO_EXCLUIDO;
+        boolean podeEnviar = podeEnviarMensagem(s.getStatus());
         Map<String, Object> resp = new LinkedHashMap<>();
         resp.put("mensagens", mensagens);
         resp.put("podeEnviar", podeEnviar);
@@ -647,9 +680,10 @@ public class SolicitanteController {
             return ResponseEntity.badRequest().body(Map.of("erro", "A mensagem excede o limite de "
                 + MensagemSolicitacaoService.TEXTO_MAX_LENGTH + " caracteres."));
         }
-        if (s.getStatus() == StatusSolicitacaoOnline.CANCELADA || s.getStatus() == StatusSolicitacaoOnline.PROCESSO_EXCLUIDO) {
+        if (!podeEnviarMensagem(s.getStatus())) {
             return ResponseEntity.badRequest().body(Map.of("erro",
-                "Não é possível enviar mensagem para esta solicitação no estado atual."));
+                "Não é possível enviar mensagem para esta solicitação no estado atual "
+                    + "(o processo gerado foi excluído)."));
         }
         mensagemService.enviar(s, texto, MensagemSolicitacao.RemetenteMensagem.SOLICITANTE, usuario.getId());
         auditoria.registrar("MENSAGEM_SOLICITANTE_ENVIADA",

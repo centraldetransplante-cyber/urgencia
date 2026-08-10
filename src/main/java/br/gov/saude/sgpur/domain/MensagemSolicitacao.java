@@ -3,8 +3,19 @@ package br.gov.saude.sgpur.domain;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
+/**
+ * F6 (S10, docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A13): mesmo
+ * racional de {@link MensagemAvaliador} - indices para as consultas mais
+ * frequentes (thread por solicitacao, contagem de nao lidas por remetente).
+ * Ver CLAUDE.md secao "F6" para a nota de conferir a criacao em producao.
+ */
 @Entity
-@Table(name = "mensagem_solicitacao")
+@Table(name = "mensagem_solicitacao", indexes = {
+    @Index(name = "idx_mensagem_solicitacao_solic_data",
+        columnList = "solicitacao_online_id, data_envio"),
+    @Index(name = "idx_mensagem_solicitacao_lida_remetente",
+        columnList = "lida, remetente")
+})
 public class MensagemSolicitacao {
 
     public enum RemetenteMensagem {

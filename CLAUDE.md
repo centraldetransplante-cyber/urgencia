@@ -4887,6 +4887,56 @@ token isolado, que é exatamente a calibragem pretendida.
 
 Suíte completa: **926 testes, 0 falhas** (918 + 8 novos, JDK 21).
 
+### F5 — MESCLADA (S7.1, simetria de `podeEnviar` no canal do solicitante, achado A8)
+
+**Decisão de produto confirmada pelo usuário (Q4 do relatório): caminho
+OPOSTO ao sugerido pela recomendação original.** O relatório propunha, como
+opção padrão, restringir o lado do OPERADOR (bloquear `podeEnviar` também
+quando a solicitação/processo já foi cancelado) para ficar simétrico ao
+lado do solicitante, que já bloqueava. **O usuário escolheu afrouxar o lado
+do SOLICITANTE** para ficar simétrico ao operador, que sempre foi
+permissivo (sempre `true`) — o solicitante pode continuar enviando mensagem
+para a equipe mesmo depois de cancelar o próprio pedido (ex.: explicar o
+motivo do cancelamento, confirmar algo, etc.).
+
+`SolicitanteController` ganhou um método privado único,
+`podeEnviarMensagem(StatusSolicitacaoOnline status)`, fonte única da regra
+— usado no poll (`GET .../mensagens`, campo `podeEnviar` do JSON) e nos
+dois endpoints de envio (`POST .../mensagem`, clássico, e `POST
+.../mensagem/ajax`). Antes, os 3 pontos bloqueavam em `CANCELADA` **e**
+`PROCESSO_EXCLUIDO`; agora só bloqueiam em `PROCESSO_EXCLUIDO`.
+
+**`PROCESSO_EXCLUIDO` continua bloqueado, decisão tomada lendo o código
+real** (`ProcessoService.excluir`, `SolicitanteController
+.montarSituacaoPedido`) — não presumido. É um estado estruturalmente mais
+definitivo que `CANCELADA`: é o `Processo` gerado a partir desta
+`SolicitacaoOnline` ter sido **excluído pelo ADMIN** (`processoGerado` é
+desvinculado, seta `null`, e a solicitação fica órfã) — diferente de um
+cancelamento, que é uma decisão do próprio fluxo normal (solicitante ou
+operador registrando `CANCELADO` via `ProcessoService.decidir`). A própria
+mensagem que a tela já mostra ao solicitante nesse estado
+(`montarSituacaoPedido`) orienta a enviar uma **nova** solicitação, não a
+continuar esta conversa — não há mais processo/equipe ativa do outro lado
+desta thread específica. Nenhum outro estado (`DEVOLVIDA`, `APROVADA`,
+`REPROVADA`, `CONVERTIDA`, `ENVIADA`) já bloqueava antes desta mudança, e
+nenhum passou a bloquear — só a condição de `CANCELADA` foi removida.
+
+**Não mexido:** `ProcessoDetalheController`/
+`SolicitacaoOnlineTriagemController` (lado do OPERADOR, já permissivo,
+sempre `true` — não precisou de nenhuma mudança) e `solicitante/detalhe.html`
+(não havia nenhum texto do tipo "você não pode mais enviar mensagem porque
+cancelou" para ajustar — conferido antes de codar).
+
+Testes novos (`SolicitanteChatPodeEnviarSimetriaIntegrationTest`,
+`@SpringBootTest` + H2 real, sem mock — convenção do projeto para escrita
+irreversível): poll devolve `podeEnviar: true` para `CANCELADA` e `false`
+para `PROCESSO_EXCLUIDO`; envio com sucesso via AJAX e via endpoint
+clássico para uma solicitação `CANCELADA` (mensagem persistida, relida do
+banco); recusa (400/flash de erro, sem persistir nada) nos dois endpoints
+para `PROCESSO_EXCLUIDO`.
+
+Suíte completa: **932 testes, 0 falhas** (926 + 6 novos, JDK 21).
+
 ### F2 — MESCLADA (S2 + S1, achados A1/A2 — a fase de maior risco do plano)
 
 Mexe em `processos/detalhe.html` (a tela mais complexa do sistema) e no
@@ -5046,3 +5096,65 @@ MESMA linha 228 já documentada (SMTP local ausente,
 nenhuma relação com esta fase — confirmado pelo log
 (`EmailSender: remetente (from) nao configurado`), idêntico ao já registrado
 nas sessões anteriores.
+
+### F6 — MESCLADA (S10, achado A13): índices de banco + `marcarComoLidas` em lote
+
+Implementada em paralelo à F2-F5 (sub-agente isolado em worktree próprio,
+branch `feat/chat-f6-indices-lote`), enquanto o agente principal cuidava
+das demais fases. Escopo fechado, sem decisão de produto pendente — só
+performance estrutural, nenhuma regra de negócio mudou. Rebase manual sobre
+`main` (após F1/F2/F3 mescladas) feito pelo agente principal antes do
+merge, resolvendo o único conflito real (este arquivo, `CLAUDE.md` —
+mantidas as seções de F3/F2/F6, nenhuma descartada).
+
+- **Índices de banco** via `@Table(indexes = ...)`:
+  - `MensagemAvaliador` (`mensagem_avaliador`): índice composto
+    `idx_mensagem_avaliador_processo_membro_data` em `(processo_id,
+    membro_id, data_envio)` — acelera `findByProcessoIdAndMembroId
+    OrderByDataEnvioAsc` (a thread aberta, poll de 5s) e o novo UPDATE em
+    lote abaixo; e `idx_mensagem_avaliador_lida_remetente` em `(lida,
+    remetente)` — acelera os badges (`countByLidaFalseAndRemetente` e
+    variantes).
+  - `MensagemSolicitacao` (`mensagem_solicitacao`): mesmo racional,
+    `idx_mensagem_solicitacao_solic_data` em `(solicitacao_online_id,
+    data_envio)` e `idx_mensagem_solicitacao_lida_remetente` em `(lida,
+    remetente)`.
+  - **`ddl-auto: update` CRIA índice novo sem drama** (ao contrário de CHECK
+    constraint de enum e coluna NOT NULL, ver "Convenções de código" acima)
+    — mas, seguindo a prática do projeto de nunca presumir o que o `update`
+    fez, **confirmar em produção via SSH após o deploy** que os 4 índices
+    existem de fato:
+    ```sql
+    SELECT indexname, indexdef FROM pg_indexes
+    WHERE tablename IN ('mensagem_avaliador', 'mensagem_solicitacao');
+    ```
+- **`marcarComoLidas` em lote** (elimina o carregamento da thread inteira em
+  Java a cada poll de 5s de uma conversa aberta, mesmo quando não há nada
+  para marcar): `MensagemAvaliadorRepository.marcarComoLidasEmLote` e
+  `MensagemSolicitacaoRepository.marcarComoLidasEmLote` — dois `@Modifying`
+  `@Query` de UPDATE em lote, mesmo padrão exato de
+  `ParecerRepository.registrarUltimoLembrete` (JPQL, não SQL nativo,
+  `@Transactional` herdado do método de serviço que chama, sem
+  `clearAutomatically` — os dois controllers que chamam `marcarComoLidas`
+  não têm `@Transactional` de classe, então o UPDATE sempre commita numa
+  transação própria antes de qualquer leitura seguinte, ex.:
+  `paraChat(...)`, abrir a sua). `MensagemAvaliadorService.marcarComoLidas`/
+  `MensagemSolicitacaoService.marcarComoLidas` mantiveram a assinatura
+  pública inalterada, só a implementação interna mudou — de "carregar tudo
+  + filtrar em Java + `saveAll`" para delegar direto ao UPDATE.
+
+**Testes:** dois testes de integração novos
+(`MensagemAvaliadorMarcarComoLidasEmLoteIntegrationTest`,
+`MensagemSolicitacaoMarcarComoLidasEmLoteIntegrationTest`, em
+`src/test/java/br/gov/saude/sgpur/service/`, `@SpringBootTest` + H2 real,
+sem mock — convenção do projeto para escrita em lote), cada um cobrindo:
+mensagens do outro lado não lidas (marcadas), mensagens do próprio lado
+(nunca tocadas, mesmo não lidas), mensagens já lidas (idempotência — seguem
+lidas, sem erro), mensagem com o mesmo `remetenteId` de quem está marcando
+(guarda contra marcar a própria mensagem), mensagem de OUTRA
+thread/processo/solicitação (nunca tocada — o cenário mais importante de um
+UPDATE em lote, garantir que ele não vaza pro escopo errado), e nenhuma
+mensagem para marcar (não quebra). Todos releem cada linha do banco depois
+da chamada e conferem `isLida()` campo a campo, nunca confiando em mock.
+
+Suíte completa validada: **924 testes, 0 falhas** (918 + 6 novos, JDK 21).
