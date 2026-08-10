@@ -3,6 +3,7 @@ package br.gov.saude.sgpur.repository;
 import br.gov.saude.sgpur.domain.MensagemAvaliador;
 import br.gov.saude.sgpur.domain.MensagemAvaliador.RemetenteMensagemAvaliador;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -74,4 +75,28 @@ public interface MensagemAvaliadorRepository extends JpaRepository<MensagemAvali
      */
     @Query("SELECT DISTINCT m.membro.id FROM MensagemAvaliador m WHERE m.processo.id = :processoId")
     List<Long> membrosComConversa(@Param("processoId") Long processoId);
+
+    /**
+     * F6 (S10, docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A13):
+     * UPDATE em lote que substitui o antigo "carregar a thread inteira em
+     * Java e filtrar" de {@code MensagemAvaliadorService.marcarComoLidas} -
+     * mesmo padrao de {@link ParecerRepository#registrarUltimoLembrete}
+     * (linha unica de {@code @Modifying}). Roda a cada poll de 5s de uma
+     * thread aberta; antes disso trazia TODAS as mensagens da thread so para
+     * filtrar {@code !lida && remetente==X && remetenteId!=Y} em memoria.
+     * Marca exatamente as mesmas linhas que o codigo Java marcava: do
+     * REMETENTE informado, ainda nao lidas, e que NAO sejam do proprio
+     * usuario que esta chamando (evita marcar como lida a propria mensagem
+     * que o usuario acabou de enviar, no caso raro de remetenteId colidir
+     * por engano com o remetente do outro lado - preserva o comportamento
+     * original).
+     */
+    @Modifying
+    @Query("UPDATE MensagemAvaliador m SET m.lida = true "
+        + "WHERE m.processo.id = :processoId AND m.membro.id = :membroId "
+        + "AND m.lida = false AND m.remetente = :remetente AND m.remetenteId <> :remetenteId")
+    int marcarComoLidasEmLote(@Param("processoId") Long processoId,
+                               @Param("membroId") Long membroId,
+                               @Param("remetente") RemetenteMensagemAvaliador remetente,
+                               @Param("remetenteId") Long remetenteId);
 }

@@ -28,8 +28,26 @@ import java.time.LocalDateTime;
  * (qualquer ADMIN/OPERADOR le e responde), mesmo design do resto do
  * sistema (autorizacao por role, nao por posse).</p>
  */
+/**
+ * F6 (S10, docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A13): os dois
+ * indices abaixo aceleram exatamente as consultas mais frequentes desta
+ * tabela - {@code findByProcessoIdAndMembroIdOrderByDataEnvioAsc} (poll de
+ * 5s da thread aberta, agora tambem alvo do UPDATE em lote de
+ * {@link br.gov.saude.sgpur.repository.MensagemAvaliadorRepository#marcarComoLidasEmLote})
+ * e {@code countByLidaFalseAndRemetente}/variantes (badges). O Postgres NAO
+ * cria indice automatico em coluna de FK - ver CLAUDE.md, "ddl-auto: update
+ * nao faz backfill/nao atualiza CHECK", mesma familia de pitfall de schema.
+ * {@code ddl-auto: update} CRIA indice novo sem drama (ao contrario de CHECK
+ * de enum/coluna NOT NULL) - mas confirmar em producao apos o deploy, ver
+ * CLAUDE.md secao "F6".
+ */
 @Entity
-@Table(name = "mensagem_avaliador")
+@Table(name = "mensagem_avaliador", indexes = {
+    @Index(name = "idx_mensagem_avaliador_processo_membro_data",
+        columnList = "processo_id, membro_id, data_envio"),
+    @Index(name = "idx_mensagem_avaliador_lida_remetente",
+        columnList = "lida, remetente")
+})
 public class MensagemAvaliador {
 
     /** Enum PROPRIO, completo desde o primeiro deploy (nao reutiliza RemetenteMensagem). */

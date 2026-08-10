@@ -62,17 +62,17 @@ public class MensagemAvaliadorService {
         return repository.findByProcessoIdAndMembroIdOrderByDataEnvioAsc(processoId, membroId);
     }
 
+    /**
+     * F6 (S10, docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A13): antes
+     * carregava a thread INTEIRA ({@link #listarThread}) e filtrava em Java a
+     * cada poll de 5s (mesmo com nada para marcar), sempre dentro de uma
+     * transacao de escrita. Agora delega direto a
+     * {@link MensagemAvaliadorRepository#marcarComoLidasEmLote} - um UPDATE
+     * de linha unica no banco, sem trazer nenhuma entidade.
+     */
     @Transactional
     public void marcarComoLidas(Long processoId, Long membroId, RemetenteMensagemAvaliador remetente, Long remetenteId) {
-        List<MensagemAvaliador> naoLidas = listarThread(processoId, membroId).stream()
-            .filter(m -> !m.isLida() && m.getRemetente() == remetente && !m.getRemetenteId().equals(remetenteId))
-            .toList();
-        for (MensagemAvaliador m : naoLidas) {
-            m.setLida(true);
-        }
-        if (!naoLidas.isEmpty()) {
-            repository.saveAll(naoLidas);
-        }
+        repository.marcarComoLidasEmLote(processoId, membroId, remetente, remetenteId);
     }
 
     /** Total de mensagens de AVALIADORES nao lidas por nenhum ADMIN/OPERADOR (caixa compartilhada), somando todos os processos. */
