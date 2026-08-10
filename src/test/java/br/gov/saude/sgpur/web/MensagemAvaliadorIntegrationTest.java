@@ -168,9 +168,14 @@ class MensagemAvaliadorIntegrationTest {
     @Test
     @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
     void operadorNaoConsegueEnviarMensagemQueCitaEquipeSolicitante() throws Exception {
+        // Calibragem de 2026-08-10 (S4, achado A5): 1 token generico da
+        // equipe isolado ("clinicas") deixou de bloquear sozinho - a
+        // mensagem precisa citar >=2 tokens da equipe (ver
+        // VerificadorNomePacienteTest para os casos que passaram a ser
+        // LIVRE de proposito).
         mvc.perform(post("/processos/" + processoId + "/avaliador/" + membroId + "/mensagem/ajax")
                         .with(csrf())
-                        .param("texto", "O Hospital de Clinicas ligou pedindo prioridade neste caso."))
+                        .param("texto", "O Hospital de Clinicas de Porto Alegre ligou pedindo prioridade neste caso."))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.erro").exists());
 

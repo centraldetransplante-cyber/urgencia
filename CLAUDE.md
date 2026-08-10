@@ -4822,3 +4822,67 @@ Lote de correções de baixo risco, sem decisão de produto pendente:
   não deixava nenhum rastro em `/auditoria` — só o enviar era auditado.
 
 Suíte completa validada: **918 testes, 0 falhas** (908 + 10 novos, JDK 21).
+
+### F3 — MESCLADA (S4, calibragem do `VerificadorNomePaciente`, achados A4/A5)
+
+**Decisão de produto confirmada pelo usuário (Q3 do relatório): seguir a
+recomendação do relatório na íntegra.** Implementados os 3 itens do S4:
+
+1. **Nome curto (achado A4):** o corte de tamanho mínimo de token do nome do
+   paciente caiu de 4 para 3 caracteres (`tokensSignificativosNome`). Um
+   nome inteiro "curto" (≤2 tokens significativos no total —
+   `NOME_CURTO_MAX_TOKENS`) passou a BLOQUEAR já com **1 único** token
+   encontrado (antes gerava só `ALERTA`, e no caso mais extremo — nome de
+   3 letras por token, ex. "Ana Luz" — nenhum token sequer era gerado,
+   então a mensagem passava **livre**). Nomes "normais" (>2 tokens
+   significativos) continuam com a regra antiga: 1 token = `ALERTA`, 2+ =
+   `BLOQUEADO`.
+2. **Equipe (achado A5):** `BLOQUEIO_EQUIPE_MIN_TOKENS = 2` — bloquear por
+   equipe agora exige **2 tokens distintos** da equipe solicitante
+   encontrados na mensagem (antes, 1 token isolado já bloqueava). Corrige
+   os dois falsos-positivos reproduzidos no relatório: "o exame de
+   *clinicas* não abriu" e "...desconsiderar o *alegre*" (vocabulário
+   clínico corrente e metade do nome de uma cidade, nenhum dos dois
+   identifica a equipe sozinho). Exceção simétrica à do nome: equipe
+   **curta** (≤1 token significativo no total — sigla sem espaços, ex.
+   "HNSC") continua bloqueando com 1 único token
+   (`BLOQUEIO_EQUIPE_MIN_TOKENS_TOTAL_CURTA`), senão essa equipe ficaria
+   estruturalmente impossível de detectar.
+   **`STOPWORDS_EQUIPE` ganhou termos genéricos**: `santa`, `casa`,
+   `geral`, `universitario`, `federal`, `municipal`, `estadual`,
+   `nefrologia`, `transplante`.
+   **Desvio deliberado da lista literal sugerida pelo relatório — não
+   inclui `clinicas`/`porto`/`alegre`.** Achado durante a implementação,
+   não previsto pelo relatório original: para a equipe "Hospital de
+   Clínicas de Porto Alegre" (HCPA — a instituição mais citada como
+   exemplo em todo o código/CLAUDE.md), essas 3 palavras são os **únicos**
+   tokens significativos que sobram depois de excluir "hospital"/"de" (já
+   stopwords) — excluí-las também tornaria essa equipe **estruturalmente
+   impossível de detectar** por este mecanismo, mesmo que uma mensagem
+   citasse o nome inteiro da instituição por extenso. Seria uma regressão
+   de proteção pior que o falso-positivo que o achado A5 queria corrigir.
+   A exigência de 2 tokens sozinha já resolve os dois casos concretos do
+   achado A5, sem essa exclusão adicional — documentado em javadoc extenso
+   em `VerificadorNomePaciente.STOPWORDS_EQUIPE`. **Sinalizado aqui para
+   revisão do usuário** (não bloqueou o merge: é uma mudança estritamente
+   mais protetora que a alternativa sugerida, não uma redução de proteção
+   em relação ao estado anterior a esta calibragem).
+3. **Mensagem de erro simplificada:** `ProcessoDetalheController` parou de
+   citar o(s) termo(s) encontrado(s) na resposta 400 — "ensinava" ao
+   operador exatamente qual palavra evitar da próxima vez, sem nenhum
+   benefício real (o operador já sabe o nome do paciente/equipe do
+   processo que está editando).
+
+`VerificadorNomePacienteTest` ampliado com os casos de borda do relatório:
+nome inteiro curto com 1 e com 2 tokens citados, 2 de 3 tokens num nome
+"normal" (comportamento pré-existente confirmado inalterado), token
+genérico de equipe isolado, topônimo isolado, token 100% stoplistado,
+equipe curta de 1 token, acento/maiúscula. Dois testes pré-existentes
+(`VerificadorNomePacienteTest.equipeSolicitanteCitadaEBloqueada` e
+`MensagemAvaliadorIntegrationTest.operadorNaoConsegueEnviarMensagemQueCitaEquipeSolicitante`)
+tiveram a mensagem-fixture ajustada para citar 2 tokens da equipe em vez
+de 1 — o cenário que exercitavam (equipe citada por inteiro) continua
+`BLOQUEADO` como sempre foi; só deixou de ser satisfeito por um único
+token isolado, que é exatamente a calibragem pretendida.
+
+Suíte completa: **926 testes, 0 falhas** (918 + 8 novos, JDK 21).

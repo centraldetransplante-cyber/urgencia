@@ -1059,10 +1059,16 @@ public class ProcessoDetalheController {
         }
         var verificacao = verificadorNomePaciente.verificar(texto, p.getPacienteNome(), p.getSolicitanteEquipe());
         if (verificacao.nivel() != VerificadorNomePaciente.Nivel.LIVRE) {
+            // Mensagem SIMPLIFICADA (S4, item 3, calibragem 2026-08-10): nao
+            // cita mais o(s) termo(s) encontrado(s) - isso "ensinava" ao
+            // operador exatamente qual palavra evitar da proxima vez para
+            // burlar a checagem (efeito colateral identificado no achado A5
+            // do relatorio de vistoria), sem trazer nenhum beneficio real ao
+            // operador (ele ja sabe o nome do paciente e a equipe do
+            // processo que esta editando).
             return ResponseEntity.badRequest().body(java.util.Map.of("erro",
-                "Esta mensagem parece citar o paciente ou a equipe solicitante (contém \""
-                    + String.join("\", \"", verificacao.termosEncontrados())
-                    + "\"). Refira-se ao paciente apenas pelas iniciais e não cite a equipe solicitante. "
+                "Esta mensagem parece citar o paciente ou a equipe solicitante. "
+                    + "Refira-se ao paciente apenas pelas iniciais e não cite a equipe solicitante. "
                     + "Reescreva a mensagem e envie novamente."));
         }
         MembroUrgenciaRenal membro = membroRepo.findById(membroId)
