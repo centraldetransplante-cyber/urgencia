@@ -1380,23 +1380,38 @@
     // Conversas com os avaliadores (docs/RELATORIO-CHAT-MEMBROS-OPERADORES-2026-08.md):
     // uma thread 1:1 por parecer. Nasce ja EXPANDIDA (classe "show" no HTML)
     // quando ja existe conversa (existeConversaPorParecer, ver CLAUDE.md
-    // 2026-08-07) - nesse caso o poll comeca imediato, sem esperar clique.
-    // Sem conversa ainda, o card nasce recolhido e o poll so comeca quando o
-    // operador expande de fato (evento shown.bs.collapse) - evita ate 3 polls
-    // simultaneos rodando o tempo todo numa mesma tela quando ninguem esta
-    // lendo nenhuma conversa (risco R5 do relatorio). chat-solicitacao.js e
-    // reusado sem nenhuma modificacao (item 12.7 do relatorio).
+    // 2026-08-07) - nesse caso o poll comeca imediato, sem esperar clique -
+    // MAS somente se a aba "Respostas" (onde este elemento vive) estiver
+    // REALMENTE ativa no wizard. Sem essa segunda checagem, abrir a tela em
+    // QUALQUER outra aba ja marcava a mensagem do avaliador como lida para
+    // todos os operadores, sem que ninguem tivesse visto o texto (achado A1,
+    // docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md - o elemento "show" do
+    // Bootstrap Collapse e independente de qual aba do Bootstrap Tab esta
+    // visivel). Sem conversa ainda, o card nasce recolhido e o poll so
+    // comeca quando o operador expande de fato (evento shown.bs.collapse) -
+    // evita ate 3 polls simultaneos rodando o tempo todo numa mesma tela
+    // quando ninguem esta lendo nenhuma conversa (risco R5 do relatorio
+    // original). chat-solicitacao.js e reusado sem nenhuma modificacao (item
+    // 12.7 do relatorio) - o parametro marcarLida=true e so acrescentado na
+    // URL de poll, montada aqui no servidor.
+    function tabRespostasEstaAtiva() {
+        var pane = document.getElementById('pane-respostas');
+        return !!pane && pane.classList.contains('active');
+    }
     /*[# th:each="par : ${processo.pareceres}"]*/
     (function () {
         var parecerId = /*[[${par.id}]]*/ 0;
-        var pollUrl = /*[[@{/processos/{id}/avaliador/{membroId}/mensagens(id=${processo.id},membroId=${par.membro.id})}]]*/ '';
+        var pollUrl = /*[[@{/processos/{id}/avaliador/{membroId}/mensagens(id=${processo.id},membroId=${par.membro.id},marcarLida=true)}]]*/ '';
         var sendUrl = /*[[@{/processos/{id}/avaliador/{membroId}/mensagem/ajax(id=${processo.id},membroId=${par.membro.id})}]]*/ '';
         var deleteUrlBase = /*[[@{/processos/{id}/avaliador/{membroId}/mensagem/(id=${processo.id},membroId=${par.membro.id})}]]*/ '';
         var elCollapse = document.getElementById('chatAval' + parecerId);
         if (!elCollapse) return;
         var iniciado = false;
+        function podeIniciar() {
+            return tabRespostasEstaAtiva() && elCollapse.classList.contains('show');
+        }
         function iniciarThread() {
-            if (iniciado) return;
+            if (iniciado || !podeIniciar()) return;
             iniciado = true;
             iniciarChatSolicitacao({
                 pollUrl: pollUrl,
@@ -1413,7 +1428,11 @@
             });
         }
         elCollapse.addEventListener('shown.bs.collapse', iniciarThread);
-        if (elCollapse.classList.contains('show')) iniciarThread();
+        var tabRespostasBtn = document.getElementById('tab-respostas');
+        if (tabRespostasBtn) {
+            tabRespostasBtn.addEventListener('shown.bs.tab', iniciarThread);
+        }
+        if (podeIniciar()) iniciarThread();
     })();
     /*[/]*/
 </script>

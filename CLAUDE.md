@@ -4823,14 +4823,140 @@ Lote de correções de baixo risco, sem decisão de produto pendente:
 
 Suíte completa validada: **918 testes, 0 falhas** (908 + 10 novos, JDK 21).
 
-### F6 — Implementada, PR aberto (S10, achado A13): índices de banco + `marcarComoLidas` em lote
+### F3 — MESCLADA (S4, calibragem do `VerificadorNomePaciente`, achados A4/A5)
+
+**Decisão de produto confirmada pelo usuário (Q3 do relatório): seguir a
+recomendação do relatório na íntegra.** Implementados os 3 itens do S4:
+
+1. **Nome curto (achado A4):** o corte de tamanho mínimo de token do nome do
+   paciente caiu de 4 para 3 caracteres (`tokensSignificativosNome`). Um
+   nome inteiro "curto" (≤2 tokens significativos no total —
+   `NOME_CURTO_MAX_TOKENS`) passou a BLOQUEAR já com **1 único** token
+   encontrado (antes gerava só `ALERTA`, e no caso mais extremo — nome de
+   3 letras por token, ex. "Ana Luz" — nenhum token sequer era gerado,
+   então a mensagem passava **livre**). Nomes "normais" (>2 tokens
+   significativos) continuam com a regra antiga: 1 token = `ALERTA`, 2+ =
+   `BLOQUEADO`.
+2. **Equipe (achado A5):** `BLOQUEIO_EQUIPE_MIN_TOKENS = 2` — bloquear por
+   equipe agora exige **2 tokens distintos** da equipe solicitante
+   encontrados na mensagem (antes, 1 token isolado já bloqueava). Corrige
+   os dois falsos-positivos reproduzidos no relatório: "o exame de
+   *clinicas* não abriu" e "...desconsiderar o *alegre*" (vocabulário
+   clínico corrente e metade do nome de uma cidade, nenhum dos dois
+   identifica a equipe sozinho). Exceção simétrica à do nome: equipe
+   **curta** (≤1 token significativo no total — sigla sem espaços, ex.
+   "HNSC") continua bloqueando com 1 único token
+   (`BLOQUEIO_EQUIPE_MIN_TOKENS_TOTAL_CURTA`), senão essa equipe ficaria
+   estruturalmente impossível de detectar.
+   **`STOPWORDS_EQUIPE` ganhou termos genéricos**: `santa`, `casa`,
+   `geral`, `universitario`, `federal`, `municipal`, `estadual`,
+   `nefrologia`, `transplante`.
+   **Desvio deliberado da lista literal sugerida pelo relatório — não
+   inclui `clinicas`/`porto`/`alegre`.** Achado durante a implementação,
+   não previsto pelo relatório original: para a equipe "Hospital de
+   Clínicas de Porto Alegre" (HCPA — a instituição mais citada como
+   exemplo em todo o código/CLAUDE.md), essas 3 palavras são os **únicos**
+   tokens significativos que sobram depois de excluir "hospital"/"de" (já
+   stopwords) — excluí-las também tornaria essa equipe **estruturalmente
+   impossível de detectar** por este mecanismo, mesmo que uma mensagem
+   citasse o nome inteiro da instituição por extenso. Seria uma regressão
+   de proteção pior que o falso-positivo que o achado A5 queria corrigir.
+   A exigência de 2 tokens sozinha já resolve os dois casos concretos do
+   achado A5, sem essa exclusão adicional — documentado em javadoc extenso
+   em `VerificadorNomePaciente.STOPWORDS_EQUIPE`. **Sinalizado aqui para
+   revisão do usuário** (não bloqueou o merge: é uma mudança estritamente
+   mais protetora que a alternativa sugerida, não uma redução de proteção
+   em relação ao estado anterior a esta calibragem).
+3. **Mensagem de erro simplificada:** `ProcessoDetalheController` parou de
+   citar o(s) termo(s) encontrado(s) na resposta 400 — "ensinava" ao
+   operador exatamente qual palavra evitar da próxima vez, sem nenhum
+   benefício real (o operador já sabe o nome do paciente/equipe do
+   processo que está editando).
+
+`VerificadorNomePacienteTest` ampliado com os casos de borda do relatório:
+nome inteiro curto com 1 e com 2 tokens citados, 2 de 3 tokens num nome
+"normal" (comportamento pré-existente confirmado inalterado), token
+genérico de equipe isolado, topônimo isolado, token 100% stoplistado,
+equipe curta de 1 token, acento/maiúscula. Dois testes pré-existentes
+(`VerificadorNomePacienteTest.equipeSolicitanteCitadaEBloqueada` e
+`MensagemAvaliadorIntegrationTest.operadorNaoConsegueEnviarMensagemQueCitaEquipeSolicitante`)
+tiveram a mensagem-fixture ajustada para citar 2 tokens da equipe em vez
+de 1 — o cenário que exercitavam (equipe citada por inteiro) continua
+`BLOQUEADO` como sempre foi; só deixou de ser satisfeito por um único
+token isolado, que é exatamente a calibragem pretendida.
+
+Suíte completa: **926 testes, 0 falhas** (918 + 8 novos, JDK 21).
+
+### F2 — MESCLADA (S2 + S1, achados A1/A2 — a fase de maior risco do plano)
+
+Mexe em `processos/detalhe.html` (a tela mais complexa do sistema) e no
+`ProcessoDetalheController`. As duas sub-fases foram implementadas **juntas**
+(o próprio relatório explica por quê: entregar uma sem a outra deixa o furo
+aberto pela metade).
+
+- **S2 (achado A2):** `ProcessoDetalheController.detalhe` passou a aceitar
+  `@RequestParam(required = false) String aba` — quando vier um `paneId`
+  **real do wizard deste processo** (nunca uma string arbitrária da query
+  string; validado contra o `Set` de `paneId`s de `passosWizard`), usa esse
+  valor para `abaAtivaPaneId` em vez do cálculo automático (primeira etapa
+  não concluída). Sem o parâmetro, ou com um valor inválido, comportamento
+  idêntico a sempre. O link "Abrir processo" da caixa de entrada
+  (`mensagens-avaliadores-lista.html`) trocou a âncora morta `#respostas`
+  (não existia elemento com esse id — o painel real é `pane-respostas`, e
+  nenhum JS lia `location.hash`) por `@{/processos/{id}(id=...,
+  aba='pane-respostas')}`, um link expression Thymeleaf de verdade.
+- **S1 (achado A1):** o bug real — abrir `/processos/{id}` em **qualquer**
+  aba marcava a mensagem do avaliador como lida para **todos** os
+  operadores, porque `elCollapse.classList.contains('show')` (Bootstrap
+  Collapse) é independente de qual aba do Bootstrap Tab está visível. A tela
+  disparava o poll (que marca como lida no servidor) sempre que existia
+  conversa, mesmo com a aba "Respostas" oculta. Corrigido em duas camadas:
+  1. **JS** (`processos/detalhe.html`): nova função `tabRespostasEstaAtiva()`
+     (checa `#pane-respostas.classList.contains('active')`). A thread do
+     avaliador só inicia (`iniciarThread`) quando **as duas** condições
+     valem: `tabRespostasEstaAtiva()` **e** o collapse tem `show`. Registrado
+     também `shown.bs.tab` no botão `#tab-respostas` (id gerado
+     automaticamente a partir do `paneId`, ver `processos/detalhe.html`) —
+     quando o operador de fato entra na aba, as threads já expandidas (mas
+     ainda não iniciadas) começam a pollar naquele momento.
+  2. **Servidor (defesa em profundidade):** `GET .../avaliador/{membroId}/
+     mensagens` passou a exigir `?marcarLida=true` explícito para chamar
+     `marcarComoLidas` — sem o parâmetro (omitido ou `false`), devolve as
+     mensagens sem marcar nada. O `pollUrl` montado no Thymeleaf já embute
+     `marcarLida=true`, porque a instância só é criada quando a conversa
+     está de fato visível — não foi preciso modificar `chat-solicitacao.js`
+     (que continua proibido de ser bifurcado/reescrito), só o parâmetro
+     extra na URL montada no servidor.
+  Escopo confirmado: o canal **Avaliador↔Operador** (só o lado operador,
+  em `ProcessoDetalheController`) tinha esse defeito — o chat do
+  **Solicitante** não (fica sempre visível na barra lateral esquerda, REGRA
+  fixa do produto, sem tabs escondendo), e o lado do próprio **avaliador**
+  em `avaliador/votar.html` também não (página única, sem tabs escondendo o
+  chat).
+
+Testes novos em `MensagemAvaliadorIntegrationTest`: `?aba=pane-respostas`
+abre de fato no pane certo (com o pane Envio, que seria o padrão automático
+nesse fixture, confirmadamente INATIVO); `?aba` ausente preserva o cálculo
+automático de sempre; `?aba` com string arbitrária (`<script>...`) é
+ignorado com segurança (nunca refletido no HTML, cai no cálculo
+automático); abrir o detalhe em qualquer aba nunca marca mensagem do
+avaliador como lida sozinho; o poll AJAX sem `marcarLida=true` não altera
+nada; com `marcarLida=true`, marca de verdade.
+
+Suíte completa: **932 testes, 0 falhas** (926 + 6 novos, JDK 21). E2E
+dedicado (`ChatVisualVerificacaoIT`) verde; `FluxoCompletoProcessoIT` falha
+na mesma linha pré-existente e documentada (SMTP local ausente), não
+relacionada.
+
+### F6 — MESCLADA (S10, achado A13): índices de banco + `marcarComoLidas` em lote
 
 Implementada em paralelo à F2-F5 (sub-agente isolado em worktree próprio,
-branch `feat/chat-f6-indices-lote`, PR aberto contra `main`), enquanto o
-agente principal cuidava das demais fases. Escopo fechado, sem decisão de
-produto pendente — só performance estrutural, nenhuma regra de negócio
-mudou. **Merge coordenado pelo agente principal junto com F2-F5** — não
-mesclado automaticamente por este sub-agente.
+branch `feat/chat-f6-indices-lote`), enquanto o agente principal cuidava
+das demais fases. Escopo fechado, sem decisão de produto pendente — só
+performance estrutural, nenhuma regra de negócio mudou. Rebase manual sobre
+`main` (após F1/F2/F3 mescladas) feito pelo agente principal antes do
+merge, resolvendo o único conflito real (este arquivo, `CLAUDE.md` —
+mantidas as seções de F3/F2/F6, nenhuma descartada).
 
 - **Índices de banco** via `@Table(indexes = ...)`:
   - `MensagemAvaliador` (`mensagem_avaliador`): índice composto

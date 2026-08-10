@@ -168,9 +168,14 @@ class MensagemAvaliadorIntegrationTest {
     @Test
     @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
     void operadorNaoConsegueEnviarMensagemQueCitaEquipeSolicitante() throws Exception {
+        // Calibragem de 2026-08-10 (S4, achado A5): 1 token generico da
+        // equipe isolado ("clinicas") deixou de bloquear sozinho - a
+        // mensagem precisa citar >=2 tokens da equipe (ver
+        // VerificadorNomePacienteTest para os casos que passaram a ser
+        // LIVRE de proposito).
         mvc.perform(post("/processos/" + processoId + "/avaliador/" + membroId + "/mensagem/ajax")
                         .with(csrf())
-                        .param("texto", "O Hospital de Clinicas ligou pedindo prioridade neste caso."))
+                        .param("texto", "O Hospital de Clinicas de Porto Alegre ligou pedindo prioridade neste caso."))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.erro").exists());
 
@@ -247,10 +252,18 @@ class MensagemAvaliadorIntegrationTest {
      * suite passava "verde" com o bug em producao. Corrigido concatenando
      * com {@code +} (sintaxe padrao do Thymeleaf para Link Expression +
      * String literal). Renderiza o HTML de verdade, nao so o status.
+     *
+     * <p><b>Atualizado em 2026-08-10 (F2/S2, achado A2):</b> o alvo do link
+     * deixou de ser a ancora morta {@code #respostas} (nao existia elemento
+     * com esse id - o painel real e {@code pane-respostas} - e nenhum JS lia
+     * {@code location.hash}, entao o clique caia sempre na aba calculada pelo
+     * servidor, quase nunca Respostas) e passou a ser
+     * {@code ?aba=pane-respostas}, lido por {@code ProcessoDetalheController
+     * .detalhe} para escolher a aba ativa de verdade.</p>
      */
     @Test
     @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
-    void caixaDeEntradaRenderizaListaComThreadSemQuebrarNoLinkDeAncora() throws Exception {
+    void caixaDeEntradaRenderizaListaComLinkParaAAbaRespostas() throws Exception {
         var msg = new MensagemAvaliador();
         msg.setProcesso(processoRepo.findById(processoId).orElseThrow());
         msg.setMembro(membroRepo.findById(membroId).orElseThrow());
@@ -266,7 +279,7 @@ class MensagemAvaliadorIntegrationTest {
 
         assertThat(html)
                 .doesNotContain("Algo deu errado")
-                .contains("/processos/" + processoId + "#respostas");
+                .contains("/processos/" + processoId + "?aba=pane-respostas");
     }
 
     // ---- Lado AVALIADOR ----------------------------------------------------
@@ -363,6 +376,148 @@ class MensagemAvaliadorIntegrationTest {
                         + "EXPANDIDA quando ja existe conversa - mesma correcao do lado do "
                         + "avaliador, CLAUDE.md 2026-08-07.")
                 .contains("show");
+    }
+
+    // -------------------------------------------------------------------
+    // F2 / S2 (achado A2) - ?aba=... na URL escolhe a aba ativa de verdade
+    // -------------------------------------------------------------------
+
+    @Test
+    @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
+    void detalheComAbaRespostasNaQueryStringAbreNaAbaRespostasDeVerdade() throws Exception {
+        String html = mvc.perform(get("/processos/" + processoId + "?aba=pane-respostas"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        int idxRespostas = html.indexOf("id=\"pane-respostas\"");
+        assertThat(idxRespostas).isPositive();
+        String trechoRespostas = html.substring(Math.max(0, idxRespostas - 120), idxRespostas);
+        assertThat(trechoRespostas)
+                .as("Com ?aba=pane-respostas, o pane Respostas deve nascer ATIVO (classes "
+                        + "Bootstrap 'show active'), nao o pane calculado automaticamente.")
+                .contains("show active");
+
+        int idxEnvio = html.indexOf("id=\"pane-envio\"");
+        assertThat(idxEnvio).isPositive();
+        String trechoEnvio = html.substring(Math.max(0, idxEnvio - 120), idxEnvio);
+        assertThat(trechoEnvio)
+                .as("O pane Envio (o que seria escolhido pelo calculo automatico neste "
+                        + "fixture, ja que o envio ainda nao foi registrado) NAO deve estar "
+                        + "ativo quando ?aba=pane-respostas foi explicitamente pedido.")
+                .doesNotContain("show active");
+    }
+
+    @Test
+    @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
+    void detalheSemParametroAbaUsaOCalculoAutomaticoDeSempre() throws Exception {
+        // Fixture: envio ainda NAO foi registrado - o calculo automatico
+        // (primeira etapa nao concluida) sempre escolhe "Envio" aqui. Confirma
+        // que a introducao do parametro ?aba nao alterou o comportamento
+        // padrao (sem o parametro).
+        String html = mvc.perform(get("/processos/" + processoId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        int idxEnvio = html.indexOf("id=\"pane-envio\"");
+        assertThat(idxEnvio).isPositive();
+        String trechoEnvio = html.substring(Math.max(0, idxEnvio - 120), idxEnvio);
+        assertThat(trechoEnvio).contains("show active");
+    }
+
+    @Test
+    @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
+    void detalheComAbaInvalidaNaQueryStringIgnoraEUsaOCalculoAutomatico() throws Exception {
+        // Nunca aceita string arbitraria da query string como paneId - so
+        // valores que realmente existem no wizard deste processo.
+        String html = mvc.perform(get("/processos/" + processoId + "?aba=<script>alert(1)</script>"))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        assertThat(html).doesNotContain("<script>alert(1)</script>");
+        int idxEnvio = html.indexOf("id=\"pane-envio\"");
+        assertThat(idxEnvio).isPositive();
+        assertThat(html.substring(Math.max(0, idxEnvio - 120), idxEnvio)).contains("show active");
+    }
+
+    // -------------------------------------------------------------------
+    // F2 / S1 (achado A1) - so marca como lida quando a conversa e de fato
+    // exibida; o poll AJAX (chamado pelo JS so quando a aba Respostas esta
+    // realmente ativa) e a UNICA coisa que marca como lida - nunca o GET do
+    // detalhe da tela em si, em nenhuma aba.
+    // -------------------------------------------------------------------
+
+    @Test
+    @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
+    void abrirDetalheDoProcessoEmQualquerAbaNuncaMarcaMensagemDoAvaliadorComoLidaSozinho() throws Exception {
+        var msg = new MensagemAvaliador();
+        msg.setProcesso(processoRepo.findById(processoId).orElseThrow());
+        msg.setMembro(membroRepo.findById(membroId).orElseThrow());
+        msg.setRemetente(RemetenteMensagemAvaliador.AVALIADOR);
+        msg.setRemetenteId(1L);
+        msg.setTexto("O PDF nao abriu no meu celular.");
+        msg.setDataEnvio(java.time.LocalDateTime.now());
+        msg = mensagemRepo.saveAndFlush(msg);
+        Long msgId = msg.getId();
+
+        // GET simples (aba automatica = Envio neste fixture).
+        mvc.perform(get("/processos/" + processoId)).andExpect(status().isOk());
+        assertThat(mensagemRepo.findById(msgId).orElseThrow().isLida())
+                .as("Abrir a tela numa aba diferente de Respostas nao pode marcar a "
+                        + "mensagem do avaliador como lida.")
+                .isFalse();
+
+        // GET explicitamente pedindo a aba Respostas: o SERVIDOR ainda nao
+        // marca nada sozinho no render do HTML - so o poll AJAX seguinte
+        // (disparado pelo JS, testado abaixo) marca. Confirma que renderizar
+        // a pagina, por si so, nunca e o gatilho de "marcar como lida".
+        mvc.perform(get("/processos/" + processoId + "?aba=pane-respostas")).andExpect(status().isOk());
+        assertThat(mensagemRepo.findById(msgId).orElseThrow().isLida()).isFalse();
+    }
+
+    @Test
+    @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
+    void pollDoChatDoAvaliadorSemMarcarLidaNaoAlteraMensagensNaoLidas() throws Exception {
+        var msg = new MensagemAvaliador();
+        msg.setProcesso(processoRepo.findById(processoId).orElseThrow());
+        msg.setMembro(membroRepo.findById(membroId).orElseThrow());
+        msg.setRemetente(RemetenteMensagemAvaliador.AVALIADOR);
+        msg.setRemetenteId(1L);
+        msg.setTexto("O PDF nao abriu no meu celular.");
+        msg.setDataEnvio(java.time.LocalDateTime.now());
+        msg = mensagemRepo.saveAndFlush(msg);
+        Long msgId = msg.getId();
+
+        // Sem marcarLida=true (default false): e o que o JS agora faz quando
+        // a instancia do poll NUNCA chega a ser criada (aba Respostas nao
+        // ativa) - mas o teste bate direto no endpoint para provar a defesa
+        // em profundidade do SERVIDOR, independente do JS.
+        mvc.perform(get("/processos/" + processoId + "/avaliador/" + membroId + "/mensagens"))
+                .andExpect(status().isOk());
+
+        assertThat(mensagemRepo.findById(msgId).orElseThrow().isLida()).isFalse();
+    }
+
+    @Test
+    @WithMockUser(username = "operador-msg-it", roles = "OPERADOR")
+    void pollDoChatDoAvaliadorComMarcarLidaTrueMarcaAsMensagensComoLidas() throws Exception {
+        var msg = new MensagemAvaliador();
+        msg.setProcesso(processoRepo.findById(processoId).orElseThrow());
+        msg.setMembro(membroRepo.findById(membroId).orElseThrow());
+        msg.setRemetente(RemetenteMensagemAvaliador.AVALIADOR);
+        msg.setRemetenteId(1L);
+        msg.setTexto("O PDF nao abriu no meu celular.");
+        msg.setDataEnvio(java.time.LocalDateTime.now());
+        msg = mensagemRepo.saveAndFlush(msg);
+        Long msgId = msg.getId();
+
+        mvc.perform(get("/processos/" + processoId + "/avaliador/" + membroId + "/mensagens?marcarLida=true"))
+                .andExpect(status().isOk());
+
+        assertThat(mensagemRepo.findById(msgId).orElseThrow().isLida())
+                .as("marcarLida=true e o que o JS envia quando a instancia do poll e criada "
+                        + "de verdade (aba Respostas ativa E a thread expandida) - esse e o "
+                        + "unico caminho que deve marcar a mensagem como lida.")
+                .isTrue();
     }
 
     /** Posse: um medico so acessa/escreve na thread de um processo em que ele E avaliador. */

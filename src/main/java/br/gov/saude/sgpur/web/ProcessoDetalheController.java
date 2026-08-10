@@ -368,7 +368,9 @@ public class ProcessoDetalheController {
      */
     @GetMapping("/{id}")
     @Transactional
-    public String detalhe(@PathVariable Long id, Model model, Principal principal) {
+    public String detalhe(@PathVariable Long id,
+                          @RequestParam(required = false) String aba,
+                          Model model, Principal principal) {
         Processo p = processoRepo.findByIdComPareceres(id)
             .orElseThrow(() -> new IllegalArgumentException("Processo nao encontrado: " + id));
         // Inicializa a SEGUNDA colecao (bag) dentro desta transacao. Nao use
@@ -596,11 +598,27 @@ public class ProcessoDetalheController {
         // olhar pareceres.get(0), que diverge quando so parte dos pareceres
         // tem dataEnvio - ver javadoc de envioRegistrado).
         model.addAttribute("envioFeito", fluxoService.envioRegistrado(p));
-        String abaAtivaPaneId = passosWizard.stream()
-            .filter(passo -> passo.estado() != EstadoEtapa.CONCLUIDA)
-            .findFirst()
+        // Aba ativa: por padrao, a primeira etapa ainda NAO concluida (mesmo
+        // calculo de sempre). S2 (docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md,
+        // achado A2): se vier ?aba=... na URL e for um paneId REAL do wizard
+        // deste processo (nunca uma string arbitraria da query string), usa
+        // esse em vez do calculo automatico - e o que permite a caixa de
+        // entrada de mensagens dos avaliadores (mensagens-avaliadores-lista.html)
+        // levar o operador direto para a aba Respostas, em vez de sempre cair
+        // na primeira etapa pendente (frequentemente Envio).
+        java.util.Set<String> paneIdsValidos = passosWizard.stream()
             .map(PassoWizard::paneId)
-            .orElse(passosWizard.get(passosWizard.size() - 1).paneId());
+            .collect(java.util.stream.Collectors.toSet());
+        String abaAtivaPaneId;
+        if (aba != null && paneIdsValidos.contains(aba)) {
+            abaAtivaPaneId = aba;
+        } else {
+            abaAtivaPaneId = passosWizard.stream()
+                .filter(passo -> passo.estado() != EstadoEtapa.CONCLUIDA)
+                .findFirst()
+                .map(PassoWizard::paneId)
+                .orElse(passosWizard.get(passosWizard.size() - 1).paneId());
+        }
         model.addAttribute("abaAtivaPaneId", abaAtivaPaneId);
 
         // Sub-rotulo dinamico ao lado do status (ex.: "Maioria formada -
@@ -1015,10 +1033,27 @@ public class ProcessoDetalheController {
     // mesmo assim"), o que e aceitavel dado que o custo de um falso-positivo
     // (sobrenome comum) e so ter que reescrever a frase.
 
-    /** Polling do chat com um avaliador especifico (AJAX). */
+    /**
+     * Polling do chat com um avaliador especifico (AJAX).
+     *
+     * <p><b>S1 (docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A1) -
+     * {@code marcarLida} e defesa em profundidade.</b> Antes, TODO poll
+     * marcava como lida - e o JS de {@code processos/detalhe.html} iniciava o
+     * poll sempre que o elemento do chat tinha a classe Bootstrap
+     * {@code show} (existe conversa), SEM checar se a aba "Respostas" (onde
+     * o elemento vive) estava de fato a aba ATIVA do wizard. Resultado: abrir
+     * a tela do processo em QUALQUER outra aba (ex. Envio) ja marcava a
+     * mensagem do avaliador como lida, para TODOS os operadores, sem que
+     * ninguem tivesse realmente visto o texto. A correcao real fica no JS
+     * (so cria a instancia do poll quando a aba Respostas esta genuinamente
+     * ativa) - este parametro e so a rede de seguranca do lado do servidor:
+     * sem ele (omitido ou {@code false}), o endpoint devolve as mensagens
+     * SEM marcar nada como lido.</p>
+     */
     @GetMapping("/{id}/avaliador/{membroId}/mensagens")
     @ResponseBody
     public java.util.Map<String, Object> mensagensAvaliadorJson(@PathVariable Long id, @PathVariable Long membroId,
+            @RequestParam(required = false, defaultValue = "false") boolean marcarLida,
             Principal principal) {
         Processo p = processoService.buscar(id);
         java.util.Map<String, Object> resp = new java.util.LinkedHashMap<>();
@@ -1028,7 +1063,9 @@ public class ProcessoDetalheController {
             return resp;
         }
         Usuario operador = resolverOperador(principal);
-        mensagemAvaliadorService.marcarComoLidas(id, membroId, RemetenteMensagemAvaliador.AVALIADOR, operador.getId());
+        if (marcarLida) {
+            mensagemAvaliadorService.marcarComoLidas(id, membroId, RemetenteMensagemAvaliador.AVALIADOR, operador.getId());
+        }
         String nomeMedico = membroRepo.findById(membroId).map(m -> m.getRotulo()).orElse("Avaliador");
         resp.put("mensagens", mensagemAvaliadorService.paraChat(
             id, membroId, RemetenteMensagemAvaliador.OPERADOR, operador.getId(), "Voce", nomeMedico));
@@ -1059,10 +1096,16 @@ public class ProcessoDetalheController {
         }
         var verificacao = verificadorNomePaciente.verificar(texto, p.getPacienteNome(), p.getSolicitanteEquipe());
         if (verificacao.nivel() != VerificadorNomePaciente.Nivel.LIVRE) {
+            // Mensagem SIMPLIFICADA (S4, item 3, calibragem 2026-08-10): nao
+            // cita mais o(s) termo(s) encontrado(s) - isso "ensinava" ao
+            // operador exatamente qual palavra evitar da proxima vez para
+            // burlar a checagem (efeito colateral identificado no achado A5
+            // do relatorio de vistoria), sem trazer nenhum beneficio real ao
+            // operador (ele ja sabe o nome do paciente e a equipe do
+            // processo que esta editando).
             return ResponseEntity.badRequest().body(java.util.Map.of("erro",
-                "Esta mensagem parece citar o paciente ou a equipe solicitante (contém \""
-                    + String.join("\", \"", verificacao.termosEncontrados())
-                    + "\"). Refira-se ao paciente apenas pelas iniciais e não cite a equipe solicitante. "
+                "Esta mensagem parece citar o paciente ou a equipe solicitante. "
+                    + "Refira-se ao paciente apenas pelas iniciais e não cite a equipe solicitante. "
                     + "Reescreva a mensagem e envie novamente."));
         }
         MembroUrgenciaRenal membro = membroRepo.findById(membroId)
