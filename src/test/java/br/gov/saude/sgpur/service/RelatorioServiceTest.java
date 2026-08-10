@@ -22,6 +22,7 @@ import java.nio.file.Path;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.within;
@@ -409,12 +410,21 @@ class RelatorioServiceTest {
         // texto fixo "Favoraveis: 1 (regra: 2 de 3 defere o processo)" ao
         // lado de "DEFERIDO" sugeria que a propria regra citada foi violada.
         Processo p = processoBase(StatusProcesso.DEFERIDO);
-        MembroUrgenciaRenal coordenador = p.getPareceres().get(0).getMembro();
+        Parecer parecerDoCoordenador = p.getPareceres().get(0);
+        MembroUrgenciaRenal coordenador = parecerDoCoordenador.getMembro();
         coordenador.setCoordenador(true);
         coordenador.setNome("Dra. Coordenadora");
+        // Snapshot do papel no momento do voto: desde a F1 do relatorio de
+        // brechas de decisao (2026-08-10) o NOME impresso vem de
+        // ProcessoValidator.parecerDoCoordenador (que le
+        // Parecer.eraCoordenadorNoVoto), nao mais do cargo AO VIVO do membro
+        // -- por isso este fixture precisa fornecer o parecer, e nao so
+        // marcar o membro como coordenador.
+        parecerDoCoordenador.setEraCoordenadorNoVoto(true);
         when(fluxoService.montarEtapas(any())).thenReturn(List.of());
         when(processoService.contarFavoraveis(any())).thenReturn(1L);
         when(processoService.deferidoPeloCoordenador(any())).thenReturn(true);
+        when(processoService.parecerDoCoordenador(any())).thenReturn(Optional.of(parecerDoCoordenador));
 
         String texto = extrairTexto(novoService().gerar(p));
 

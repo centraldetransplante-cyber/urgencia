@@ -463,11 +463,22 @@ public class RelatorioService {
         // lado de "DEFERIDO", como se a propria regra citada tivesse sido
         // violada.
         if (processoService.deferidoPeloCoordenador(p)) {
-            String nomeCoordenador = p.getPareceres().stream()
-                .filter(par -> par.getResultado() == ResultadoParecer.FAVORAVEL
-                    && par.getMembro() != null && par.getMembro().isCoordenador())
-                .map(par -> par.getMembro().getNome())
-                .findFirst()
+            // O NOME impresso vem do MESMO parecer que a regra usou para
+            // deferir: ProcessoValidator.parecerDoCoordenador le o snapshot
+            // Parecer.eraCoordenadorNoVoto (o papel no INSTANTE do voto).
+            // Antes, esta busca filtrava par.getMembro().isCoordenador() --
+            // o cargo AO VIVO -- e o documento oficial creditava a excecao
+            // regimental ao medico ERRADO quando o cargo de coordenador
+            // mudava de mao depois do voto, ou perdia o nome de quem
+            // decidiu (Achado 1 do RELATORIO-VISTORIA-BRECHAS-DECISAO-
+            // 2026-08-10.md). A REGRA de decisao ja usava o snapshot e nao
+            // foi tocada: so a busca do nome estava fora dessa protecao.
+            String nomeCoordenador = processoService.parecerDoCoordenador(p)
+                .map(Parecer::getMembro)
+                .map(m -> m.getNome())
+                // Fallback generico: parecer legado sem snapshot (votado
+                // antes de 2026-08-07) ou membro nulo. Comportamento
+                // conservador preservado, identico ao anterior.
                 .orElse("Coordenador da CET-RS");
             return new Paragraph(
                 "Deferido pelo voto do Coordenador da CET-RS (" + nomeCoordenador

@@ -75,6 +75,47 @@ public class ProcessoValidator {
     }
 
     /**
+     * O {@link Parecer} FAVORAVEL que foi dado por quem era coordenador
+     * CET-RS NO MOMENTO DO VOTO, se existir.
+     *
+     * <p><b>Metodo SOMENTE LEITURA, adicionado para a apresentacao</b> (F1 do
+     * {@code docs/RELATORIO-VISTORIA-BRECHAS-DECISAO-2026-08-10.md}, Achado
+     * 1): {@code RelatorioService.paragrafoRegraDecisao} precisa do NOME do
+     * medico que exerceu a excecao regimental para imprimir no Relatorio
+     * Final, e fazia essa busca por conta propria filtrando
+     * {@code parecer.getMembro().isCoordenador()} -- o papel AO VIVO. Se o
+     * cargo de coordenador mudasse de mao depois do voto, o documento
+     * oficial passava a creditar a prerrogativa ao medico ERRADO (ou perdia
+     * o nome, caindo num rotulo generico). Este metodo usa o MESMO predicado
+     * de {@link #temVotoCoordenadorFavoravel} (o snapshot
+     * {@code Parecer.eraCoordenadorNoVoto}), para o nome impresso e a regra
+     * aplicada nunca divergirem.</p>
+     *
+     * <p><b>Nao altera nem substitui nenhuma regra de decisao.</b>
+     * {@link #temVotoCoordenadorFavoravel} continua com o corpo original e
+     * segue sendo a fonte da REGRA (quem venceu a votacao); este metodo so
+     * responde "qual parecer foi esse", para exibicao. Reescrever a regra em
+     * termos deste metodo foi deliberadamente deixado de fora do escopo da
+     * F1 -- exigiria nova aprovacao explicita do dono do produto.</p>
+     *
+     * <p>Parecer legado sem snapshot ({@code eraCoordenadorNoVoto == null},
+     * votado antes de 2026-08-07) NAO e considerado -- mesma decisao
+     * conservadora de {@link #temVotoCoordenadorFavoravel}, documentada no
+     * javadoc de {@code Parecer.eraCoordenadorNoVoto}. Nesse caso o
+     * documento cai no rotulo generico, que e o comportamento atual.</p>
+     *
+     * @return o parecer do coordenador, ou {@link Optional#empty()} se
+     *         nenhum voto FAVORAVEL foi dado por um coordenador (segundo o
+     *         snapshot do momento do voto)
+     */
+    public Optional<Parecer> parecerDoCoordenador(Processo processo) {
+        return processo.getPareceres().stream()
+            .filter(p -> p.getResultado() == ResultadoParecer.FAVORAVEL
+                && Boolean.TRUE.equals(p.getEraCoordenadorNoVoto()))
+            .findFirst();
+    }
+
+    /**
      * True se o processo foi deferido pelo voto do coordenador CET-RS
      * (status DEFERIDO + coordenador votou FAVORAVEL).
      */

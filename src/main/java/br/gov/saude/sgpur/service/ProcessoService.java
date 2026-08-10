@@ -599,6 +599,17 @@ public class ProcessoService {
         return validator.deferidoPeloCoordenador(processo);
     }
 
+    /**
+     * Delegacao somente leitura de
+     * {@link ProcessoValidator#parecerDoCoordenador} -- usada pelo
+     * Relatorio Final para imprimir o NOME de quem exerceu a excecao
+     * regimental (F1 do relatorio de brechas de decisao, Achado 1). Nao
+     * participa de nenhuma decisao.
+     */
+    public Optional<Parecer> parecerDoCoordenador(Processo processo) {
+        return validator.parecerDoCoordenador(processo);
+    }
+
     public long favoraveisNecessariosParaDeferir(Processo processo) {
         return validator.favoraveisNecessariosParaDeferir(processo);
     }
