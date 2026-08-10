@@ -7,6 +7,7 @@ import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
 import br.gov.saude.sgpur.service.FluxoProcessoService;
+import br.gov.saude.sgpur.service.ProcessoValidator;
 import br.gov.saude.sgpur.service.SolicitacaoOnlineService;
 import br.gov.saude.sgpur.service.TempoRespostaService;
 import br.gov.saude.sgpur.service.dto.EstadoEtapa;
@@ -42,6 +43,11 @@ class HomeControllerTest {
     @MockitoBean private MembroUrgenciaRenalService membroService;
     @MockitoBean private FluxoProcessoService fluxoService;
     @MockitoBean private TempoRespostaService tempoRespostaService;
+    // F2 do relatorio de vistoria de brechas (2026-08-10): HomeController
+    // agora calcula "qual regra decidiu" por processo (badge do voto unico
+    // do Coordenador CET-RS no Painel). Sem stub explicito o Mockito devolve
+    // null - o template trata null com seguranca (fragment badgeRegraDecisao).
+    @MockitoBean private ProcessoValidator processoValidator;
     // GlobalModelAdvice (@ControllerAdvice global) precisa dessas duas pro
     // contexto do @WebMvcTest subir - ver ArquivoControllerTest.
     @MockitoBean private UsuarioRepository usuarioRepository;

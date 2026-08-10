@@ -473,6 +473,10 @@ public class ProcessoDetalheController {
         }
         model.addAttribute("diasAguardandoPorParecer", diasAguardandoPorParecer);
         model.addAttribute("deferidoPeloCoordenador", processoService.deferidoPeloCoordenador(p));
+        // Fonte unica de "qual regra decidiu este processo" (F2 do relatorio
+        // de vistoria de brechas, 2026-08-10) - consumida pelo fragment
+        // layout :: badgeRegraDecisao e pelo rotulo de parecer dispensado.
+        model.addAttribute("regraDecisao", processoService.regraAplicada(p));
         model.addAttribute("emails", emailTemplateService.gerar(p));
         // IDs dos pareceres votados diretamente pelo avaliador autenticado no portal.
         // Esses pareceres sao IMUTAVEIS pelo operador: o campo de resultado fica

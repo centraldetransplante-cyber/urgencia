@@ -21,6 +21,7 @@
                       th:classappend="${processo.status.bootstrapBadge}"
                       th:text="${deferidoPeloCoordenador} ? 'Deferido pelo Coordenador da CET-RS' : ${processo.status.descricao}">status</span>
                 <span th:replace="~{layout :: badgeEncerramento(${processo}, 'align-middle px-3 py-1 ms-1')}"></span>
+                <span th:replace="~{layout :: badgeRegraDecisao(${regraDecisao}, 'align-middle px-3 py-1 ms-1')}"></span>
                 <!-- "Aguardando parecer"/"pronto para decidir" - pendencia interna
                      (medicos ainda votando), nao a pausa "Solicita informacao".
                      Padronizacao de cores 2026-08-06: azul. -->
@@ -816,10 +817,14 @@
                                 </span>
                             </td>
                             <td>
-                                <!-- Processo ja finalizado: pendentes viram "Dispensado pela maioria" -->
+                                <!-- Processo ja finalizado: rotulo do parecer dispensado depende da
+                                     regra que decidiu (Achado 4 - "Dispensado pela maioria" so quando
+                                     de fato houve maioria; a excecao do coordenador/cancelamento
+                                     dispensam por outro motivo). Fonte unica: RegraDecisao. -->
                                 <th:block th:if="${processo.status.finalizado and par.resultado == null}">
                                     <span class="badge bg-secondary">
-                                        <i class="bi bi-dash-circle"></i> Dispensado pela maioria
+                                        <i class="bi bi-dash-circle"></i>
+                                        <span th:text="${regraDecisao != null} ? ${regraDecisao.rotuloDispensado} : 'Dispensado pela maioria'">Dispensado pela maioria</span>
                                     </span>
                                 </th:block>
                                 <span th:if="${!processo.status.finalizado or par.resultado != null}"

@@ -5,6 +5,7 @@ import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
+import br.gov.saude.sgpur.service.ProcessoValidator;
 import br.gov.saude.sgpur.service.SolicitacaoOnlineService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -54,6 +55,11 @@ class ArquivoControllerTest {
     @MockitoBean private UsuarioRepository usuarioRepository;
     @MockitoBean private ParecerRepository parecerRepository;
     @MockitoBean private SolicitacaoOnlineService solicitacaoOnlineService;
+    // F2 do relatorio de vistoria de brechas (2026-08-10): ArquivoController
+    // agora calcula "qual regra decidiu" por processo (Achado 6). Sem stub
+    // explicito o Mockito devolve null - o template trata null com
+    // seguranca (fragment badgeRegraDecisao).
+    @MockitoBean private ProcessoValidator processoValidator;
 
     private static Processo processo(Long id, String numero, String paciente,
                                       String equipe, StatusProcesso status) {

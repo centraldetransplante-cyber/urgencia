@@ -216,6 +216,7 @@
                             </span>
                             <div th:if="${l.processo.status.isFinalizado()}" class="badge-encerramento-xs">
                                 <span th:replace="~{layout :: badgeEncerramento(${l.processo}, '')}"></span>
+                                <span th:replace="~{layout :: badgeRegraDecisao(${regrasDecisao.get(l.processo.id)}, '')}"></span>
                             </div>
                             <!-- Relatorio de clareza (2026-08-05), item 5.1: a celula mostra so o
                                  rotulo curto da etapa pendente (ex. "Envio aos 3 médicos"); a frase

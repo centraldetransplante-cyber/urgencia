@@ -6,6 +6,7 @@ import br.gov.saude.sgpur.service.dto.EstadoEtapa;
 import br.gov.saude.sgpur.service.dto.EtapaFluxo;
 import br.gov.saude.sgpur.service.dto.EtapaFluxo.Chave;
 import br.gov.saude.sgpur.service.dto.PassoWizard;
+import br.gov.saude.sgpur.service.dto.RegraDecisao;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -124,13 +125,32 @@ public class FluxoProcessoService {
         boolean respostasOk = maioria || todasRespondidas;
         boolean pausaBloqueiaDecisao = p.getStatus() == StatusProcesso.SOLICITA_INFORMACAO
             && !processoService.temVotoCoordenadorFavoravel(p);
+        boolean decididoResp = p.getStatus().isFinalizado();
         String detResp;
         if (totalMedicos == 0) {
             detResp = "Aguardando definicao dos medicos.";
+        } else if (decididoResp) {
+            // Achado 3 do relatorio de vistoria de brechas (2026-08-10): o
+            // texto antigo continuava dizendo "Maioria formada ... pronto
+            // para decidir" mesmo com o processo JA decidido (as vezes por 1
+            // voto so, do coordenador) - autocontraditorio, e reaparecia no
+            // Relatorio Final (secao "4. Andamento do processo") uma pagina
+            // depois de explicar corretamente a excecao do coordenador.
+            // Processo decidido nunca mais fica "pronto para decidir": conta
+            // a regra que de fato decidiu, via a mesma fonte unica usada
+            // pelo Relatorio Final/dossie/auditoria.
+            RegraDecisao regra = processoService.regraAplicada(p);
+            detResp = "Processo ja decidido (" + p.getStatus().getDescricao() + "). "
+                + regra.getRotuloLongo();
         } else if (maioria && pausaBloqueiaDecisao) {
             detResp = "Maioria formada (" + sugestaoResp.get().getDescricao()
                 + ") mas a decisao esta BLOQUEADA: aguardando informacao complementar "
                 + "de outro avaliador. Favoraveis: " + favoraveis + ".";
+        } else if (maioria && processoService.temVotoCoordenadorFavoravel(p)) {
+            // Idem: nao e "maioria formada" quando quem decidiu foi o voto
+            // isolado do coordenador (1 voto so).
+            detResp = "Voto favoravel do Coordenador da CET-RS registrado - pronto para decidir "
+                + "(" + sugestaoResp.get().getDescricao() + " isoladamente, sem precisar da maioria).";
         } else if (maioria) {
             detResp = "Maioria formada (" + sugestaoResp.get().getDescricao()
                 + ") - pronto para decidir. Favoraveis: " + favoraveis + ".";
@@ -160,7 +180,11 @@ public class FluxoProcessoService {
         boolean decidido = p.getStatus().isFinalizado();
         String detDecisao;
         if (decidido) {
-            detDecisao = "Processo " + p.getStatus().getDescricao() + ".";
+            // Mesma fonte unica do detResp acima: descreve a regra que de
+            // fato decidiu, em vez de um "Processo Deferido." generico que
+            // nao distingue maioria de excecao do coordenador.
+            RegraDecisao regra = processoService.regraAplicada(p);
+            detDecisao = "Processo " + p.getStatus().getDescricao() + " - " + regra.getRotuloLongo();
         } else if (pausaBloqueiaDecisao) {
             // Mesmo motivo do detResp acima: maioria formada nao significa
             // decisao liberada enquanto a pausa estiver ativa (exceto pelo
@@ -170,6 +194,16 @@ public class FluxoProcessoService {
                 .map(s -> "Sugestao automatica: " + s.getDescricao()
                     + " - BLOQUEADA pela pausa (aguardando informacao complementar).")
                 .orElse("Aguardando informacao complementar do solicitante.");
+        } else if (processoService.sugerirDecisao(p).isPresent()
+                && processoService.temVotoCoordenadorFavoravel(p)) {
+            // Achado 3 (segunda evidencia do relatorio de vistoria): apos
+            // reabertura, um processo com 1 unico voto (do coordenador) NAO
+            // pode dizer "regra 2 de 3 favoraveis" - a sugestao aqui vem da
+            // excecao regimental, nao da maioria.
+            detDecisao = "Sugestao automatica: " + processoService.sugerirDecisao(p).get().getDescricao()
+                + " (voto favoravel isolado do Coordenador da CET-RS, dispensa a maioria de "
+                + ProcessoService.FAVORAVEIS_PARA_DEFERIR + " de "
+                + ProcessoService.AVALIADORES_POR_PROCESSO + ").";
         } else {
             var sugestao = processoService.sugerirDecisao(p);
             detDecisao = sugestao

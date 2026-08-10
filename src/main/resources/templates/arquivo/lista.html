@@ -68,6 +68,7 @@
                         <span class="badge rounded-pill" th:classappend="${p.status.bootstrapBadge}"
                               th:text="${p.status.descricao}">status</span>
                         <span th:replace="~{layout :: badgeEncerramento(${p}, 'ms-1')}"></span>
+                        <span th:replace="~{layout :: badgeRegraDecisao(${regrasDecisao.get(p.id)}, 'ms-1')}"></span>
                     </td>
                     <td class="small text-muted text-center"
                         th:text="${p.dataDecisao != null} ? ${#temporals.format(p.dataDecisao, 'dd/MM/yyyy')} : '-'">-</td>

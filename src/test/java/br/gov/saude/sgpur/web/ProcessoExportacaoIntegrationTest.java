@@ -12,6 +12,8 @@ import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
 import br.gov.saude.sgpur.service.ExportacaoProcessoService;
+import com.lowagie.text.pdf.PdfReader;
+import com.lowagie.text.pdf.parser.PdfTextExtractor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -257,5 +259,87 @@ class ProcessoExportacaoIntegrationTest {
     void adminPodeExportar() throws Exception {
         mvc.perform(get("/processos/" + processoId + "/exportar"))
             .andExpect(status().isOk());
+    }
+
+    /**
+     * F2 do relatorio de vistoria de brechas (2026-08-10) - achados 2 e 3:
+     * um processo deferido pelo VOTO UNICO do Coordenador da CET-RS (1
+     * favoravel, excecao regimental) nao pode, em NENHUM documento do
+     * dossie (nem {@code Resumo-do-Processo.txt}, nem
+     * {@code Relatorio-Final.pdf}), afirmar "regra: 2 de 3" nem "Maioria
+     * formada" - contradiria a propria regra que cita, ao lado da decisao
+     * que a dispensou. Integracao real (contexto Spring completo, PDF
+     * gerado de verdade) - fonte unica RegraDecisao/ProcessoValidator
+     * .regraAplicada, consumida tanto pelo resumo quanto pelo PDF.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void dossieDeProcessoDeferidoPeloCoordenadorNaoAfirmaRegraDeMaioriaEmNenhumDocumento() throws Exception {
+        Processo p = new Processo();
+        p.setNumero("09/2026");
+        p.setAno(2026);
+        p.setSequencial(9);
+        p.setPacienteNome("Pedro Coordenador Teste");
+        p.setPacienteRgct("999888777");
+        p.setSolicitanteEquipe("HCPA");
+        p.setSolicitanteEmail("equipe@hcpa.example.com");
+        p.setDataSituacaoEspecial(LocalDate.of(2026, 3, 1));
+        p.setStatus(StatusProcesso.DEFERIDO);
+        processoRepo.saveAndFlush(p);
+        Long idCoordenador = p.getId();
+
+        MembroUrgenciaRenal coordenador = membroRepo.saveAndFlush(
+            new MembroUrgenciaRenal("CET-RS", "Dra. Coordenadora", "coord@example.com"));
+        coordenador.setCoordenador(true);
+        membroRepo.saveAndFlush(coordenador);
+
+        Parecer par = new Parecer(coordenador);
+        par.setProcesso(p);
+        par.setDataEnvio(LocalDate.of(2026, 3, 2));
+        par.setDataResposta(LocalDate.of(2026, 3, 3));
+        par.setResultado(ResultadoParecer.FAVORAVEL);
+        par.setEraCoordenadorNoVoto(true);
+        parecerRepo.saveAndFlush(par);
+
+        MvcResult res = mvc.perform(get("/processos/" + idCoordenador + "/exportar"))
+            .andExpect(status().isOk())
+            .andReturn();
+        res.getAsyncResult();
+        byte[] zip = res.getResponse().getContentAsByteArray();
+
+        String resumo = null;
+        byte[] relatorioPdf = null;
+        try (ZipInputStream in = new ZipInputStream(new ByteArrayInputStream(zip), StandardCharsets.UTF_8)) {
+            ZipEntry e;
+            while ((e = in.getNextEntry()) != null) {
+                if (e.getName().endsWith(ExportacaoProcessoService.ARQUIVO_RESUMO)) {
+                    resumo = new String(in.readAllBytes(), StandardCharsets.UTF_8);
+                } else if (e.getName().endsWith(ExportacaoProcessoService.ARQUIVO_RELATORIO)) {
+                    relatorioPdf = in.readAllBytes();
+                } else {
+                    in.readAllBytes();
+                }
+            }
+        }
+        assertThat(resumo).isNotNull();
+        assertThat(relatorioPdf).isNotNull();
+
+        // 1) Resumo-do-Processo.txt (Achado 2)
+        assertThat(resumo)
+            .contains("Deferido")
+            .doesNotContain("regra: 2 de 3")
+            .contains("Coordenador");
+
+        // 2) Relatorio-Final.pdf (Achado 3, secao "4. Andamento do processo")
+        PdfReader reader = new PdfReader(relatorioPdf);
+        StringBuilder texto = new StringBuilder();
+        for (int i = 1; i <= reader.getNumberOfPages(); i++) {
+            texto.append(new PdfTextExtractor(reader).getTextFromPage(i));
+        }
+        reader.close();
+        assertThat(texto.toString())
+            .doesNotContain("Maioria formada")
+            .doesNotContain("regra 2 de 3 favoraveis")
+            .doesNotContain("regra: 2 de 3");
     }
 }

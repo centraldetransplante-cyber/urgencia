@@ -149,6 +149,33 @@ class ProcessoListaControllerTest {
         org.assertj.core.api.Assertions.assertThat(html).contains("Encerrado");
     }
 
+    /**
+     * F2 do relatorio de vistoria de brechas (2026-08-10) - Achado 6: o
+     * badge do voto unico do Coordenador CET-RS (RegraDecisao) so existia
+     * na tela de detalhe. Renderiza a lista de verdade e confere que o
+     * badge aparece so no processo decidido pela excecao do coordenador.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void listaMostraBadgeDeRegraDecisaoApenasNoProcessoDecididoPeloCoordenador() throws Exception {
+        Processo peloCoordenador = new Processo();
+        peloCoordenador.setId(2L);
+        peloCoordenador.setNumero("04/2026");
+        peloCoordenador.setStatus(StatusProcesso.DEFERIDO);
+        Page<Processo> pagina = new PageImpl<>(List.of(processo, peloCoordenador), PageRequest.of(0, 15), 2);
+        when(processoService.buscar(isNull(), isNull(), any())).thenReturn(pagina);
+        when(processoService.regraAplicada(processo))
+            .thenReturn(br.gov.saude.sgpur.service.dto.RegraDecisao.NAO_DECIDIDO);
+        when(processoService.regraAplicada(peloCoordenador))
+            .thenReturn(br.gov.saude.sgpur.service.dto.RegraDecisao.VOTO_COORDENADOR);
+
+        String html = mvc.perform(get("/processos"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html).contains("Voto único do Coordenador CET-RS");
+    }
+
     @Test
     @WithMockUser(roles = "OPERADOR")
     void filtraPorTermoDeBuscaEStatus() throws Exception {

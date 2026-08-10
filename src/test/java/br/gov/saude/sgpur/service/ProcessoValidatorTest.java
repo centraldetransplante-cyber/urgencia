@@ -411,4 +411,74 @@ class ProcessoValidatorTest {
 
         assertThat(validator.validarRegistroEnvio(p)).isEmpty();
     }
+
+    // ----- regraAplicada (F2 do relatorio de vistoria de brechas, 2026-08-10) -----
+    //
+    // Metodo de LEITURA - reusa temVotoCoordenadorFavoravel sem alterar
+    // nenhum predicado existente. Cobre os 4 valores do vocabulario fechado
+    // RegraDecisao.
+
+    @Test
+    void regraAplicadaNaoDecididoQuandoProcessoAindaEmTramitacao() {
+        Processo enviado = new Processo();
+        enviado.setStatus(StatusProcesso.ENVIADO);
+        assertThat(validator.regraAplicada(enviado))
+            .isEqualTo(br.gov.saude.sgpur.service.dto.RegraDecisao.NAO_DECIDIDO);
+
+        Processo pausado = new Processo();
+        pausado.setStatus(StatusProcesso.SOLICITA_INFORMACAO);
+        assertThat(validator.regraAplicada(pausado))
+            .isEqualTo(br.gov.saude.sgpur.service.dto.RegraDecisao.NAO_DECIDIDO);
+
+        Processo semStatus = new Processo();
+        assertThat(validator.regraAplicada(semStatus))
+            .isEqualTo(br.gov.saude.sgpur.service.dto.RegraDecisao.NAO_DECIDIDO);
+    }
+
+    @Test
+    void regraAplicadaCancelamentoQuandoStatusCancelado() {
+        Processo p = new Processo();
+        p.setStatus(StatusProcesso.CANCELADO);
+        assertThat(validator.regraAplicada(p))
+            .isEqualTo(br.gov.saude.sgpur.service.dto.RegraDecisao.CANCELAMENTO);
+    }
+
+    @Test
+    void regraAplicadaMaioriaSimplesQuandoDeferidoOuIndeferidoSemCoordenador() {
+        Processo deferido = new Processo();
+        deferido.setStatus(StatusProcesso.DEFERIDO);
+        deferido.addParecer(parecer(ResultadoParecer.FAVORAVEL, false));
+        deferido.addParecer(parecer(ResultadoParecer.FAVORAVEL, false));
+        assertThat(validator.regraAplicada(deferido))
+            .isEqualTo(br.gov.saude.sgpur.service.dto.RegraDecisao.MAIORIA_SIMPLES);
+
+        Processo indeferido = new Processo();
+        indeferido.setStatus(StatusProcesso.INDEFERIDO);
+        indeferido.addParecer(parecer(ResultadoParecer.NAO_FAVORAVEL, false));
+        indeferido.addParecer(parecer(ResultadoParecer.NAO_FAVORAVEL, false));
+        assertThat(validator.regraAplicada(indeferido))
+            .isEqualTo(br.gov.saude.sgpur.service.dto.RegraDecisao.MAIORIA_SIMPLES);
+    }
+
+    @Test
+    void regraAplicadaVotoCoordenadorQuandoDeferidoPeloVotoUnicoDoCoordenador() {
+        Processo p = new Processo();
+        p.setStatus(StatusProcesso.DEFERIDO);
+        p.addParecer(parecer(ResultadoParecer.FAVORAVEL, true));
+        assertThat(validator.regraAplicada(p))
+            .isEqualTo(br.gov.saude.sgpur.service.dto.RegraDecisao.VOTO_COORDENADOR);
+    }
+
+    @Test
+    void regraAplicadaIndeferidoNuncaEhVotoCoordenadorMesmoComParecerLegadoInconsistente() {
+        // INDEFERIDO com coordenador favoravel nao e alcancavel pela regra de
+        // negocio real (validarContagemVotos veda), mas o metodo de LEITURA
+        // precisa continuar coerente mesmo diante de um dado legado
+        // inconsistente: so DEFERIDO pode ser VOTO_COORDENADOR.
+        Processo p = new Processo();
+        p.setStatus(StatusProcesso.INDEFERIDO);
+        p.addParecer(parecer(ResultadoParecer.FAVORAVEL, true));
+        assertThat(validator.regraAplicada(p))
+            .isEqualTo(br.gov.saude.sgpur.service.dto.RegraDecisao.MAIORIA_SIMPLES);
+    }
 }

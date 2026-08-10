@@ -592,6 +592,33 @@ class ProcessoDetalheControllerTest {
             .andExpect(model().attribute("deferidoPeloCoordenador", true));
     }
 
+    /**
+     * F2 do relatorio de vistoria de brechas (2026-08-10) - Achado 6: o
+     * badge "Voto único do Coordenador CET-RS" (fonte unica RegraDecisao)
+     * aparece no detalhe quando a regra aplicada e a excecao do
+     * coordenador, e NAO aparece num processo decidido por maioria simples
+     * comum (nao polui a tela com "maioria simples" em todo processo).
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void detalheMostraBadgeDeRegraDecisaoQuandoForDoCoordenadorENaoQuandoForMaioriaSimples() throws Exception {
+        when(processoService.regraAplicada(processo))
+            .thenReturn(br.gov.saude.sgpur.service.dto.RegraDecisao.VOTO_COORDENADOR);
+
+        mvc.perform(get("/processos/1"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "Voto único do Coordenador CET-RS")));
+
+        when(processoService.regraAplicada(processo))
+            .thenReturn(br.gov.saude.sgpur.service.dto.RegraDecisao.MAIORIA_SIMPLES);
+
+        mvc.perform(get("/processos/1"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Voto único do Coordenador CET-RS"))));
+    }
+
     @Test
     @WithMockUser(roles = "OPERADOR")
     void detalheExpoeProcessoVeioDoPortalFalseParaProcessoLegadoSemVinculo() throws Exception {

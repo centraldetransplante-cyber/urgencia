@@ -715,6 +715,74 @@ class FluxoProcessoServiceTest {
         assertThat(fluxo().veioDoPortal(p)).isFalse();
     }
 
+    // ----------------------------------------------------------------
+    // F2 do relatorio de vistoria de brechas (2026-08-10) - Achado 3:
+    // "Maioria formada"/"regra 2 de 3" em processo decidido por 1 voto so
+    // (voto do coordenador). Os textos abaixo passam a consultar
+    // ProcessoValidator.regraAplicada (fonte unica) em vez de assumir
+    // maioria incondicionalmente.
+    // ----------------------------------------------------------------
+
+    @Test
+    void processoJaDecididoPorMaioriaNaoDizMaisMaioriaFormadaNemProntoParaDecidir() {
+        Processo p = processoProntoParaDecisao();
+        p.setStatus(StatusProcesso.DEFERIDO);
+
+        List<EtapaFluxo> etapas = fluxo().montarEtapas(p);
+        assertThat(detalhe(etapas, Chave.RESPOSTAS))
+                .doesNotContain("Maioria formada")
+                .doesNotContain("pronto para decidir")
+                .contains("ja decidido")
+                .contains("Deferido");
+        assertThat(detalhe(etapas, Chave.DECISAO))
+                .contains("Deferido")
+                .contains("maioria simples");
+    }
+
+    @Test
+    void processoDecididoPeloCoordenadorNaoCitaRegraDeMaioriaEmNenhumaEtapa() {
+        // 1 voto so (do coordenador), processo ja Deferido - a etapa
+        // "Respostas dos medicos" e a "Decisao final" nao podem mais dizer
+        // "Maioria formada"/"regra 2 de 3 favoraveis": foi a excecao do
+        // coordenador que decidiu, com 1 voto so.
+        Processo p = processoComTresPareceres();
+        p.setStatus(StatusProcesso.DEFERIDO);
+        registrarEnvioCompleto(p);
+        p.getPareceres().get(0).getMembro().setCoordenador(true);
+        p.getPareceres().get(0).setId(1L);
+        p.getPareceres().get(0).setResultado(ResultadoParecer.FAVORAVEL);
+        p.getPareceres().get(0).setEraCoordenadorNoVoto(true);
+
+        List<EtapaFluxo> etapas = fluxo().montarEtapas(p);
+        assertThat(detalhe(etapas, Chave.RESPOSTAS))
+                .doesNotContain("Maioria formada")
+                .doesNotContain("regra: 2 de 3")
+                .contains("Coordenador");
+        assertThat(detalhe(etapas, Chave.DECISAO))
+                .doesNotContain("regra 2 de 3")
+                .contains("Coordenador");
+    }
+
+    @Test
+    void decisaoFinalAposReaberturaComVotoUnicoDoCoordenadorNaoCitaRegraDeMaioria() {
+        // Cenario do Achado 3 (segunda evidencia): processo reaberto volta
+        // para ENVIADO (nao finalizado) com 1 unico voto do coordenador
+        // registrado - a sugestao automatica nao pode dizer
+        // "regra 2 de 3 favoraveis" com 1 voto so.
+        Processo p = processoComTresPareceres();
+        p.setStatus(StatusProcesso.ENVIADO);
+        registrarEnvioCompleto(p);
+        p.getPareceres().get(0).getMembro().setCoordenador(true);
+        p.getPareceres().get(0).setId(1L);
+        p.getPareceres().get(0).setResultado(ResultadoParecer.FAVORAVEL);
+        p.getPareceres().get(0).setEraCoordenadorNoVoto(true);
+
+        List<EtapaFluxo> etapas = fluxo().montarEtapas(p);
+        assertThat(detalhe(etapas, Chave.DECISAO))
+                .doesNotContain("regra 2 de 3 favoraveis")
+                .contains("Coordenador da CET-RS");
+    }
+
     private EstadoEtapa estado(List<EtapaFluxo> etapas, EtapaFluxo.Chave chave) {
         return etapas.stream()
                 .filter(e -> e.chave() == chave)

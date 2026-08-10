@@ -3,6 +3,7 @@ package br.gov.saude.sgpur.web;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
+import br.gov.saude.sgpur.service.ProcessoValidator;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Controller;
@@ -11,7 +12,9 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Arquivo: listagem, apenas leitura, dos processos ENCERRADOS
@@ -31,9 +34,11 @@ public class ArquivoController {
     static final int TAMANHO_PAGINA = 15;
 
     private final ProcessoRepository processoRepository;
+    private final ProcessoValidator processoValidator;
 
-    public ArquivoController(ProcessoRepository processoRepository) {
+    public ArquivoController(ProcessoRepository processoRepository, ProcessoValidator processoValidator) {
         this.processoRepository = processoRepository;
+        this.processoValidator = processoValidator;
     }
 
     /**
@@ -59,6 +64,14 @@ public class ArquivoController {
         model.addAttribute("paginaAtual", pagina.getNumber());
         model.addAttribute("totalPaginas", pagina.getTotalPages());
         model.addAttribute("totalEncerrados", pagina.getTotalElements());
+        // Qual regra decidiu cada processo - Achado 6 do relatorio de
+        // vistoria de brechas (2026-08-10), mesmo padrao do mapa usado em
+        // ProcessoListaController.
+        Map<Long, br.gov.saude.sgpur.service.dto.RegraDecisao> regrasDecisao = new LinkedHashMap<>();
+        for (Processo p : pagina.getContent()) {
+            regrasDecisao.put(p.getId(), processoValidator.regraAplicada(p));
+        }
+        model.addAttribute("regrasDecisao", regrasDecisao);
         return "arquivo/lista";
     }
 }

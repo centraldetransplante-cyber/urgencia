@@ -607,6 +607,15 @@ public class ProcessoService {
         return validator.desfavoraveisNecessariosParaIndeferir();
     }
 
+    /**
+     * Qual regra decidiu (ou decide hoje) este processo - ver javadoc de
+     * {@link ProcessoValidator#regraAplicada}. Wrapper fino, mesmo padrao
+     * dos demais metodos deste bloco (delega ao validator).
+     */
+    public br.gov.saude.sgpur.service.dto.RegraDecisao regraAplicada(Processo processo) {
+        return validator.regraAplicada(processo);
+    }
+
     /** Registra a decisao final manual do servidor. */
     @Transactional
     public Processo decidir(Long id, StatusProcesso decisao, String motivoIndeferimento) {

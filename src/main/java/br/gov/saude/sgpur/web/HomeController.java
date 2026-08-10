@@ -4,9 +4,11 @@ import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
 import br.gov.saude.sgpur.service.FluxoProcessoService;
 import br.gov.saude.sgpur.service.MembroUrgenciaRenalService;
+import br.gov.saude.sgpur.service.ProcessoValidator;
 import br.gov.saude.sgpur.service.TempoRespostaService;
 import br.gov.saude.sgpur.service.TempoRespostaService.ResumoTempo;
 import br.gov.saude.sgpur.service.dto.EtapaFluxo;
+import br.gov.saude.sgpur.service.dto.RegraDecisao;
 import br.gov.saude.sgpur.web.dto.PainelLinha;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,15 +30,18 @@ public class HomeController {
     private final MembroUrgenciaRenalService membroService;
     private final FluxoProcessoService fluxoService;
     private final TempoRespostaService tempoRespostaService;
+    private final ProcessoValidator processoValidator;
 
     public HomeController(ProcessoRepository processoRepository,
                           MembroUrgenciaRenalService membroService,
                           FluxoProcessoService fluxoService,
-                          TempoRespostaService tempoRespostaService) {
+                          TempoRespostaService tempoRespostaService,
+                          ProcessoValidator processoValidator) {
         this.processoRepository = processoRepository;
         this.membroService = membroService;
         this.fluxoService = fluxoService;
         this.tempoRespostaService = tempoRespostaService;
+        this.processoValidator = processoValidator;
     }
 
     @GetMapping("/login")
@@ -141,6 +146,15 @@ public class HomeController {
         // de cada parecer (Favoravel / Desfavoravel / Aguardando / ...).
         List<PainelLinha> linhas = processos.stream().map(PainelLinha::de).toList();
         model.addAttribute("linhas", linhas);
+
+        // Qual regra decidiu cada processo - Achado 6 do relatorio de
+        // vistoria de brechas (2026-08-10): o badge do voto unico do
+        // Coordenador CET-RS so existia na tela de detalhe.
+        Map<Long, RegraDecisao> regrasDecisao = new LinkedHashMap<>();
+        for (Processo p : processos) {
+            regrasDecisao.put(p.getId(), processoValidator.regraAplicada(p));
+        }
+        model.addAttribute("regrasDecisao", regrasDecisao);
 
         // Indicador: tempo de resposta medio total dos avaliadores.
         ResumoTempo tempo = tempoRespostaService.calcular();

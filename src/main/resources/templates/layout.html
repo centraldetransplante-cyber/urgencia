@@ -521,6 +521,40 @@
 </th:block>
 
 <!-- ============================================================
+     badgeRegraDecisao(regra, classes): mostra QUAL regra decidiu o processo,
+     quando ela FOGE do caminho padrao de maioria simples (hoje so o voto
+     unico do Coordenador CET-RS) - Achado 6 do
+     docs/RELATORIO-VISTORIA-BRECHAS-DECISAO-2026-08-10.md ("o badge existia
+     em uma tela so"). FONTE UNICA: ProcessoValidator.regraAplicada
+     (RegraDecisao) - mesmo vocabulario usado pelo Relatorio Final, pelo
+     dossie exportado e pela auditoria, para as 4 reconstrucoes
+     independentes da mesma frase pararem de poder divergir entre si
+     (achados 2, 3 e 4).
+
+     `regra` ja vem CALCULADO pelo controller (RegraDecisao), nao um
+     Processo cru - mesmo padrao de `pendencias.get(p.id)` (EtapaFluxo ja
+     pronto) usado em processos/lista.html/dashboard.html. Deliberadamente
+     NAO chama um bean de servico direto do template (`@processoValidator...`)
+     porque isso quebraria qualquer @WebMvcTest que renderize estas telas
+     sem subir o contexto completo do Spring.
+
+     So exibe quando RegraDecisao.isExcepcional() - mostrar "maioria simples"
+     em todo processo deferido/indeferido normal nao informa nada (§3.3 do
+     relatorio) e e o caminho mais curto para o usuario pedir para remover
+     tudo.
+
+     Uso: <span th:replace="~{layout :: badgeRegraDecisao(${regra}, 'ms-1')}"></span>
+     ============================================================ -->
+<th:block th:fragment="badgeRegraDecisao(regra, classes)">
+    <span th:if="${regra != null and regra.excepcional}"
+          class="badge rounded-pill bg-info text-dark" th:classappend="${classes}"
+          th:title="${regra.rotuloLongo}">
+        <i class="bi bi-award-fill" aria-hidden="true"></i>
+        <span th:text="${regra.rotuloCurto}">Voto único do Coordenador CET-RS</span>
+    </span>
+</th:block>
+
+<!-- ============================================================
      Badge de TOM semantico (design system, 2026-08-05) - traduz o
      vocabulario "ok"/"danger"/"attention"/"aguardando"/"neutral" (usado por
      StatusProcesso.getTom(), SituacaoPedidoView.tom(),

@@ -4,6 +4,7 @@ import br.gov.saude.sgpur.domain.Anexo;
 import br.gov.saude.sgpur.domain.Parecer;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.service.dto.EtapaFluxo;
+import br.gov.saude.sgpur.service.dto.RegraDecisao;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -265,9 +266,18 @@ public class ExportacaoProcessoService {
             campo(sb, "  Justificativa", par.getJustificativa());
             sb.append('\n');
         }
-        campo(sb, "Pareceres favoraveis", processoService.contarFavoraveis(p)
-            + " (regra: " + ProcessoService.FAVORAVEIS_PARA_DEFERIR + " de "
-            + ProcessoService.AVALIADORES_POR_PROCESSO + " defere)");
+        // Achado 2 do relatorio de vistoria de brechas (2026-08-10): o texto
+        // antigo era fixo em "(regra: 2 de 3 defere)", mesmo quando o
+        // processo foi deferido pelo voto isolado do Coordenador da CET-RS
+        // (ex.: "1 (regra: 2 de 3 defere)" ao lado de "Resultado: Deferido"
+        // - o dossie afirmava que a propria regra que citava tinha sido
+        // violada). Fonte unica com o Relatorio Final/o badge/a auditoria:
+        // RegraDecisao (ProcessoValidator.regraAplicada), nunca reconstruida
+        // por conta propria.
+        campo(sb, "Pareceres favoraveis", String.valueOf(processoService.contarFavoraveis(p)));
+        campo(sb, "Pareceres desfavoraveis", String.valueOf(processoService.contarNaoFavoraveis(p)));
+        RegraDecisao regraDecisao = processoService.regraAplicada(p);
+        campo(sb, "Regra de decisao aplicada", regraDecisao.getRotuloLongo());
         sb.append('\n');
 
         linhaTitulo(sb, "5. DECISAO FINAL");

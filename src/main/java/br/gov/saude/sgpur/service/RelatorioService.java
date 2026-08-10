@@ -261,7 +261,15 @@ public class RelatorioService {
             } else if (par.getResultado() != null) {
                 textoParecer = PdfRelatorioBuilder.descricaoResultado(par.getResultado());
             } else {
-                textoParecer = p.getStatus().isFinalizado() ? "Dispensado pela maioria" : "Pendente";
+                // Achado 4 do relatorio de vistoria de brechas (2026-08-10):
+                // "Dispensado pela maioria" so faz sentido quando de fato
+                // houve maioria - na excecao do coordenador (1 voto so) e no
+                // cancelamento, o rotulo generico induzia o leitor a achar
+                // que a regra padrao foi usada. Mesma fonte unica de
+                // paragrafoRegraDecisao (abaixo), sem duplicar o predicado.
+                textoParecer = p.getStatus().isFinalizado()
+                    ? processoService.regraAplicada(p).getRotuloDispensado()
+                    : "Pendente";
             }
             pdfBuilder.celula(t2, textoParecer, Element.ALIGN_LEFT, false);
             pdfBuilder.celula(t2, par.getDataResposta() != null ? par.getDataResposta().format(DATA) : "-",

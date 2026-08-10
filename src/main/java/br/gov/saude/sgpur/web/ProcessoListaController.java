@@ -83,6 +83,17 @@ public class ProcessoListaController {
         java.util.Set<Long> idsSemComprovanteSnt = processoService.idsDeferidosSemComprovanteSnt();
         model.addAttribute("idsSemComprovanteSnt", idsSemComprovanteSnt);
         model.addAttribute("totalSemComprovanteSnt", idsSemComprovanteSnt.size());
+        // Qual regra decidiu cada processo (id -> RegraDecisao) - Achado 6 do
+        // relatorio de vistoria de brechas (2026-08-10): o badge "Deferido
+        // pelo Coordenador da CET-RS" so existia na tela de detalhe. Mesmo
+        // padrao do mapa de pendencias acima (calculado uma vez aqui, o
+        // template so consome via regrasDecisao.get(p.id)).
+        java.util.Map<Long, br.gov.saude.sgpur.service.dto.RegraDecisao> regrasDecisao =
+            new java.util.LinkedHashMap<>();
+        for (Processo p : processos) {
+            regrasDecisao.put(p.getId(), processoService.regraAplicada(p));
+        }
+        model.addAttribute("regrasDecisao", regrasDecisao);
         return "processos/lista";
     }
 }

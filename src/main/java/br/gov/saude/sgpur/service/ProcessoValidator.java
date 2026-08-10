@@ -1,6 +1,7 @@
 package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.*;
+import br.gov.saude.sgpur.service.dto.RegraDecisao;
 import org.springframework.stereotype.Service;
 
 import java.util.Optional;
@@ -81,6 +82,37 @@ public class ProcessoValidator {
     public boolean deferidoPeloCoordenador(Processo processo) {
         return processo.getStatus() == StatusProcesso.DEFERIDO
             && temVotoCoordenadorFavoravel(processo);
+    }
+
+    /**
+     * Qual regra decidiu (ou decide hoje) este processo - vocabulario
+     * fechado {@link RegraDecisao}, fonte unica consumida por templates
+     * (badge), pelo Relatorio Final, pelo dossie exportado e pela auditoria
+     * (F2 do {@code docs/RELATORIO-VISTORIA-BRECHAS-DECISAO-2026-08-10.md},
+     * achados 2, 3, 4 e 6).
+     *
+     * <p><b>Metodo de LEITURA apenas</b> - reusa {@link #temVotoCoordenadorFavoravel}
+     * (snapshot, ja usado por {@code sugerirDecisao}/{@code deferidoPeloCoordenador})
+     * sem duplicar nem alterar o predicado. Nao influencia nenhuma decisao:
+     * so descreve, em texto, uma decisao ja tomada ou a situacao atual.</p>
+     */
+    public RegraDecisao regraAplicada(Processo processo) {
+        StatusProcesso status = processo.getStatus();
+        if (status == null || !status.isFinalizado()) {
+            return RegraDecisao.NAO_DECIDIDO;
+        }
+        if (status == StatusProcesso.CANCELADO) {
+            return RegraDecisao.CANCELAMENTO;
+        }
+        // DEFERIDO ou INDEFERIDO daqui pra baixo. So DEFERIDO pode ter sido
+        // decidido pelo voto isolado do coordenador (mesma condicao de
+        // deferidoPeloCoordenador, sem duplicar temVotoCoordenadorFavoravel -
+        // INDEFERIDO com coordenador favoravel nao e alcancavel, ver
+        // validarContagemVotos).
+        if (status == StatusProcesso.DEFERIDO && temVotoCoordenadorFavoravel(processo)) {
+            return RegraDecisao.VOTO_COORDENADOR;
+        }
+        return RegraDecisao.MAIORIA_SIMPLES;
     }
 
     /** Quantos pareceres favoraveis sao necessarios para Deferir (considerando coordenador). */
