@@ -211,6 +211,24 @@ public class AvaliadorController {
                 par.getResultado(), par.getDataHoraVoto(), par.getDataResposta()));
         }
 
+        // Achado 10 do relatorio de vistoria de brechas (2026-08-10):
+        // processos decididos ANTES deste avaliador conseguir votar (maioria
+        // simples ou excecao do coordenador) - o parecer dele fica para
+        // sempre com resultado null, mas o processo some de "pendentes"
+        // (status deixou de aceitar voto) sem nunca aparecer no historico
+        // (que exige resultado != null). Mesma projecao enxuta das outras
+        // secoes desta tela: SO numero do processo + iniciais - NUNCA o
+        // resultado da decisao nem qualquer dado de outro avaliador
+        // (imparcialidade, ver ProcessoVotoView/ParecerVotoView).
+        List<Parecer> dispensadosEntidades = parecerRepo.findDispensadosComProcesso(
+            membroId, List.of(StatusProcesso.DEFERIDO, StatusProcesso.INDEFERIDO, StatusProcesso.CANCELADO));
+        Map<Long, String> iniciaisDispensados = new HashMap<>();
+        List<ParecerDispensadoView> dispensados = new java.util.ArrayList<>();
+        for (Parecer par : dispensadosEntidades) {
+            iniciaisDispensados.put(par.getId(), Iniciais.de(par.getProcesso().getPacienteNome()));
+            dispensados.add(new ParecerDispensadoView(par.getId(), par.getProcesso().getNumero()));
+        }
+
         // Contadores consolidados (reutilizam as queries de contagem do repo).
         long totalAtribuidos = parecerRepo.countByMembroId(membroId);
         long totalAvaliados = parecerRepo.countByMembroIdAndResultadoNotNull(membroId);
@@ -231,6 +249,8 @@ public class AvaliadorController {
         model.addAttribute("prazoDias", prazoDias);
         model.addAttribute("historico", historico);
         model.addAttribute("iniciaisHistorico", iniciaisHistorico);
+        model.addAttribute("dispensados", dispensados);
+        model.addAttribute("iniciaisDispensados", iniciaisDispensados);
         // String, nao a entidade: membro ja vem totalmente carregado por
         // resolverMembro (MembroUrgenciaRenalRepository.findById, sem proxy
         // lazy), mas mesmo assim so passamos o rotulo pronto - nao a entidade
@@ -791,4 +811,12 @@ public class AvaliadorController {
     /** Projecao para o historico de votos do proprio avaliador. */
     private record ParecerHistoricoView(Long id, String processoNumero, ResultadoParecer resultado,
                                         LocalDateTime dataHoraVoto, LocalDate dataResposta) {}
+
+    /**
+     * Projecao para processos DISPENSADOS antes do avaliador conseguir votar
+     * (Achado 10 do relatorio de vistoria de brechas, 2026-08-10) - so
+     * numero do processo, DELIBERADAMENTE sem resultado da decisao nem
+     * qualquer dado de outro avaliador (imparcialidade).
+     */
+    private record ParecerDispensadoView(Long id, String processoNumero) {}
 }

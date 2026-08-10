@@ -103,6 +103,24 @@ public interface ParecerRepository extends JpaRepository<Parecer, Long> {
     List<Parecer> findHistoricoComProcesso(@Param("membroId") Long membroId);
 
     /**
+     * Pareceres NUNCA votados (resultado null) cujo processo ja foi decidido
+     * (status finalizado) - o avaliador foi DISPENSADO por maioria simples
+     * ou pela excecao do coordenador antes de conseguir votar. Achado 10 do
+     * relatorio de vistoria de brechas (2026-08-10): antes o processo
+     * simplesmente "evaporava" da tela do avaliador sem explicacao nenhuma -
+     * nao aparece mais em pendentes (status deixou de aceitar voto) e nunca
+     * apareceu no historico ({@link #findHistoricoComProcesso} exige
+     * resultado != null). {@code statusFinal} e passado pelo caller (lista
+     * de status finalizados) em vez de fixo aqui, mesmo padrao ja usado em
+     * {@code ProcessoRepository.buscarEncerrados}.
+     */
+    @Query("select p from Parecer p left join fetch p.processo "
+        + "where p.membro.id = :membroId and p.resultado is null "
+        + "and p.processo.status in :statusFinal order by p.processo.dataDecisao desc")
+    List<Parecer> findDispensadosComProcesso(@Param("membroId") Long membroId,
+                                              @Param("statusFinal") List<StatusProcesso> statusFinal);
+
+    /**
      * Mesmo criterio de {@link #findByProcessoIdAndMembroId}, com o Processo
      * associado carregado via fetch join - usado quando o chamador precisa
      * navegar parecer.getProcesso() (ex.: checar o status antes de liberar o

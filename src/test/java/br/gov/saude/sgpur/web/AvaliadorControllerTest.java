@@ -115,6 +115,65 @@ class AvaliadorControllerTest {
                 org.hamcrest.Matchers.containsString("Maria Rosa Silva"))));
     }
 
+    /**
+     * F6 do relatorio de vistoria de brechas (2026-08-10) - Achado 10: um
+     * processo decidido (maioria simples/excecao do coordenador) ANTES de
+     * este avaliador conseguir votar aparece na secao "Processos decididos
+     * sem o seu voto", mas SO com numero + iniciais - NUNCA o resultado da
+     * decisao (Deferido/Indeferido) nem o nome completo do paciente
+     * (imparcialidade, mesma protecao das demais secoes desta tela).
+     */
+    @Test
+    @WithMockUser(username = "avaliador1", roles = "AVALIADOR")
+    void listaMostraProcessosDispensadosSemResultadoNemNomeCompleto() throws Exception {
+        when(usuarioRepo.findByUsername("avaliador1")).thenReturn(Optional.of(usuario));
+        when(parecerRepo.findPendentesComProcesso(10L)).thenReturn(List.of());
+        when(anexoRepo.findByProcessoIdAndTipo(org.mockito.ArgumentMatchers.anyLong(),
+            eq(TipoAnexo.SOLICITACAO_AVALIADOR))).thenReturn(List.of());
+
+        Processo processoDecidido = new Processo();
+        processoDecidido.setId(2L);
+        processoDecidido.setNumero("02/2026");
+        processoDecidido.setPacienteNome("Joao Batista Nunes");
+        processoDecidido.setStatus(StatusProcesso.DEFERIDO);
+        Parecer parecerDispensado = new Parecer(membro);
+        parecerDispensado.setId(99L);
+        parecerDispensado.setProcesso(processoDecidido);
+        // resultado continua null - nunca votou, foi dispensado.
+
+        when(parecerRepo.findDispensadosComProcesso(eq(10L), any()))
+            .thenReturn(List.of(parecerDispensado));
+
+        mvc.perform(get("/avaliador"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("02/2026")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("J.B.N.")))
+            // NUNCA o nome completo do paciente do processo dispensado
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Joao Batista Nunes"))))
+            // NUNCA o resultado da decisao (o avaliador nao vota nem sabe o desfecho)
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Deferido"))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Indeferido"))));
+    }
+
+    /**
+     * Espelho do teste acima: sem nenhum processo dispensado, a secao inteira
+     * some (nao polui a tela no caso comum).
+     */
+    @Test
+    @WithMockUser(username = "avaliador1", roles = "AVALIADOR")
+    void listaNaoMostraSecaoDeDispensadosQuandoNaoHaNenhum() throws Exception {
+        when(usuarioRepo.findByUsername("avaliador1")).thenReturn(Optional.of(usuario));
+        when(parecerRepo.findPendentesComProcesso(10L)).thenReturn(List.of());
+
+        mvc.perform(get("/avaliador"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Processos decididos sem o seu voto"))));
+    }
+
     @Test
     @WithMockUser(username = "avaliador1", roles = "AVALIADOR")
     void listaSeparaAtrasadosDosDemaisPendentes() throws Exception {

@@ -399,6 +399,33 @@
         </div>
     </div>
 
+    <!-- F6 do relatorio de vistoria de brechas (2026-08-10) - Achado 10:
+         processos decididos (maioria simples ou excecao do coordenador)
+         ANTES deste avaliador conseguir votar. Antes, o processo
+         simplesmente "evaporava": some de "Pendentes" e nunca aparece no
+         "Histórico" (que exige um voto de verdade). So aparece quando ha
+         ao menos 1 (nao polui a tela no caso comum). DELIBERADAMENTE sem
+         resultado da decisao nem qualquer dado de outro avaliador -
+         mesma protecao de imparcialidade das demais secoes desta tela. -->
+    <th:block th:if="${!dispensados.isEmpty()}">
+    <h2 class="secao-titulo"><i class="bi bi-info-circle"></i> Processos decididos sem o seu voto</h2>
+    <div class="card mb-4">
+        <div class="card-body py-2">
+            <p class="small text-muted mb-2">
+                Estes processos foram decididos por maioria simples (2 de 3) ou pela exceção
+                do coordenador antes que seu parecer fosse necessário — não é preciso votar
+                neles.
+            </p>
+        </div>
+        <div class="list-group list-group-flush">
+            <div th:each="par : ${dispensados}" class="list-group-item p-3 d-flex justify-content-between align-items-center">
+                <span class="fw-semibold" th:text="${par.processoNumero}">00/0000</span>
+                <span class="font-monospace small text-muted" th:text="${iniciaisDispensados[par.id]}">X.X.X.</span>
+            </div>
+        </div>
+    </div>
+    </th:block>
+
     <!-- Estatisticas pessoais: interesse secundario, por isso ficam por
          ultimo - o avaliador entra no portal para votar, nao para ver
          numeros sobre si mesmo (ver Fase 3 do relatorio de UI). -->
