@@ -370,6 +370,15 @@ public class RelatorioService {
             // decisao e nao deve ter o mesmo peso visual de uma.
             pdfBuilder.linha(t3, "Resultado", "Em andamento (processo ainda não decidido)");
         }
+        // Achado 8 do relatorio de vistoria de brechas (2026-08-10): antes,
+        // nenhuma tela nem documento indicava que o processo ja tinha sido
+        // reaberto - o Relatorio Final apresentava a decisao atual como se
+        // fosse necessariamente a UNICA ja tomada. So aparece quando ha ao
+        // menos 1 reabertura (nao polui o documento no caso comum).
+        if (p.getReaberturasOuZero() > 0) {
+            pdfBuilder.linha(t3, "Reaberturas",
+                p.getReaberturasOuZero() + " vez(es) - a decisão atual pode não ser a primeira.");
+        }
         switch (p.getStatus()) {
             case INDEFERIDO -> {
                 pdfBuilder.linha(t3, "Motivo do indeferimento", PdfRelatorioBuilder.nvl(p.getMotivoIndeferimento()));

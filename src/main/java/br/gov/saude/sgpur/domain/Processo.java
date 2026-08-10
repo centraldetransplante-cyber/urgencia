@@ -138,6 +138,22 @@ public class Processo {
     @Column(name = "ultimo_lembrete_snt_em")
     private LocalDateTime ultimoLembreteSntEm;
 
+    /**
+     * Quantas vezes este processo ja foi reaberto pelo ADMIN
+     * ({@code ProcessoService.reabrir}) - Achado 8 do relatorio de vistoria
+     * de brechas (2026-08-10): antes, nenhuma tela mostrava que um processo
+     * decidido ja tinha sido decidido antes, so a auditoria (ADMIN-only).
+     * Alimenta o badge "Reaberto Nx" e uma linha no Relatorio Final.
+     *
+     * <p>Nullable de proposito: processo que nunca foi reaberto fica com
+     * {@code null} (== 0 reaberturas), sem exigir backfill manual em
+     * producao (mesmo padrao de {@code ultimoLembreteSntEm}/{@code
+     * numeroOficio} - ver CLAUDE.md, "ddl-auto: update nao faz backfill em
+     * coluna nova").</p>
+     */
+    @Column(name = "reaberturas")
+    private Integer reaberturas;
+
     // ----- Auditoria -----
     @Column(name = "data_cadastro", nullable = false)
     private LocalDateTime dataCadastro = LocalDateTime.now();
@@ -377,6 +393,19 @@ public class Processo {
 
     public void setUltimoLembreteSntEm(LocalDateTime ultimoLembreteSntEm) {
         this.ultimoLembreteSntEm = ultimoLembreteSntEm;
+    }
+
+    public Integer getReaberturas() {
+        return reaberturas;
+    }
+
+    public void setReaberturas(Integer reaberturas) {
+        this.reaberturas = reaberturas;
+    }
+
+    /** {@link #getReaberturas()} tratando {@code null} como 0 - conveniencia para servicos/templates. */
+    public int getReaberturasOuZero() {
+        return reaberturas == null ? 0 : reaberturas;
     }
 
     public LocalDateTime getDataCadastro() {

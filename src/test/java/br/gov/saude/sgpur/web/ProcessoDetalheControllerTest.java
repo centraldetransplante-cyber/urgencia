@@ -619,6 +619,28 @@ class ProcessoDetalheControllerTest {
                 org.hamcrest.Matchers.containsString("Voto único do Coordenador CET-RS"))));
     }
 
+    /**
+     * F5 do relatorio de vistoria de brechas (2026-08-10) - Achado 8: o
+     * badge "Reaberto Nx" aparece so quando o processo ja foi reaberto pelo
+     * menos uma vez - leitura pura de Processo.reaberturasOuZero, sem
+     * depender de nenhum servico mockado.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void detalheMostraBadgeDeReaberturasSoQuandoJaHouveReabertura() throws Exception {
+        mvc.perform(get("/processos/1"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Reaberto"))));
+
+        processo.setReaberturas(3);
+
+        mvc.perform(get("/processos/1"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Reaberto")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("3")));
+    }
+
     @Test
     @WithMockUser(roles = "OPERADOR")
     void detalheExpoeProcessoVeioDoPortalFalseParaProcessoLegadoSemVinculo() throws Exception {

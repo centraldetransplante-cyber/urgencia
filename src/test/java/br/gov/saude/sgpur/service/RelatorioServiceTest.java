@@ -525,6 +525,25 @@ class RelatorioServiceTest {
         assertThat(texto).doesNotContain("Data de envio ao SNT");
     }
 
+    /**
+     * F5 do relatorio de vistoria de brechas (2026-08-10) - Achado 8: uma
+     * linha "Reaberturas" so aparece quando o processo ja foi reaberto pelo
+     * menos uma vez - nao polui o documento no caso comum (nunca reaberto).
+     */
+    @Test
+    void gerarMostraLinhaDeReaberturasSoQuandoHouveAlgumaReabertura() throws Exception {
+        Processo nuncaReaberto = processoBase(StatusProcesso.DEFERIDO);
+        when(fluxoService.montarEtapas(any())).thenReturn(List.of());
+        when(processoService.contarFavoraveis(any())).thenReturn(1L);
+        assertThat(extrairTexto(novoService().gerar(nuncaReaberto))).doesNotContain("Reaberturas");
+
+        Processo jaReaberto = processoBase(StatusProcesso.DEFERIDO);
+        jaReaberto.setReaberturas(2);
+        String texto = extrairTexto(novoService().gerar(jaReaberto));
+        assertThat(texto).contains("Reaberturas");
+        assertThat(texto).contains("2 vez(es)");
+    }
+
     @Test
     void gerarSecaoDecisaoViraSituacaoAtualQuandoProcessoNaoFoiDecidido() throws Exception {
         // B4+A7 do relatorio V2: titulo "3. Decisao final" prometia um

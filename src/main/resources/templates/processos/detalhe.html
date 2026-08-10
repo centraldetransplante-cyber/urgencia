@@ -22,6 +22,7 @@
                       th:text="${deferidoPeloCoordenador} ? 'Deferido pelo Coordenador da CET-RS' : ${processo.status.descricao}">status</span>
                 <span th:replace="~{layout :: badgeEncerramento(${processo}, 'align-middle px-3 py-1 ms-1')}"></span>
                 <span th:replace="~{layout :: badgeRegraDecisao(${regraDecisao}, 'align-middle px-3 py-1 ms-1')}"></span>
+                <span th:replace="~{layout :: badgeReaberturas(${processo}, 'align-middle px-3 py-1 ms-1')}"></span>
                 <!-- "Aguardando parecer"/"pronto para decidir" - pendencia interna
                      (medicos ainda votando), nao a pausa "Solicita informacao".
                      Padronizacao de cores 2026-08-06: azul. -->

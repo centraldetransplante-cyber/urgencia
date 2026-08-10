@@ -795,7 +795,21 @@ public class ProcessoService {
         p.setMotivoIndeferimento(null);
         p.setEmailEnviadoSolicitante(false);
         p.setMensagemResposta(null);
+        // Achado 8 do relatorio de vistoria de brechas (2026-08-10):
+        // contador leve de quantas vezes o processo ja foi reaberto, para
+        // alimentar o badge "Reaberto Nx" (mesma logica de F2/badgeRegraDecisao)
+        // e uma linha no Relatorio Final. Nullable (ver getReaberturasOuZero) -
+        // nao exige backfill.
+        p.setReaberturas(p.getReaberturasOuZero() + 1);
         processoRepository.save(p);
+        // Achado 9 do relatorio de vistoria de brechas (2026-08-10): o
+        // Relatorio Final e sempre DERIVADO (regenerado na proxima decisao,
+        // ver DecisaoFinalService.gerarDocumentos) - continuar oferecendo
+        // para download o anexo da decisao que acabou de ser anulada e um
+        // documento institucional afirmando um resultado que nao vale mais,
+        // numa janela que pode durar dias (ou ser permanente, se o processo
+        // nunca for redecidido).
+        anexoStorage.removerAntigosDoTipo(p, TipoAnexo.RELATORIO_FINAL, null);
         // Recalcula o status a partir dos pareceres de verdade: se ainda
         // houver um SOLICITA_INFORMACAO ativo, volta para a pausa em vez de
         // ficar preso em ENVIADO (achado C, ver javadoc acima).

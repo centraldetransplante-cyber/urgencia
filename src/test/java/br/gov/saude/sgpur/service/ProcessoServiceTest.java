@@ -479,12 +479,26 @@ class ProcessoServiceTest {
         when(processoRepository.save(p)).thenReturn(p);
         service.decidir(30L, StatusProcesso.DEFERIDO, null);
         assertThat(p.getStatus()).isEqualTo(StatusProcesso.DEFERIDO);
+        assertThat(p.getReaberturasOuZero()).isZero();
 
         service.reabrir(30L);
 
         assertThat(p.getStatus()).isEqualTo(StatusProcesso.ENVIADO);
         assertThat(p.getDataDecisao()).isNull();
         assertThat(p.getMotivoIndeferimento()).isNull();
+        // F5 do relatorio de vistoria de brechas (2026-08-10) - Achado 8:
+        // contador de reaberturas incrementado.
+        assertThat(p.getReaberturasOuZero()).isEqualTo(1);
+        // Achado 9: o Relatorio Final da decisao anulada e removido (e
+        // sempre DERIVADO, regenerado na proxima decisao).
+        org.mockito.Mockito.verify(anexoStorageService)
+            .removerAntigosDoTipo(p, br.gov.saude.sgpur.domain.TipoAnexo.RELATORIO_FINAL, null);
+
+        // Uma segunda reabertura (redecidir + reabrir de novo) incrementa
+        // outra vez - nao reseta.
+        service.decidir(30L, StatusProcesso.DEFERIDO, null);
+        service.reabrir(30L);
+        assertThat(p.getReaberturasOuZero()).isEqualTo(2);
     }
 
     /**

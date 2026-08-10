@@ -555,6 +555,27 @@
 </th:block>
 
 <!-- ============================================================
+     badgeReaberturas(p, classes): "Reaberto Nx" quando o processo ja foi
+     reaberto pelo ADMIN pelo menos uma vez (Achado 8 do
+     docs/RELATORIO-VISTORIA-BRECHAS-DECISAO-2026-08-10.md - "reabertura nao
+     deixa marca em nenhuma tela do processo"). Antes, so a auditoria
+     (ADMIN-only) mostrava que a decisao atual nao era necessariamente a
+     PRIMEIRA - o OPERADOR nao tinha nenhum jeito de saber isso olhando a
+     tela do processo. Leitura pura de Processo.reaberturasOuZero (sem bean
+     de servico), mesmas 4 superficies de badgeRegraDecisao.
+
+     Uso: <span th:replace="~{layout :: badgeReaberturas(${p}, 'ms-1')}"></span>
+     ============================================================ -->
+<th:block th:fragment="badgeReaberturas(p, classes)">
+    <span th:if="${p != null and p.reaberturasOuZero > 0}"
+          class="badge rounded-pill bg-secondary" th:classappend="${classes}"
+          th:title="'Este processo já foi reaberto ' + ${p != null ? p.reaberturasOuZero : 0} + ' vez(es) pelo administrador - a decisão atual pode não ser a primeira.'">
+        <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+        Reaberto <span th:text="${p != null ? p.reaberturasOuZero : 0}">1</span>x
+    </span>
+</th:block>
+
+<!-- ============================================================
      Badge de TOM semantico (design system, 2026-08-05) - traduz o
      vocabulario "ok"/"danger"/"attention"/"aguardando"/"neutral" (usado por
      StatusProcesso.getTom(), SituacaoPedidoView.tom(),
