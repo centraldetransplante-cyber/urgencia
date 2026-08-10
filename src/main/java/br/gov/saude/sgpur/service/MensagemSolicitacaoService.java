@@ -51,19 +51,16 @@ public class MensagemSolicitacaoService {
         return repository.findBySolicitacaoOnlineIdOrderByDataEnvioAsc(solicitacaoOnlineId);
     }
 
+    /**
+     * F6 (S10, docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md, achado A13): antes
+     * carregava a thread INTEIRA a cada poll de 5s e filtrava em Java, mesmo
+     * sem nada para marcar. Agora delega a
+     * {@link MensagemSolicitacaoRepository#marcarComoLidasEmLote} - um UPDATE
+     * de linha unica no banco, sem trazer nenhuma entidade.
+     */
     @Transactional
     public void marcarComoLidas(Long solicitacaoOnlineId, RemetenteMensagem remetente, Long remetenteId) {
-        List<MensagemSolicitacao> naoLidas = repository
-            .findBySolicitacaoOnlineIdOrderByDataEnvioAsc(solicitacaoOnlineId)
-            .stream()
-            .filter(m -> !m.isLida() && m.getRemetente() == remetente && !m.getRemetenteId().equals(remetenteId))
-            .toList();
-        for (MensagemSolicitacao m : naoLidas) {
-            m.setLida(true);
-        }
-        if (!naoLidas.isEmpty()) {
-            repository.saveAll(naoLidas);
-        }
+        repository.marcarComoLidasEmLote(solicitacaoOnlineId, remetente, remetenteId);
     }
 
     @Transactional(readOnly = true)

@@ -4822,3 +4822,64 @@ Lote de correções de baixo risco, sem decisão de produto pendente:
   não deixava nenhum rastro em `/auditoria` — só o enviar era auditado.
 
 Suíte completa validada: **918 testes, 0 falhas** (908 + 10 novos, JDK 21).
+
+### F6 — Implementada, PR aberto (S10, achado A13): índices de banco + `marcarComoLidas` em lote
+
+Implementada em paralelo à F2-F5 (sub-agente isolado em worktree próprio,
+branch `feat/chat-f6-indices-lote`, PR aberto contra `main`), enquanto o
+agente principal cuidava das demais fases. Escopo fechado, sem decisão de
+produto pendente — só performance estrutural, nenhuma regra de negócio
+mudou. **Merge coordenado pelo agente principal junto com F2-F5** — não
+mesclado automaticamente por este sub-agente.
+
+- **Índices de banco** via `@Table(indexes = ...)`:
+  - `MensagemAvaliador` (`mensagem_avaliador`): índice composto
+    `idx_mensagem_avaliador_processo_membro_data` em `(processo_id,
+    membro_id, data_envio)` — acelera `findByProcessoIdAndMembroId
+    OrderByDataEnvioAsc` (a thread aberta, poll de 5s) e o novo UPDATE em
+    lote abaixo; e `idx_mensagem_avaliador_lida_remetente` em `(lida,
+    remetente)` — acelera os badges (`countByLidaFalseAndRemetente` e
+    variantes).
+  - `MensagemSolicitacao` (`mensagem_solicitacao`): mesmo racional,
+    `idx_mensagem_solicitacao_solic_data` em `(solicitacao_online_id,
+    data_envio)` e `idx_mensagem_solicitacao_lida_remetente` em `(lida,
+    remetente)`.
+  - **`ddl-auto: update` CRIA índice novo sem drama** (ao contrário de CHECK
+    constraint de enum e coluna NOT NULL, ver "Convenções de código" acima)
+    — mas, seguindo a prática do projeto de nunca presumir o que o `update`
+    fez, **confirmar em produção via SSH após o deploy** que os 4 índices
+    existem de fato:
+    ```sql
+    SELECT indexname, indexdef FROM pg_indexes
+    WHERE tablename IN ('mensagem_avaliador', 'mensagem_solicitacao');
+    ```
+- **`marcarComoLidas` em lote** (elimina o carregamento da thread inteira em
+  Java a cada poll de 5s de uma conversa aberta, mesmo quando não há nada
+  para marcar): `MensagemAvaliadorRepository.marcarComoLidasEmLote` e
+  `MensagemSolicitacaoRepository.marcarComoLidasEmLote` — dois `@Modifying`
+  `@Query` de UPDATE em lote, mesmo padrão exato de
+  `ParecerRepository.registrarUltimoLembrete` (JPQL, não SQL nativo,
+  `@Transactional` herdado do método de serviço que chama, sem
+  `clearAutomatically` — os dois controllers que chamam `marcarComoLidas`
+  não têm `@Transactional` de classe, então o UPDATE sempre commita numa
+  transação própria antes de qualquer leitura seguinte, ex.:
+  `paraChat(...)`, abrir a sua). `MensagemAvaliadorService.marcarComoLidas`/
+  `MensagemSolicitacaoService.marcarComoLidas` mantiveram a assinatura
+  pública inalterada, só a implementação interna mudou — de "carregar tudo
+  + filtrar em Java + `saveAll`" para delegar direto ao UPDATE.
+
+**Testes:** dois testes de integração novos
+(`MensagemAvaliadorMarcarComoLidasEmLoteIntegrationTest`,
+`MensagemSolicitacaoMarcarComoLidasEmLoteIntegrationTest`, em
+`src/test/java/br/gov/saude/sgpur/service/`, `@SpringBootTest` + H2 real,
+sem mock — convenção do projeto para escrita em lote), cada um cobrindo:
+mensagens do outro lado não lidas (marcadas), mensagens do próprio lado
+(nunca tocadas, mesmo não lidas), mensagens já lidas (idempotência — seguem
+lidas, sem erro), mensagem com o mesmo `remetenteId` de quem está marcando
+(guarda contra marcar a própria mensagem), mensagem de OUTRA
+thread/processo/solicitação (nunca tocada — o cenário mais importante de um
+UPDATE em lote, garantir que ele não vaza pro escopo errado), e nenhuma
+mensagem para marcar (não quebra). Todos releem cada linha do banco depois
+da chamada e conferem `isLida()` campo a campo, nunca confiando em mock.
+
+Suíte completa validada: **924 testes, 0 falhas** (918 + 6 novos, JDK 21).

@@ -860,7 +860,7 @@ isoladamente e com a suíte completa verde antes do merge (base atual:
 | **F3** | **S4** (calibragem do `VerificadorNomePaciente` + testes de borda) | A4, A5 | **Médio** | **SIM (Q3)** | **Sim** | Pendente |
 | **F4** | **S8** (badges sempre no DOM, badge de mensagem do avaliador, `assinatura()`, `aria-live`/`aria-controls`) + **S7.2** (`toggle` do formulário) | A9, A10, A11, A12 | **Baixo** | Não (Q5 é só confirmação) | Sim (leve) | Pendente |
 | **F5** | **S7.1** (simetria de `podeEnviar` no canal do solicitante) | A8 | **Baixo-médio** | **SIM (Q4)** | Sim (leve) | Pendente |
-| **F6** | **S10** (índices + `marcarComoLidas` em lote) | A13 | **Baixo-médio** | Não | Não | Pendente |
+| **F6** | **S10** (índices + `marcarComoLidas` em lote) | A13 | **Baixo-médio** | Não | Não | **Implementada, PR aberto** (2026-08-10, `feat/chat-f6-indices-lote`, ver CLAUDE.md — aguardando o agente principal coordenar o merge com F2-F5) |
 | **F7** *(adiar)* | **S11** (recorte da caixa de entrada) | A14 | Baixo | Não | Não | Adiada de propósito |
 
 **Por que F2 é a fase de maior risco:** mexe em `processos/detalhe.html`
