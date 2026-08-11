@@ -5320,3 +5320,54 @@ o cargo "ao vivo") como pendente de decisão de produto — já estava
 implementado desde o commit `3dac941` (2026-08-07), só o texto do guia
 não tinha sido atualizado (ver a correção logo acima, na mesma seção
 "Vistoria de bugs de 2026-08-03").
+
+## Fix: faixa de cabeçalho do Portal do Solicitante tinha o MESMO fundo da navbar (2026-08-11)
+
+**Bug visual relatado pelo dono do produto em produção**, olhando
+`/solicitante/16`: *"onde vai estas informações: Minhas solicitações / Ana
+de Oliveira / Processo 11/2026 / Enviada em ... — o fundo está igual do
+começo da página, altere isso. o css"*.
+
+**Causa raiz confirmada VISUALMENTE (screenshot real via Playwright em
+desktop 1440px e celular 390px, não leitura de CSS):** `.pagina-cabecalho-solida`
+(a "capa do processo" criada na fase V4 do redesign visual, usada em
+`solicitante/detalhe.html` e `avaliador/votar.html`) declarava
+**literalmente o mesmo** `background: linear-gradient(135deg, var(--rs-blue)
+0%, var(--rs-blue-dark) 100%)` de `.navbar-sgpur` — o comentário no
+`app.css` até dizia isso explicitamente ("herda literalmente o tratamento
+visual da navbar/login"). Resultado: navbar e faixa emendavam num **único
+bloco azul** do topo da tela até o fim do cabeçalho, sem nenhuma pista de
+onde o menu termina e o conteúdo começa (a borda dourada de 2px da navbar
+some no meio da massa azul). Em celular o efeito era ainda mais forte —
+~250px contínuos de azul. Nenhuma das outras hipóteses levantadas se
+confirmou: não havia herança/especificidade errada nem cartão mais abaixo
+repetindo a cor.
+
+**Correção (só `app.css`, nenhuma cor nova, nenhum template alterado):** a
+faixa passou a receber uma camada branca translúcida fixa
+(`linear-gradient(rgba(255,255,255,.16), rgba(255,255,255,.16))`) por cima
+do **mesmo** gradiente institucional, mais um filete branco no topo
+(`box-shadow: inset 0 1px 0 rgba(255,255,255,.22)`) marcando a emenda. Isso
+cria um degrau tonal claro entre navbar e faixa **mantendo** a identidade
+azul, o texto branco, o `.chip-protocolo` e a marca d'água — ou seja, sem
+reverter a decisão 4 do §10 do
+`docs/RELATORIO-REDESIGN-VISUAL-SOLICITANTE-2026-08.md` (variante sólida
+como capa do processo), que foi aprovada pelo dono do produto. Contraste do
+texto branco continua aprovando em WCAG AA (~5,6:1 na ponta mais clara do
+gradiente resultante).
+
+**Alternativas NÃO adotadas** (registradas caso o dono do produto prefira
+outro caminho ao revisar o PR): (a) usar a variante suave/clara
+`.pagina-cabecalho` da lista/formulário, o que reverteria a decisão 4 do
+§10; (b) fundo branco/cinza sem faixa colorida. As duas mudam mais do que a
+queixa pedia — a queixa é sobre o fundo ser **igual ao do topo**, não sobre
+existir uma faixa azul.
+
+**Validação visual obrigatória feita** (a suíte nunca reprova cor/fundo —
+ver §11 do relatório de redesign): screenshots regenerados e inspecionados
+em desktop e celular para `/solicitante/{id}` (em andamento, DEFERIDO e
+INDEFERIDO) **e** para `/avaliador/{id}`, que usa a mesma classe — nenhuma
+regressão, o degrau tonal aparece nas duas telas. Suíte completa: **977
+testes, 0 falhas** (JDK 21). E2E `RedesignVisualSolicitanteIT` e
+`PortaisVisualCompletoIT` verdes (o `assertPinta` do primeiro segue válido:
+a faixa continua pintando por gradiente).
