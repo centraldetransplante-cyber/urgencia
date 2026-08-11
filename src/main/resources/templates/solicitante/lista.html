@@ -183,10 +183,19 @@
                                class="badge rounded-pill bg-warning text-dark text-decoration-none">
                                 <i class="bi bi-exclamation-triangle-fill"></i> Ação necessária
                             </a>
+                            <!-- Desfecho REAL, nao o estado da solicitacao (correcao da §4 do
+                                 relatorio de responsividade/cores de 2026-08-11): ler
+                                 s.status.bootstrapBadge aqui pintava de VERDE todo pedido
+                                 CONVERTIDA - inclusive os INDEFERIDOS - porque o enum trata
+                                 "convertida em processo" como um estado unico. Quem decide
+                                 agora e SolicitanteController.montarSituacaoLista, que olha o
+                                 Processo gerado. O enum segue intacto (a triagem do OPERADOR
+                                 depende dele). -->
                             <span th:unless="${s.status.name() == 'CONVERTIDA' and acaoNecessaria.get(s.id)}"
-                                  class="badge rounded-pill" th:classappend="${s.status.bootstrapBadge}">
-                                <i class="bi" th:classappend="${'bi-' + s.status.badgeIcone}"></i>
-                                <span th:text="${s.status.descricao}">Status</span>
+                                  class="badge rounded-pill"
+                                  th:classappend="${situacoesLista.get(s.id).bootstrapBadge()}">
+                                <i class="bi" th:classappend="${'bi-' + situacoesLista.get(s.id).icone}"></i>
+                                <span th:text="${situacoesLista.get(s.id).rotulo}">Status</span>
                             </span>
                         </td>
                         <td class="text-end">
@@ -268,10 +277,14 @@
                           class="badge rounded-pill bg-warning text-dark">
                         <i class="bi bi-exclamation-triangle-fill"></i> Ação necessária
                     </span>
+                    <!-- Mesmo desfecho real da tabela acima (§4 do relatorio de
+                         responsividade/cores de 2026-08-11) - os dois pontos tem que
+                         mostrar o mesmo badge, so muda o layout por breakpoint. -->
                     <span th:unless="${s.status.name() == 'CONVERTIDA' and acaoNecessaria.get(s.id)}"
-                          class="badge rounded-pill" th:classappend="${s.status.bootstrapBadge}">
-                        <i class="bi" th:classappend="${'bi-' + s.status.badgeIcone}"></i>
-                        <span th:text="${s.status.descricao}">Status</span>
+                          class="badge rounded-pill"
+                          th:classappend="${situacoesLista.get(s.id).bootstrapBadge()}">
+                        <i class="bi" th:classappend="${'bi-' + situacoesLista.get(s.id).icone}"></i>
+                        <span th:text="${situacoesLista.get(s.id).rotulo}">Status</span>
                     </span>
                     <span th:if="${s.status.name() == 'ENVIADA'}"
                           class="badge rounded-pill" th:classappend="${diasEspera.get(s.id).badgeClass}"

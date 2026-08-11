@@ -248,28 +248,23 @@ fora da área do título. Continua decorativa e `aria-hidden`.
 
 ---
 
-## 4. Uma coisa NÃO foi mexida: precisa de decisão do dono do produto
+## 4. Badge da lista: pedido Indeferido saía verde — CORRIGIDO (opção "a")
 
-**Badge verde "Convertida em processo" na lista, inclusive para pedidos
-INDEFERIDOS.**
+**O defeito.** Em `/solicitante`, todo pedido já convertido em processo exibia
+o mesmo badge **verde** "Convertida em processo" — confirmado nos screenshots
+da vistoria: os processos #18/2026 (Indeferido), #17/2026 e #16/2026
+(Deferidos) e #14/2026 (ainda em análise) apareciam visualmente idênticos.
+Verde significa "deferido/sucesso" em todo o resto do Portal (cartão `.r-ok`,
+timeline, ícones), então a lista anunciava sucesso para quem teve o pedido
+negado.
 
-Em `/solicitante`, todo pedido já convertido em processo exibe o mesmo badge
-**verde** "Convertida em processo" — confirmado nos screenshots: os processos
-#18/2026 (Indeferido), #17/2026 e #16/2026 (Deferidos) e #14/2026 (ainda em
-análise) aparecem visualmente idênticos. Verde significa "deferido/sucesso" em
-todo o resto do Portal (cartão `.r-ok`, timeline, ícones).
+A causa é que a cor vinha de `StatusSolicitacaoOnline.getBootstrapBadge()`
+(`CONVERTIDA -> "bg-success"`), e esse enum é **compartilhado** com a tela de
+triagem do OPERADOR (`processos/solicitacoes-online-lista.html`) — mudá-lo
+mudaria as duas telas.
 
-Não foi alterado porque envolve duas decisões que não são de CSS:
-
-1. **Informação**: mostrar o desfecho real na lista é uma escolha de produto
-   (a tela de detalhe já mostra, e o card de resumo "Decididas" já conta — mas
-   a lista, hoje, deliberadamente ou não, não revela).
-2. **Raio de alcance**: a cor vem de `StatusSolicitacaoOnline.getBootstrapBadge()`
-   (`CONVERTIDA -> "bg-success"`), enum **compartilhado** com a tela de triagem
-   do OPERADOR (`processos/solicitacoes-online-lista.html`). Mudar o enum muda
-   as duas telas.
-
-Caminhos possíveis, para o dono do produto escolher:
+Por envolver uma escolha de produto (mostrar ou não o desfecho na lista), a
+vistoria original deixou 3 caminhos em aberto:
 
 | Opção | O que muda | Alcance |
 |---|---|---|
@@ -277,8 +272,52 @@ Caminhos possíveis, para o dono do produto escolher:
 | **(b)** Manter o texto e trocar a cor verde por azul (andamento) | Corrige a semântica da cor sem revelar desfecho na lista | Exige mudar o enum → **afeta também a triagem do operador** |
 | **(c)** Manter como está | Nada | — |
 
-Nenhuma foi implementada. **Esta é uma pergunta aberta, não uma pendência a
-esquecer.**
+### O que foi implementado
+
+**O dono do produto escolheu a opção (a)** ("sim pode alterar"). Implementada
+na mesma branch/PR desta vistoria.
+
+- **`web/dto/SituacaoListaView`** (record novo: `rotulo`, `tom`, `icone` +
+  `bootstrapBadge()`) e **`SolicitanteController.montarSituacaoLista`**, que
+  decide a partir do `Processo` gerado e não do estado da solicitação. O
+  controller expõe `situacoesLista` (`Map<Long, SituacaoListaView>`) e
+  `solicitante/lista.html` consome — nos **dois** pontos da tela (tabela
+  ≥992px e cards empilhados <992px, que têm de mostrar o mesmo badge).
+- **Critério** (mesma ordem de prioridade e mesmo vocabulário de
+  `montarSituacaoPedido`, para a lista nunca dizer algo diferente do detalhe,
+  e cobrindo os dois formatos históricos de "decidido" — o espelho antigo em
+  `APROVADA`/`REPROVADA` e o atual, `CONVERTIDA` com o processo finalizado):
+
+  | Situação real | Rótulo | Tom / cor | Ícone |
+  |---|---|---|---|
+  | Processo Deferido (ou `APROVADA`) | Deferido | `ok` / verde | `check-circle-fill` |
+  | Processo Indeferido (ou `REPROVADA`) | Indeferido | `danger` / vermelho | `x-circle-fill` |
+  | Processo Cancelado (ou `CANCELADA`) | Cancelado | `neutral` / cinza | `slash-circle-fill` |
+  | `DEVOLVIDA` | Devolvida | `danger` / vermelho | `arrow-return-left` |
+  | `PROCESSO_EXCLUIDO` | Processo excluído | `danger` / vermelho | `exclamation-triangle-fill` |
+  | `CONVERTIDA`, processo ainda não decidido | Em análise | `aguardando` / azul | `hourglass-split` |
+  | `ENVIADA` | Aguardando triagem | `aguardando` / azul | `hourglass-split` |
+
+- **`StatusSolicitacaoOnline` não foi tocado**, nem
+  `processos/solicitacoes-online-lista.html` — na triagem do operador
+  "Convertida em processo" continua sendo a informação correta (ele acompanha
+  o ciclo da *solicitação*, não o desfecho clínico).
+- O badge **"Ação necessária"** (âmbar, pausa por informação complementar)
+  continua decidido no template pelo mapa `acaoNecessaria` e tem **precedência**
+  sobre este: quando o solicitante precisa agir, é isso que ele tem que ver,
+  não "Em análise".
+- Efeito colateral positivo: a navegação `s.processoGerado.status` saiu do
+  template e passou a acontecer **dentro** da transação de `lista()`
+  (`open-in-view: false`).
+
+**Guardas:** `SolicitanteControllerTest
+.listaDistingueVisualmentePedidoIndeferidoDeDeferidoEDeEmAnalise` (HTML
+renderizado, com asserção **negativa** em "Convertida em processo" — sem ela o
+teste voltaria a passar se alguém reintroduzisse a leitura do enum) e
+`ResponsividadeSolicitanteIT
+.listaMostraCoresDIFERENTESParaPedidoDeferidoIndeferidoEEmAnalise` (navegador
+real, compara a cor de fundo **computada** de cada linha; screenshot
+`cores-lista-deferido-vs-indeferido`).
 
 ---
 
@@ -336,6 +375,9 @@ teste falha" precisa desfazer a causa raiz inteira, não um pedaço dela.
 |---|---|
 | `src/main/resources/static/css/app.css` | correções do `.cartao-resultado` + bloco responsivo novo + `.w-sm-auto` |
 | `src/main/resources/templates/solicitante/detalhe.html` | `text-break` no anexo, 2 botões na variante `-dark` |
-| `src/main/resources/templates/solicitante/lista.html` | breakpoint da tabela `md` → `lg` |
+| `src/main/resources/templates/solicitante/lista.html` | breakpoint da tabela `md` → `lg`; badge de situação vindo de `situacoesLista` (§4) |
 | `src/main/resources/templates/solicitante/nova.html` | barra de ações e contador com wrap |
-| `src/test/java/br/gov/saude/sgpur/e2e/ResponsividadeSolicitanteIT.java` | guarda novo |
+| `src/main/java/br/gov/saude/sgpur/web/dto/SituacaoListaView.java` | record novo (§4) |
+| `src/main/java/br/gov/saude/sgpur/web/SolicitanteController.java` | `montarSituacaoLista` + model attribute `situacoesLista` (§4) |
+| `src/test/java/br/gov/saude/sgpur/e2e/ResponsividadeSolicitanteIT.java` | guarda novo (responsividade + cores da lista) |
+| `src/test/java/br/gov/saude/sgpur/web/SolicitanteControllerTest.java` | guarda do badge da lista (§4) |

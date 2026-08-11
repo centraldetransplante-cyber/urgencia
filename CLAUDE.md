@@ -5385,15 +5385,34 @@ passando (o `overflow-wrap` sozinho já bastava naquele breakpoint) — para
 provar que um guarda pega o bug é preciso desfazer a causa raiz inteira, não um
 pedaço dela.
 
-**PENDENTE DE DECISÃO DO DONO DO PRODUTO (não implementado):** na lista
-`/solicitante`, todo pedido convertido mostra o mesmo badge **verde**
-"Convertida em processo" — inclusive os **INDEFERIDOS** (confirmado por
-screenshot: #18 indeferido, #17/#16 deferidos e #14 em análise, visualmente
-idênticos). Verde significa "deferido/sucesso" em todo o resto do Portal. Não
-foi mexido porque (1) mostrar o desfecho na lista é decisão de informação, e
-(2) a cor vem de `StatusSolicitacaoOnline.getBootstrapBadge()`
-(`CONVERTIDA -> "bg-success"`), enum **compartilhado com a tela de triagem do
-OPERADOR** — mudá-lo muda as duas telas. As 3 opções estão na §4 do relatório.
+**Badge da lista (§4) — CORRIGIDO no mesmo PR, opção "a" aprovada pelo dono do
+produto ("sim pode alterar").** O defeito: na lista `/solicitante`, todo pedido
+convertido mostrava o mesmo badge **verde** "Convertida em processo" —
+inclusive os **INDEFERIDOS** (confirmado por screenshot: #18 indeferido,
+#17/#16 deferidos e #14 em análise, visualmente idênticos), e verde significa
+"deferido/sucesso" em todo o resto do Portal.
+
+A cor vinha de `StatusSolicitacaoOnline.getBootstrapBadge()`
+(`CONVERTIDA -> "bg-success"`), enum **compartilhado com a triagem do
+OPERADOR** — por isso a correção **não toca o enum**: `web/dto/SituacaoListaView`
+(record novo) + `SolicitanteController.montarSituacaoLista` decidem a partir do
+`Processo` gerado e alimentam `situacoesLista` no model; `solicitante/lista.html`
+consome nos **dois** pontos da tela (tabela ≥992px e cards <992px). Rótulos/tom:
+Deferido (verde) · Indeferido (vermelho) · Cancelado (cinza) · Devolvida e
+Processo excluído (vermelho) · Em análise e Aguardando triagem (azul) —
+**mesmo vocabulário de `montarSituacaoPedido`**, de propósito: abrir o pedido
+não pode mostrar rótulo diferente do que a lista mostrou. Cobre os dois
+formatos históricos de "decidido" (`APROVADA`/`REPROVADA` e `CONVERTIDA` +
+processo finalizado). O badge âmbar **"Ação necessária"** continua vindo do
+mapa `acaoNecessaria` e tem **precedência** sobre este. `processos/solicitacoes-
+online-lista.html` (triagem do operador) segue lendo o enum, inalterado — lá
+"Convertida em processo" é a informação correta. Efeito colateral positivo: a
+navegação `s.processoGerado.status` saiu do template para dentro da transação
+de `lista()` (`open-in-view: false`). Guardas:
+`SolicitanteControllerTest.listaDistingueVisualmentePedidoIndeferidoDeDeferidoEDeEmAnalise`
+(HTML renderizado, com asserção **negativa** em "Convertida em processo") e
+`ResponsividadeSolicitanteIT.listaMostraCoresDIFERENTESParaPedidoDeferidoIndeferidoEEmAnalise`
+(navegador real, compara a cor de fundo **computada** de cada linha).
 
 **Validação:** suíte completa **977 testes, 0 falhas** (JDK 21); E2E com
 `RedesignVisualSolicitanteIT`/`PortaisVisualCompletoIT`/`ChatVisualVerificacaoIT`/

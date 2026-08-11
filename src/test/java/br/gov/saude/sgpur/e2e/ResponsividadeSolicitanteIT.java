@@ -85,8 +85,17 @@ class ResponsividadeSolicitanteIT extends PlaywrightTestBase {
     private Usuario solicitante;
 
     private void seedUsuario() {
+        seedUsuario("sol.resp");
+    }
+
+    /**
+     * Username parametrizado porque o H2 desta classe e compartilhado entre os
+     * metodos de teste ({@code DB_CLOSE_DELAY=-1}) — dois testes criando o
+     * mesmo login colidiriam.
+     */
+    private void seedUsuario(String username) {
         Usuario u = new Usuario();
-        u.setUsername("sol.resp");
+        u.setUsername(username);
         u.setNome("Dra. Maria Aparecida de Souza Nascimento Rodrigues");
         u.setEmail(EMAIL);
         u.setPerfil(Perfil.SOLICITANTE);
@@ -201,6 +210,86 @@ class ResponsividadeSolicitanteIT extends PlaywrightTestBase {
               .append(" | ").append(e.get("txt")).append('\n');
         }
         return sb.toString();
+    }
+
+    /**
+     * Guarda da CORRECAO da §4 do mesmo relatorio (a parte "cores", decidida
+     * pelo dono do produto depois do diagnostico — opcao "a").
+     *
+     * <p><b>O defeito:</b> a lista lia
+     * {@code StatusSolicitacaoOnline.getBootstrapBadge()}, e esse enum trata
+     * {@code CONVERTIDA} como estado unico ({@code bg-success}) — entao um
+     * pedido <b>INDEFERIDO</b>, um <b>DEFERIDO</b> e um ainda <b>em analise</b>
+     * saiam com o MESMO badge verde, indistinguiveis. Verde significa
+     * "deferido/sucesso" em todo o resto do Portal.
+     *
+     * <p>Mede a cor de fundo <b>computada pelo navegador</b> em cada linha, e
+     * nao a classe CSS no HTML: uma regra futura em {@code app.css} que
+     * repintasse os badges da lista deixaria o teste de template verde e este
+     * vermelho, que e exatamente a divisao de trabalho pedida pela §11 do
+     * relatorio de redesign.
+     */
+    @Test
+    void listaMostraCoresDIFERENTESParaPedidoDeferidoIndeferidoEEmAnalise() {
+        seedUsuario("sol.cores");
+
+        SolicitacaoOnline defer = novaSolicitacao(
+            "Paciente Deferido da Silva", "123456789-10001", StatusSolicitacaoOnline.CONVERTIDA);
+        defer.setProcessoGerado(novoProcesso("21/2026", defer, StatusProcesso.DEFERIDO));
+        solicitacaoRepo.save(defer);
+
+        SolicitacaoOnline indef = novaSolicitacao(
+            "Paciente Indeferido de Souza", "123456789-10002", StatusSolicitacaoOnline.CONVERTIDA);
+        indef.setProcessoGerado(novoProcesso("22/2026", indef, StatusProcesso.INDEFERIDO));
+        solicitacaoRepo.save(indef);
+
+        SolicitacaoOnline analise = novaSolicitacao(
+            "Paciente Em Analise Pereira", "123456789-10003", StatusSolicitacaoOnline.CONVERTIDA);
+        analise.setProcessoGerado(novoProcesso("23/2026", analise, StatusProcesso.ENVIADO));
+        solicitacaoRepo.save(analise);
+
+        login("sol.cores", SENHA);
+        try {
+            page.setViewportSize(1440, 1000);
+            page.navigate("/solicitante");
+            page.waitForLoadState();
+
+            String corDeferido = corDoBadgeDaLinha("21/2026");
+            String corIndeferido = corDoBadgeDaLinha("22/2026");
+            String corEmAnalise = corDoBadgeDaLinha("23/2026");
+            screenshot("cores-lista-deferido-vs-indeferido");
+
+            assertThat(corIndeferido)
+                .as("pedido INDEFERIDO nao pode sair com a mesma cor de um DEFERIDO — "
+                    + "era o defeito relatado na §4 (ambos verdes, indistinguiveis)")
+                .isNotEqualTo(corDeferido);
+            assertThat(corEmAnalise)
+                .as("pedido ainda EM ANALISE tambem nao pode sair com cor de desfecho")
+                .isNotEqualTo(corDeferido)
+                .isNotEqualTo(corIndeferido);
+            assertThat(page.locator("#tabelaSolicitacoes").innerText())
+                .as("a lista mostra o desfecho real, nao o rotulo generico do enum "
+                    + "(que segue valendo na triagem do OPERADOR)")
+                .contains("Deferido").contains("Indeferido").contains("Em análise")
+                .doesNotContain("Convertida em processo");
+        } catch (AssertionError | RuntimeException e) {
+            screenshot("cores-lista-FALHA");
+            throw e;
+        }
+    }
+
+    /**
+     * Cor de fundo computada do badge de situacao da linha cujo numero de
+     * processo e o informado (a tabela mostra {@code #NN/AAAA} numa celula
+     * propria) — sempre o ultimo badge da celula "Status", que e a coluna 5.
+     */
+    private String corDoBadgeDaLinha(String numeroProcesso) {
+        return (String) page.locator("#tabelaSolicitacoes tbody tr")
+            .filter(new com.microsoft.playwright.Locator.FilterOptions().setHasText("#" + numeroProcesso))
+            .first()
+            .locator("td:nth-child(5) .badge")
+            .first()
+            .evaluate("el => getComputedStyle(el).backgroundColor");
     }
 
     @Test
