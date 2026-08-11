@@ -20,6 +20,7 @@ import br.gov.saude.sgpur.service.RascunhoSolicitacaoOnlineService;
 import br.gov.saude.sgpur.service.SolicitacaoOnlineService;
 import br.gov.saude.sgpur.service.TempoRespostaService;
 import br.gov.saude.sgpur.domain.StatusProcesso;
+import br.gov.saude.sgpur.web.dto.SituacaoListaView;
 import br.gov.saude.sgpur.web.dto.SituacaoPedidoView;
 import br.gov.saude.sgpur.web.dto.SituacaoPedidoView.AnexoDownload;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -149,6 +150,7 @@ public class SolicitanteController {
         Map<Long, SolicitacaoOnlineService.DiasEspera> diasEspera = new LinkedHashMap<>();
         Map<Long, Boolean> acaoNecessaria = new LinkedHashMap<>();
         Map<Long, Boolean> mensagensNaoLidas = new LinkedHashMap<>();
+        Map<Long, SituacaoListaView> situacoesLista = new LinkedHashMap<>();
         for (SolicitacaoOnline s : minhas) {
             if (s.getStatus() == StatusSolicitacaoOnline.ENVIADA) {
                 diasEspera.put(s.getId(), solicitacaoService.diasEspera(s));
@@ -156,10 +158,12 @@ public class SolicitanteController {
             acaoNecessaria.put(s.getId(), solicitacaoService.precisaInformacaoComplementar(s));
             mensagensNaoLidas.put(s.getId(),
                 mensagemService.contarNaoLidasSolicitantePorSolicitacao(s.getId(), usuario.getId()) > 0);
+            situacoesLista.put(s.getId(), montarSituacaoLista(s));
         }
         long totalAcaoNecessaria = acaoNecessaria.values().stream().filter(Boolean::booleanValue).count();
         model.addAttribute("diasEspera", diasEspera);
         model.addAttribute("acaoNecessaria", acaoNecessaria);
+        model.addAttribute("situacoesLista", situacoesLista);
         model.addAttribute("totalAcaoNecessaria", totalAcaoNecessaria);
         model.addAttribute("mensagensNaoLidas", mensagensNaoLidas);
         model.addAttribute("equipe", usuario.getEquipeSolicitante());
@@ -321,6 +325,66 @@ public class SolicitanteController {
         model.addAttribute("chatAtivoNestaTela", true);
         mensagemService.marcarComoLidas(id, MensagemSolicitacao.RemetenteMensagem.OPERADOR, usuario.getId());
         return "solicitante/detalhe";
+    }
+
+    /**
+     * Badge de situacao de UMA linha da lista ({@code /solicitante}) — o
+     * equivalente enxuto de {@link #montarSituacaoPedido} para a listagem.
+     *
+     * <p><b>Por que nao le mais {@code StatusSolicitacaoOnline} direto no
+     * template</b> (correcao da §4 do relatorio de responsividade/cores de
+     * 2026-08-11, decidida pelo dono do produto — opcao "a"): aquele enum
+     * trata {@code CONVERTIDA} como estado unico ({@code bg-success} +
+     * "Convertida em processo"), entao pedido <b>Indeferido</b>,
+     * <b>Deferido</b> e <b>em analise</b> saiam com o MESMO badge verde. Aqui
+     * a decisao passa a olhar o {@link Processo} gerado e mostrar o desfecho
+     * real. O enum continua intacto porque e compartilhado com a triagem do
+     * OPERADOR, onde "Convertida em processo" e a informacao correta.
+     *
+     * <p>Mesma ordem de prioridade e mesmo vocabulario de
+     * {@link #montarSituacaoPedido} (rotulo/tom/icone), de proposito: abrir o
+     * pedido nao pode mostrar um rotulo diferente do que a lista mostrou.
+     * Tambem cobre os dois formatos historicos de "decidido" (o espelho
+     * antigo em {@code APROVADA}/{@code REPROVADA} e o caminho atual,
+     * {@code CONVERTIDA} com o processo ja finalizado).
+     *
+     * <p>Roda dentro da transacao de {@code lista()} (o template renderiza
+     * depois do commit, com {@code open-in-view: false}), entao navegar ate
+     * {@code s.getProcessoGerado().getStatus()} aqui e mais seguro do que a
+     * navegacao equivalente que o template fazia.
+     *
+     * <p>Nao trata "Acao necessaria" (pausa por informacao complementar): esse
+     * badge continua sendo decidido no template pelo mapa {@code acaoNecessaria}
+     * e tem precedencia sobre este — quando o solicitante precisa agir, e isso
+     * que ele tem que ver, nao "Em analise".
+     */
+    private SituacaoListaView montarSituacaoLista(SolicitacaoOnline s) {
+        Processo proc = s.getProcessoGerado();
+        boolean processoFinalizado = proc != null && proc.getStatus().isFinalizado();
+
+        if (s.getStatus() == StatusSolicitacaoOnline.CANCELADA
+                || (processoFinalizado && proc.getStatus() == StatusProcesso.CANCELADO)) {
+            return new SituacaoListaView("Cancelado", "neutral", "slash-circle-fill");
+        }
+        if (s.getStatus() == StatusSolicitacaoOnline.APROVADA
+                || (processoFinalizado && proc.getStatus() == StatusProcesso.DEFERIDO)) {
+            return new SituacaoListaView("Deferido", "ok", "check-circle-fill");
+        }
+        if (s.getStatus() == StatusSolicitacaoOnline.REPROVADA
+                || (processoFinalizado && proc.getStatus() == StatusProcesso.INDEFERIDO)) {
+            return new SituacaoListaView("Indeferido", "danger", "x-circle-fill");
+        }
+        if (s.getStatus() == StatusSolicitacaoOnline.DEVOLVIDA) {
+            return new SituacaoListaView("Devolvida", "danger", "arrow-return-left");
+        }
+        if (s.getStatus() == StatusSolicitacaoOnline.PROCESSO_EXCLUIDO) {
+            return new SituacaoListaView("Processo excluído", "danger", "exclamation-triangle-fill");
+        }
+        if (s.getStatus() == StatusSolicitacaoOnline.CONVERTIDA) {
+            return new SituacaoListaView("Em análise", "aguardando", "hourglass-split");
+        }
+        // ENVIADA (default): ainda nao triada, nenhum processo gerado.
+        return new SituacaoListaView("Aguardando triagem", "aguardando", "hourglass-split");
     }
 
     /**

@@ -38,7 +38,7 @@ class EmailTemplateServiceTest {
         p.setStatus(StatusProcesso.DEFERIDO);
         EmailTemplate deferido = service.gerar(p).stream()
             .filter(e -> e.chave().equals("deferido")).findFirst().orElseThrow();
-        assertThat(deferido.corpo()).contains("EM ANEXO");
+        assertThat(deferido.corpo()).contains("Segue em anexo");
         assertThat(deferido.corpo()).contains("Sistema Nacional de Transplantes");
     }
 
@@ -92,8 +92,135 @@ class EmailTemplateServiceTest {
         // Deve conter o numero do processo, o texto de disponibilidade para avaliacao
         // e o nome do avaliador destinatario
         assertThat(lembrete.corpo()).contains("07/2026");
-        assertThat(lembrete.corpo()).contains("esta disponivel para sua avaliacao");
+        assertThat(lembrete.corpo()).contains("permanece disponível para a sua");
         assertThat(lembrete.corpo()).contains("Dra. Avaliadora");
         assertThat(lembrete.assunto()).contains("07/2026");
+    }
+
+    // ===================================================================
+    // Regras de redacao dos e-mails (2026-08-11)
+    //
+    // Motivacao: o dono do produto recebeu um e-mail real de deferimento e
+    // relatou que a "formatacao esta ridicula" - sem acentuacao, com palavras
+    // em CAIXA ALTA no meio da frase ("foi DEFERIDO", "Segue EM ANEXO") e com
+    // "Equipe solicitante: X" solta entre dois paragrafos de prosa. Estes
+    // testes travam as 3 regras adotadas, para nao recair. Ver o javadoc de
+    // EmailTemplateService.
+    // ===================================================================
+
+    /** Todos os templates gerados por processo, para varrer de uma vez so. */
+    private java.util.List<EmailTemplate> todosOsTemplates() {
+        Processo enviado = processo();
+        enviado.setStatus(StatusProcesso.ENVIADO);
+        enviado.getPareceres().forEach(par -> par.setDataEnvio(LocalDate.now()));
+
+        Processo deferido = processo();
+        deferido.setStatus(StatusProcesso.DEFERIDO);
+
+        Processo indeferido = processo();
+        indeferido.setStatus(StatusProcesso.INDEFERIDO);
+        // Texto acentuado de proposito: e DADO do processo (digitado pelo operador),
+        // nao literal do template - a varredura de acentuacao abaixo nao deve
+        // acusar o que veio de fora.
+        indeferido.setMotivoIndeferimento("Critérios clínicos não atendidos.");
+
+        Processo info = processo();
+        info.setStatus(StatusProcesso.SOLICITA_INFORMACAO);
+
+        Processo snt = processo();
+        snt.setId(42L);
+        snt.setStatus(StatusProcesso.DEFERIDO);
+
+        MembroUrgenciaRenal membro = new MembroUrgenciaRenal("HCPA", "Dra. Avaliadora", "a@example.com");
+
+        java.util.List<EmailTemplate> todos = new java.util.ArrayList<>();
+        todos.addAll(service.gerar(enviado));
+        todos.addAll(service.gerar(deferido));
+        todos.addAll(service.gerar(indeferido));
+        todos.addAll(service.gerar(info));
+        todos.add(service.emailConviteAvaliador(deferido, membro));
+        todos.add(service.emailCancelamentoAvaliador(deferido, membro));
+        todos.add(service.emailLembreteAvaliador(deferido, membro));
+        todos.add(service.emailLembreteComprovanteSnt(snt, 12));
+        return todos;
+    }
+
+    /**
+     * Regra 2: nenhum template pode ter palavra inteiramente em CAIXA ALTA no meio
+     * de uma frase. O e-mail e enviado em TEXTO PURO (EmailSenderService usa
+     * {@code setText(body, false)}), entao caixa alta nao vira enfase - so parece
+     * grito. Siglas legitimas (SNT, CET-RS, PDF...) sao permitidas via allowlist.
+     */
+    @Test
+    void nenhumTemplateUsaCaixaAltaComoEnfaseNoMeioDaFrase() {
+        java.util.Set<String> siglasPermitidas = java.util.Set.of(
+            "SNT", "CET", "RS", "SAUR", "SES", "PDF", "RGCT", "HCPA", "ISCMPA");
+        var regex = java.util.regex.Pattern.compile("\\b\\p{Lu}{2,}\\b");
+
+        for (EmailTemplate t : todosOsTemplates()) {
+            var m = regex.matcher(t.corpo() + "\n" + t.assunto());
+            while (m.find()) {
+                assertThat(siglasPermitidas)
+                    .as("Palavra em caixa alta '%s' no template '%s' - use caixa normal "
+                        + "(o e-mail e texto puro, caixa alta nao e enfase)", m.group(), t.chave())
+                    .contains(m.group());
+            }
+        }
+    }
+
+    /**
+     * Regra 1: acentuacao. Varre palavras que so existem acentuadas em portugues -
+     * se alguma aparecer sem acento, algum literal escapou da correcao.
+     */
+    @Test
+    void nenhumTemplateTemPalavraSemAcentuacao() {
+        String[] semAcento = {
+            "Urgencia", "urgencia", "disposicao", "Saude", "avaliacao", "informacoes",
+            "analise", "decisao", "oficio", "insercao", "solicitacao", "Voce", "Voces",
+            "nao ", "ja ", "esta disponivel", "necessarios", "Finalizacao", "Ola,",
+            "imparcialidade do julgamento; identificado"
+        };
+        for (EmailTemplate t : todosOsTemplates()) {
+            for (String termo : semAcento) {
+                assertThat(t.corpo() + "\n" + t.assunto() + "\n" + t.titulo())
+                    .as("Template '%s' contem o termo sem acentuacao '%s'", t.chave(), termo)
+                    .doesNotContain(termo);
+            }
+        }
+    }
+
+    /**
+     * Regra 3: nos e-mails dirigidos a EQUIPE SOLICITANTE, os dados de
+     * identificacao vem num bloco no inicio (antes da prosa), e nao como uma linha
+     * de dado solta no meio dos paragrafos - que era exatamente o defeito relatado
+     * ("Equipe solicitante: Santa Casa" entre dois paragrafos corridos).
+     */
+    @Test
+    void emailsAoSolicitanteComecamComOBlocoDeIdentificacao() {
+        Processo deferido = processo();
+        deferido.setStatus(StatusProcesso.DEFERIDO);
+        Processo indeferido = processo();
+        indeferido.setStatus(StatusProcesso.INDEFERIDO);
+        Processo info = processo();
+        info.setStatus(StatusProcesso.SOLICITA_INFORMACAO);
+
+        for (Processo p : java.util.List.of(deferido, indeferido, info)) {
+            EmailTemplate t = service.gerar(p).get(0);
+            String corpo = t.corpo();
+            int bloco = corpo.indexOf("Processo: 07/2026");
+            int paciente = corpo.indexOf("Paciente: Joao Paciente Secreto");
+            int equipe = corpo.indexOf("Equipe solicitante: Hospital Solicitante");
+            int prosa = corpo.indexOf("Informamos que o processo acima");
+            if (prosa < 0) {
+                prosa = corpo.indexOf("Durante a análise do processo acima");
+            }
+
+            assertThat(bloco).as("bloco de identificacao ausente em '%s'", t.chave()).isNotNegative();
+            assertThat(paciente).isGreaterThan(bloco);
+            assertThat(equipe).isGreaterThan(paciente);
+            assertThat(prosa)
+                .as("a prosa deve vir DEPOIS do bloco de identificacao em '%s'", t.chave())
+                .isGreaterThan(equipe);
+        }
     }
 }

@@ -5374,3 +5374,178 @@ detalhe nenhum; Indeferido com motivo segue exibindo o motivo) e **captura
 visual real** com Playwright (IT temporário, não commitado) dos 3 cartões
 renderizados — inspecionados um a um, sem repetição e com o botão de
 download visível. Suíte completa: **981 testes, 0 falhas** (JDK 21).
+
+## Acentuação e formatação dos e-mails prontos (2026-08-11)
+
+Relato do dono do produto sobre um e-mail real de produção (processo 11/2026,
+Deferido): *"a formatação dele está ridículo"*. Três defeitos sistêmicos em
+`EmailTemplateService` — o arquivo nunca passou pela leva de acentuação de
+2026-08-03/04 (só templates HTML) nem pela de 2026-08-08 (4 controllers).
+Passaram a valer 3 regras, documentadas no javadoc da classe e travadas por
+teste (`EmailTemplateServiceTest`, 3 casos novos que varrem TODOS os
+templates): (1) **acentuação correta** — inclusive nos defaults
+`sgpur.email.assinatura`/`prefixo-assunto` (`EmailProperties`/
+`application.yml`); (2) **nunca CAIXA ALTA no meio de frase** ("foi
+DEFERIDO", "Segue EM ANEXO", "foi CANCELADO") — o envio é em texto puro
+(`EmailSenderService`, `setText(body, false)`), não há negrito, então caixa
+alta não vira ênfase, só parece grito; (3) **bloco de identificação
+(Processo/Paciente/Equipe solicitante) antes da prosa** nos e-mails à
+equipe solicitante, em vez de uma linha de dado solta entre parágrafos.
+`UsuarioService` (e-mail de redefinição de senha) foi acentuado junto. Nada
+de regra de negócio, rota ou `gerar(Processo)` mudou;
+`ResultadoParecer.descricao`/`StatusProcesso.descricao` seguem sem acento
+de propósito (PDF oficial). **Ressalva de produção:** se a VM definir
+`SGPUR_EMAIL_ASSINATURA`/`SGPUR_EMAIL_PREFIXO_ASSUNTO` em
+`/opt/sgpur/sgpur.env` (fora do git), o valor de lá vence o default e
+precisa ser acentuado manualmente. Suíte: **980 testes, 0 falhas** (JDK
+21). PR #99.
+
+## Fix: faixa de cabeçalho do Portal do Solicitante tinha o MESMO fundo da navbar (2026-08-11)
+
+**Bug visual relatado pelo dono do produto em produção**, olhando
+`/solicitante/16`: *"onde vai estas informações: Minhas solicitações / Ana
+de Oliveira / Processo 11/2026 / Enviada em ... — o fundo está igual do
+começo da página, altere isso. o css"*.
+
+**Causa raiz confirmada VISUALMENTE (screenshot real via Playwright em
+desktop 1440px e celular 390px, não leitura de CSS):** `.pagina-cabecalho-solida`
+(a "capa do processo" criada na fase V4 do redesign visual, usada em
+`solicitante/detalhe.html` e `avaliador/votar.html`) declarava
+**literalmente o mesmo** `background: linear-gradient(135deg, var(--rs-blue)
+0%, var(--rs-blue-dark) 100%)` de `.navbar-sgpur` — o comentário no
+`app.css` até dizia isso explicitamente ("herda literalmente o tratamento
+visual da navbar/login"). Resultado: navbar e faixa emendavam num **único
+bloco azul** do topo da tela até o fim do cabeçalho, sem nenhuma pista de
+onde o menu termina e o conteúdo começa (a borda dourada de 2px da navbar
+some no meio da massa azul). Em celular o efeito era ainda mais forte —
+~250px contínuos de azul. Nenhuma das outras hipóteses levantadas se
+confirmou: não havia herança/especificidade errada nem cartão mais abaixo
+repetindo a cor.
+
+**Correção (só `app.css`, nenhuma cor nova, nenhum template alterado):** a
+faixa passou a receber uma camada branca translúcida fixa
+(`linear-gradient(rgba(255,255,255,.16), rgba(255,255,255,.16))`) por cima
+do **mesmo** gradiente institucional, mais um filete branco no topo
+(`box-shadow: inset 0 1px 0 rgba(255,255,255,.22)`) marcando a emenda. Isso
+cria um degrau tonal claro entre navbar e faixa **mantendo** a identidade
+azul, o texto branco, o `.chip-protocolo` e a marca d'água — ou seja, sem
+reverter a decisão 4 do §10 do
+`docs/RELATORIO-REDESIGN-VISUAL-SOLICITANTE-2026-08.md` (variante sólida
+como capa do processo), que foi aprovada pelo dono do produto. Contraste do
+texto branco continua aprovando em WCAG AA (~5,6:1 na ponta mais clara do
+gradiente resultante).
+
+**Alternativas NÃO adotadas** (registradas caso o dono do produto prefira
+outro caminho ao revisar o PR): (a) usar a variante suave/clara
+`.pagina-cabecalho` da lista/formulário, o que reverteria a decisão 4 do
+§10; (b) fundo branco/cinza sem faixa colorida. As duas mudam mais do que a
+queixa pedia — a queixa é sobre o fundo ser **igual ao do topo**, não sobre
+existir uma faixa azul.
+
+**Validação visual obrigatória feita** (a suíte nunca reprova cor/fundo —
+ver §11 do relatório de redesign): screenshots regenerados e inspecionados
+em desktop e celular para `/solicitante/{id}` (em andamento, DEFERIDO e
+INDEFERIDO) **e** para `/avaliador/{id}`, que usa a mesma classe — nenhuma
+regressão, o degrau tonal aparece nas duas telas. Suíte completa: **977
+testes, 0 falhas** (JDK 21). E2E `RedesignVisualSolicitanteIT` e
+`PortaisVisualCompletoIT` verdes (o `assertPinta` do primeiro segue válido:
+a faixa continua pintando por gradiente).
+
+## Vistoria de responsividade e cores do Portal do Solicitante (2026-08-11)
+
+`docs/RELATORIO-RESPONSIVIDADE-CORES-SOLICITANTE-2026-08.md` — **IMPLEMENTADO**
+(o relatório é registro, não plano pendente). Gatilho: pedido do dono do
+produto, *"verifique responsividade e as cores, ajuste todo css, tinha texto
+saindo da tela"*. Só o Portal do Solicitante; nenhuma regra de negócio,
+controller, endpoint ou `name=`/`id` de campo mudou.
+
+**O bug relatado era real e mensurável: a página tinha 642px de largura numa
+tela de 360px** (282px de estouro), nos estados Aguardando triagem, Deferido e
+Indeferido de `/solicitante/{id}` — o solicitante precisava rolar de lado para
+ler a decisão do próprio pedido.
+
+**Causa raiz (vale para qualquer cartão flex do sistema):** `.cartao-resultado`
+é `display:flex`, e **item de flex nasce com `min-width: auto`** — nunca encolhe
+abaixo da largura *min-content* do conteúdo. As mensagens desse cartão carregam
+o e-mail institucional da equipe solicitante, **um token sem nenhum espaço**, o
+que fixava a largura do conteúdo em ~519px em qualquer viewport. `flex-grow` não
+ajuda (só distribui sobra, não autoriza encolher). A correção é sempre **um
+par**: `min-width: 0` (autoriza encolher) **+** `overflow-wrap: anywhere`
+(autoriza o token a quebrar no espaço encolhido) — uma sem a outra não resolve.
+Mesmo remédio que `.text-pre-wrap` já aplicava na justificativa clínica desde
+2026-08-06; só não tinha sido estendido ao cartão de resultado, criado depois.
+
+**Achado estrutural: o bloco de redesign V1–V6 do `app.css` não tinha UMA
+media query.** A última `@media` do arquivo estava na linha ~1318 e todo o
+bloco do Portal (`.pagina-cabecalho`, `.cartao-resultado`, `.estado-vazio`,
+`.chip-protocolo`, `.zona-upload`) vem depois — tudo calibrado no mockup de
+desktop e servido igual no celular. Criado um bloco responsivo novo
+(`max-width: 767.98px` e `max-width: 575.98px`, sempre com `.98` pela armadilha
+de sobreposição em pixel exato já documentada acima): o cartão de resultado
+**empilha** em celular (ícone acima do texto), ícone 64→52px, título de destaque
+1.75→1.35rem, ação principal em largura total.
+
+Demais correções: tabela da lista trocou o corte `md` (768px) por `lg` (992px)
+— entre 768 e 991px as 6 colunas quebravam todas as células em 3-4 linhas, pior
+que os cards que já existiam logo abaixo (os dois lados, `d-lg-block` e
+`d-lg-none`, **têm** que trocar no mesmo breakpoint); `text-truncate` →
+`text-break` no nome do anexo em `detalhe.html` (**recaída** do bug já corrigido
+em `nova.html` em 2026-08-04, ver "Lista de documentos selecionados" acima —
+aquela correção não cobriu a tela de detalhe); `btn-warning` →
+`btn-resultado-attention` e `btn-outline-danger` → `btn-resultado-danger` nos
+dois botões dentro de cartão tintado (a família `.btn-resultado-*` foi criada em
+2026-08-08 exatamente por esse motivo de contraste, para o Portal do Avaliador —
+a tela que originou o padrão tinha ficado de fora); barra de ações e contador de
+caracteres de `nova.html` com `flex-wrap`.
+
+**`.w-sm-auto` foi definida no `app.css`**: o Bootstrap 5 **não** gera variantes
+responsivas das utilities de largura, então `w-sm-auto` simplesmente não
+existiria e o `w-100` valeria em todas as larguras.
+
+**Guarda novo: `ResponsividadeSolicitanteIT`** (Playwright, profile `e2e`).
+Semeia os 8 estados do portal com dados do tamanho dos reais (o e-mail curto de
+fixture não reproduz o defeito) e percorre 10 telas × 6 larguras (360/390/576/
+768/992/1440), falhando se qualquer uma estourar a largura da viewport —
+nomeando tela, largura, pixels de estouro e elementos culpados. Nenhum outro
+teste do projeto mede isso: a suíte olha status/model/texto e o
+`RedesignVisualSolicitanteIT` olha cor e tamanho de fonte, nunca a largura do
+documento. **Verificado que o guarda falha de verdade** ao reintroduzir a causa
+raiz. Nota metodológica: removendo **só** o `min-width: 0` o teste continuava
+passando (o `overflow-wrap` sozinho já bastava naquele breakpoint) — para
+provar que um guarda pega o bug é preciso desfazer a causa raiz inteira, não um
+pedaço dela.
+
+**Badge da lista (§4) — CORRIGIDO no mesmo PR, opção "a" aprovada pelo dono do
+produto ("sim pode alterar").** O defeito: na lista `/solicitante`, todo pedido
+convertido mostrava o mesmo badge **verde** "Convertida em processo" —
+inclusive os **INDEFERIDOS** (confirmado por screenshot: #18 indeferido,
+#17/#16 deferidos e #14 em análise, visualmente idênticos), e verde significa
+"deferido/sucesso" em todo o resto do Portal.
+
+A cor vinha de `StatusSolicitacaoOnline.getBootstrapBadge()`
+(`CONVERTIDA -> "bg-success"`), enum **compartilhado com a triagem do
+OPERADOR** — por isso a correção **não toca o enum**: `web/dto/SituacaoListaView`
+(record novo) + `SolicitanteController.montarSituacaoLista` decidem a partir do
+`Processo` gerado e alimentam `situacoesLista` no model; `solicitante/lista.html`
+consome nos **dois** pontos da tela (tabela ≥992px e cards <992px). Rótulos/tom:
+Deferido (verde) · Indeferido (vermelho) · Cancelado (cinza) · Devolvida e
+Processo excluído (vermelho) · Em análise e Aguardando triagem (azul) —
+**mesmo vocabulário de `montarSituacaoPedido`**, de propósito: abrir o pedido
+não pode mostrar rótulo diferente do que a lista mostrou. Cobre os dois
+formatos históricos de "decidido" (`APROVADA`/`REPROVADA` e `CONVERTIDA` +
+processo finalizado). O badge âmbar **"Ação necessária"** continua vindo do
+mapa `acaoNecessaria` e tem **precedência** sobre este. `processos/solicitacoes-
+online-lista.html` (triagem do operador) segue lendo o enum, inalterado — lá
+"Convertida em processo" é a informação correta. Efeito colateral positivo: a
+navegação `s.processoGerado.status` saiu do template para dentro da transação
+de `lista()` (`open-in-view: false`). Guardas:
+`SolicitanteControllerTest.listaDistingueVisualmentePedidoIndeferidoDeDeferidoEDeEmAnalise`
+(HTML renderizado, com asserção **negativa** em "Convertida em processo") e
+`ResponsividadeSolicitanteIT.listaMostraCoresDIFERENTESParaPedidoDeferidoIndeferidoEEmAnalise`
+(navegador real, compara a cor de fundo **computada** de cada linha).
+
+**Validação:** suíte completa **977 testes, 0 falhas** (JDK 21); E2E com
+`RedesignVisualSolicitanteIT`/`PortaisVisualCompletoIT`/`ChatVisualVerificacaoIT`/
+`ResponsividadeSolicitanteIT` verdes e `FluxoCompletoProcessoIT` falhando só na
+linha 228 pré-existente de SMTP local ausente; de **12 ocorrências de estouro
+horizontal para 0**; todos os screenshots relidos após as correções.

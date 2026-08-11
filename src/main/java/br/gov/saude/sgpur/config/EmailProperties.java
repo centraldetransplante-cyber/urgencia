@@ -13,8 +13,21 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "sgpur.email")
 public class EmailProperties {
 
-    private String assinatura = "Equipe de Urgencia Renal - Secretaria de Saude";
-    private String prefixoAssunto = "Urgencia Renal";
+    /**
+     * Assinatura ao pe dos e-mails prontos ({@code EmailTemplateService}) e do
+     * Oficio de Indeferimento ({@code OficioService}). ACENTUADA desde 2026-08-11:
+     * e texto institucional que chega a equipe solicitante, mesma regra dos corpos
+     * de e-mail (ver javadoc de {@code EmailTemplateService}).
+     *
+     * <p><strong>Atencao em producao:</strong> este e apenas o DEFAULT. Se a VM
+     * definir {@code SGPUR_EMAIL_ASSINATURA} em {@code /opt/sgpur/sgpur.env}
+     * (arquivo fora do git), o valor de la vence e precisa ser acentuado a mao -
+     * nenhum deploy corrige isso sozinho.</p>
+     */
+    private String assinatura = "Equipe de Urgência Renal - Secretaria de Saúde";
+
+    /** Prefixo do assunto dos e-mails. Mesma ressalva de {@code SGPUR_EMAIL_PREFIXO_ASSUNTO}. */
+    private String prefixoAssunto = "Urgência Renal";
 
     /**
      * Cidade impressa na linha "Cidade, dd de mes de aaaa" do Oficio de

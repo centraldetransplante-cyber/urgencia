@@ -269,22 +269,25 @@ public class UsuarioService {
             return;
         }
         String novaSenha = gerarSenhaTemporaria();
+        // Acentuado em 2026-08-11, junto com EmailTemplateService: e um e-mail
+        // institucional visto pelo usuario, mesma regra de redacao (ver o javadoc
+        // de EmailTemplateService).
         String corpo = """
-            Ola, %s,
+            Olá, %s,
 
             Sua senha de acesso ao SAUR foi redefinida a seu pedido.
 
-            Nova senha temporaria: %s
+            Nova senha temporária: %s
 
-            Recomendamos alterar esta senha apos o proximo login.
+            Recomendamos alterar esta senha após o próximo login.
 
-            Se voce nao solicitou esta redefinicao, entre em contato com o
+            Se você não solicitou esta redefinição, entre em contato com o
             administrador do sistema imediatamente.
 
             Atenciosamente,
-            Equipe SAUR - Secretaria de Saude
+            Equipe SAUR - Secretaria de Saúde
             """.formatted(u.getNome(), novaSenha);
-        boolean enviado = emailSenderService.enviar(u.getEmail(), "SAUR - Redefinicao de senha", corpo);
+        boolean enviado = emailSenderService.enviar(u.getEmail(), "SAUR - Redefinição de senha", corpo);
         if (!enviado) {
             log.warn("resetarSenha: falha ao enviar e-mail para '{}' - senha NAO foi alterada.", username);
             return;
