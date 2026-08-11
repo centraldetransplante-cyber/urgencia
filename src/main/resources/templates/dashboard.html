@@ -6,7 +6,15 @@
 <nav th:replace="~{layout :: navbar}"></nav>
 <div th:replace="~{layout :: flash}"></div>
 
-<main id="conteudo" class="container-fluid px-3 px-lg-4 py-4">
+<!-- Largura padronizada com as demais telas de lista do Operador (Processos,
+     Membros, Usuarios etc.): cap de ~1320px do .container puro do Bootstrap,
+     nao mais container-fluid (full-bleed). O Painel nao tem nenhum split-pane/
+     sidebar estrutural (diferente de processos/detalhe.html e
+     avaliador/votar.html, que continuam container-fluid de proposito) - so um
+     grid de cartoes de estatistica + uma tabela, a mesma "forma" de conteudo
+     que membros/lista.html ja resolve bem dentro do cap padrao. Ver
+     docs/RELATORIO-PADRAO-LARGURA-PORTAIS-2026-08.md. -->
+<main id="conteudo" class="container my-4">
     <!-- Cabecalho -->
     <div class="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
         <div>
