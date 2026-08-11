@@ -132,6 +132,34 @@ class SolicitanteControllerTest {
             .andExpect(view().name("solicitante/detalhe"));
     }
 
+    // O retorno da equipe NUNCA e "so por e-mail": o proprio Portal mostra a
+    // situacao e a decisao a qualquer momento. O cartao de "Aguardando triagem"
+    // dizia que o solicitante "sera avisado por e-mail", sugerindo que ele
+    // dependia da caixa de entrada para saber o resultado (relato do dono do
+    // produto, 2026-08-11). O e-mail continua citado, mas como aviso
+    // COMPLEMENTAR - por isso as duas asserções (a positiva e a negativa).
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void cartaoDeAguardandoTriagemNaoDizQueORetornoEApenasPorEmail() throws Exception {
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.buscarParaDetalhe(50L)).thenReturn(solicitacaoDoDono);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(0, "bg-secondary"));
+        when(mensagemService.listarPorSolicitacao(50L)).thenReturn(java.util.List.of());
+
+        mvc.perform(get("/solicitante/50"))
+            .andExpect(status().isOk())
+            // nunca mais a promessa de canal unico
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("você será avisado por e-mail"))))
+            // o Portal e o canal principal, sempre disponivel
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "acompanhar o andamento por aqui a qualquer momento")))
+            // e o e-mail continua existindo, como aviso complementar
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "também avisaremos por e-mail")));
+    }
+
     @Test
     @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
     void detalheExibePrevisaoDePrazoQuandoProcessoEstaEmAnaliseAtiva() throws Exception {

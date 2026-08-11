@@ -5563,3 +5563,52 @@ puramente de copy, sem efeito em `ParecerRepository.findDispensadosComProcesso`
 nem em nenhuma regra de decisão — o comentário Java/HTML acima do bloco, que
 documenta por que a seção existe (cobre os dois motivos de dispensa), foi
 mantido como está, só o texto visível ao usuário mudou.
+
+## O retorno ao solicitante NÃO é "só por e-mail" (2026-08-11)
+
+Pedido do dono do produto: *"Retire essa parte que irá retornar por email, pois
+o retorno pode ser apenas pelo sistema e não somente pelo email. Verifique isso
+em todo sistema e frases assim no restante."*
+
+O Portal do Solicitante mostra a situação e a decisão do pedido a qualquer
+momento (o cartão de situação de `/solicitante/{id}`, ver
+`SolicitanteController.montarSituacaoPedido`), e a lista mostra o estado de
+cada pedido — o e-mail é um **aviso complementar**, nunca o único canal.
+Duas frases diziam o contrário e foram reescritas (varredura completa em
+`src/main/resources/templates/**` e nos controllers/serviços que geram texto
+visível ao solicitante — não há mais nenhuma):
+
+| Onde | Antes | Depois |
+|---|---|---|
+| `solicitante/lista.html` (parágrafo de topo) | "Envie sua solicitação pelo sistema — nossa equipe vai analisar e **retornar por e-mail**." | "...nossa equipe vai analisar e **você acompanha o andamento e o resultado por aqui a qualquer momento**. Também avisamos por e-mail quando houver novidade." |
+| `SolicitanteController.montarSituacaoPedido`, ramo `ENVIADA` ("Aguardando triagem") | "Não é necessário fazer nada agora. Assim que a equipe analisar o pedido, **você será avisado por e-mail (...)**." | "Não é necessário fazer nada agora. **Você pode acompanhar o andamento por aqui a qualquer momento**; também avisaremos por e-mail (...) assim que a equipe de Urgência Renal analisar o pedido." |
+
+**O que NÃO foi alterado, de propósito** (nem toda menção a e-mail é o mesmo
+problema — só as que prometem o e-mail como canal ÚNICO de retorno ao
+solicitante):
+- `avaliador/lista.html` — *"você receberá um convite por e-mail"*: verdadeiro,
+  o convite ao Portal do Avaliador realmente só sai por e-mail
+  (`EmailTemplateService.emailConviteAvaliador`).
+- Os ramos Deferido/Indeferido do mesmo `montarSituacaoPedido` — *"A resposta
+  oficial foi enviada por e-mail"* / *"O ofício com os detalhes foi enviado por
+  e-mail"*: são **fatos** sobre um envio que já ocorreu
+  (`Processo.emailEnviadoSolicitante`), não promessa de canal único, e a
+  decisão em si já está visível no próprio cartão, com botão de download do
+  anexo. São também as frases que os testes de contradição usam como âncora
+  (ver "cartão afirmava envio de e-mail que ainda não tinha ocorrido" acima) —
+  **não reescrever sem atualizar aqueles testes**.
+- `solicitante/indisponivel.html` — *"continue usando o e-mail de sempre"*: ali
+  o Portal está desligado (`app.solicitante.habilitado=false`), então o e-mail
+  é mesmo o único canal.
+- Lembretes/e-mails operacionais do lado do OPERADOR (`processos/detalhe.html`)
+  — são ações dele, não promessa ao solicitante.
+
+**Testes:** `SolicitanteControllerTest.cartaoDeAguardandoTriagemNaoDizQueORetornoEApenasPorEmail`
+— renderiza o HTML e cobra as três coisas ao mesmo tempo: a promessa antiga
+some, o Portal aparece como canal sempre disponível, e o e-mail **continua**
+citado como aviso complementar (uma asserção negativa sozinha deixaria passar
+uma correção que simplesmente apagasse o e-mail da frase). Validação visual
+real com Playwright (IT temporário, não commitado): lista vazia, lista com
+pedido e cartão "Aguardando triagem", em 1440/390/360px — texto quebra
+normalmente, sem estouro horizontal. Suíte completa: **986 testes, 0 falhas**
+(JDK 21); `ResponsividadeSolicitanteIT` verde.

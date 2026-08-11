@@ -540,8 +540,14 @@ public class SolicitanteController {
         // Padronizacao de cores 2026-08-06: "Aguardando" = azul (nao amarelo -
         // amarelo fica reservado para "Solicita informacao", ver
         // docs/IDEIA-PADRONIZACAO-CORES-SOLICITA-INFO-AGUARDANDO-2026-08.md).
-        String mensagem = "Não é necessário fazer nada agora. Assim que a equipe de Urgência Renal analisar "
-            + "o pedido, você será avisado por e-mail (" + s.getSolicitanteEmail() + ").";
+        // O retorno NUNCA e "so por e-mail": o proprio Portal mostra a situacao e a
+        // decisao a qualquer momento (este cartao). O e-mail e um aviso complementar -
+        // dizer que a pessoa "sera avisada por e-mail" sugeria, erradamente, que ela
+        // dependia da caixa de entrada para saber o resultado (relato do dono do
+        // produto, 2026-08-11).
+        String mensagem = "Não é necessário fazer nada agora. Você pode acompanhar o andamento por aqui a "
+            + "qualquer momento; também avisaremos por e-mail (" + s.getSolicitanteEmail() + ") assim que a "
+            + "equipe de Urgência Renal analisar o pedido.";
         return new SituacaoPedidoView("Aguardando triagem", "primary", "hourglass-split", "Aguardando triagem",
             mensagem, null, false, false, null, null);
     }
