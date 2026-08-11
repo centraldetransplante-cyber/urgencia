@@ -9,7 +9,7 @@
     <h1 class="h3 mb-3">Editar processo <span th:text="${processo.numero}">00/0000</span></h1>
 
     <form th:action="@{/processos/{id}/editar(id=${processo.id})}" th:object="${processo}"
-          method="post" class="card">
+          method="post" class="card" data-lock-submit="Salvando alterações...">
         <div class="card-body">
             <div class="row g-3">
                 <div class="col-md-3">
@@ -56,7 +56,7 @@
             <hr>
             <div>
                 <label class="form-label" th:for="observacoes">Observações</label>
-                <textarea th:field="*{observacoes}" class="form-control" rows="2"></textarea>
+                <textarea th:field="*{observacoes}" class="form-control" rows="8"></textarea>
             </div>
         </div>
         <div class="card-footer text-end">
@@ -69,5 +69,6 @@
 <div th:replace="~{layout :: footer}"></div>
 
 <script th:replace="~{layout :: scripts}"></script>
+<script th:replace="~{layout :: lockSubmitScript}"></script>
 </body>
 </html>

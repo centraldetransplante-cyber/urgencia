@@ -8,7 +8,8 @@
 <main id="conteudo" class="container my-4">
     <h1 class="h3 mb-3">Novo processo</h1>
 
-    <form th:action="@{/processos}" th:object="${processo}" method="post" class="card">
+    <form th:action="@{/processos}" th:object="${processo}" method="post" class="card"
+          data-lock-submit="Cadastrando processo...">
         <div class="card-body">
             <input type="hidden" name="origemSolicitacaoOnlineId" th:if="${origemSolicitacaoOnlineId != null}"
                    th:value="${origemSolicitacaoOnlineId}">
@@ -87,7 +88,9 @@
             <hr>
             <div>
                 <label class="form-label" th:for="observacoes">Observações</label>
-                <textarea th:field="*{observacoes}" class="form-control" rows="2"></textarea>
+                <textarea th:field="*{observacoes}" class="form-control" rows="8"></textarea>
+                <div class="form-text">Pré-preenchido com a justificativa clínica enviada pelo solicitante — revise
+                    com atenção antes de cadastrar.</div>
             </div>
         </div>
         <div class="card-footer text-end">
@@ -98,6 +101,7 @@
 </main>
 
 <script th:replace="~{layout :: scripts}"></script>
+<script th:replace="~{layout :: lockSubmitScript}"></script>
 <script th:src="@{/js/processo-form.js}"></script>
 <div th:replace="~{layout :: footer}"></div>
 </body>

@@ -5886,3 +5886,74 @@ visual do restante da tela.
 dono do produto nesta rodada (queixa foi justamente sobre mudança de CSS
 sem supervisão adequada) — pronto para revisão humana antes de ir a
 produção.
+
+## Campo "Observações" de `/processos/novo` (conversão de solicitação) — nascia com só 2 linhas (2026-08-11)
+
+**Relato do dono do produto em produção**, em
+`/processos/novo?origemSolicitacaoOnlineId=NN`: *"as observações estão
+abrindo com um campo muito estreito, verifique todo esse painel, com
+carinho"*.
+
+**Investigação (reproduzida de ponta a ponta com Playwright contra o app
+real, H2 local — não presumida):** o `<textarea>` de "Observações" em
+`processos/form.html` **já ocupava 100% da largura** do card em qualquer
+viewport (confirmado por `getBoundingClientRect`/screenshot em 1440px,
+800px e 390px — largura sempre igual à do card, sem nenhum `.row`/`col-*`
+restringindo). O problema real não era largura, e sim **altura**: o campo
+tinha `rows="2"`, mas `ProcessoDetalheController.novo` sempre pré-preenche
+esse campo com `s.getJustificativaClinica()` — o texto **completo** que o
+solicitante escreveu no Portal (o mesmo texto que motivou o campo
+equivalente do lado do solicitante, `/solicitante/nova`, ganhar
+`rows="10"` mais cedo neste mesmo dia — ver seção "Ajuste no mesmo dia" em
+"Topo de `/solicitante/nova` compactado", acima). Um texto de várias
+frases dentro de uma caixa de 2 linhas fica majoritariamente escondido,
+exigindo rolagem interna — visualmente indistinguível de um campo
+"apertado"/"estreito" numa leitura rápida, e é exatamente essa a mesma
+classe de problema já corrigida antes para o campo de origem.
+
+**Achado ao revisar "todo o painel com carinho", como pedido:**
+`processos/editar.html` (editar um processo já cadastrado) tem o
+**exato mesmo** `<textarea th:field="*{observacoes}" rows="2">` —
+código duplicado, mesmo defeito. Corrigido nos dois lugares, não só na
+tela citada no relato.
+
+Enquanto revisava o painel também ficou evidente que nenhum dos dois
+formulários tinha `data-lock-submit` (`static/js/lock-submit.js`, mecanismo
+já padrão no resto do sistema para travar o botão contra duplo clique
+durante uma escrita irreversível — ver "Convenções de código"/seção de
+Fase C da UI do operador) — cadastrar/editar um `Processo` é exatamente o
+tipo de escrita que esse mecanismo protege, e os dois forms tinham ficado
+de fora das levas anteriores que cobriram outros formulários do sistema.
+
+**Correção (`processos/form.html` e `processos/editar.html`):**
+- `rows="2"` → `rows="8"` no `<textarea>` de Observações — grande o
+  suficiente para mostrar a justificativa clínica pré-preenchida quase por
+  inteiro sem rolagem, sem deixar a tela desproporcionalmente longa (um meio
+  termo deliberado entre o `rows="2"` original e o `rows="10"` do campo de
+  origem no Portal do Solicitante, que tem menos outros campos na mesma
+  tela).
+- `processos/form.html` ganhou um `<div class="form-text">` explicando que o
+  campo já vem preenchido com a justificativa do solicitante e pede revisão
+  antes de cadastrar — só nesse form (não em `editar.html`, onde o
+  `observacoes` já pode ter sido editado pelo operador antes e não é mais
+  necessariamente "a justificativa original").
+- Os dois `<form>` ganharam `data-lock-submit="Cadastrando processo..."` /
+  `"Salvando alterações..."` e o `<script th:replace="~{layout ::
+  lockSubmitScript}"></script>` correspondente (sem essa segunda linha, o
+  atributo fica sem efeito — `lock-submit.js` só é carregado por quem inclui
+  o fragment explicitamente).
+
+**Validação:** fluxo completo reproduzido de ponta a ponta com Playwright
+contra a aplicação real (H2 local): criar usuário SOLICITANTE, enviar uma
+solicitação com justificativa clínica longa, triar/converter como ADMIN,
+abrir `/processos/novo?origemSolicitacaoOnlineId=...`, confirmar visualmente
+(screenshot) em desktop (1440px), tablet (800px) e celular (390px) que o
+texto aparece quase inteiro sem cortar, cadastrar o processo com sucesso
+(redirect para `/processos/{id}` confirmado) e abrir a tela de edição desse
+mesmo processo para confirmar visualmente a mesma correção lá. Suíte
+completa revalidada (JDK 21, `mvn test`), sem regressão — nenhum teste
+travava o valor de `rows` nem a ausência de `data-lock-submit` nesses dois
+templates. `NovoProcessoPage` (E2E) localiza o botão "Cadastrar" por
+`AriaRole.BUTTON`/nome acessível, inalterado pela mudança (o texto do botão
+só troca para o spinner **depois** do clique, via `setTimeout(0)` — o clique
+em si e o `waitForURL` seguinte não são afetados).
