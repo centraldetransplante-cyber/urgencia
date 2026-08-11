@@ -78,20 +78,39 @@
              quebra de linha (text-break) sem nunca forçar a largura do
              cartão, diferente de um item de flex/grid (que teria a mesma
              armadilha de min-width:auto já documentada em app.css para
-             .cartao-resultado). -->
-        <div class="secao-rotulo mb-1">Quem está enviando</div>
-        <div class="superficie-apoio px-3 py-2 mb-3">
-            <p class="text-break small mb-1">
+             .cartao-resultado).
+
+             REFINAMENTO (2026-08-11, mesmo dia, pedido do dono do produto
+             logo depois do primeiro ajuste ir ao ar): a primeira versão deste
+             bloco (px-3 py-2, texto ".small", linhas com só mb-1 entre si e
+             o .secao-rotulo forçado para mb-1) ficou "muito apertada/
+             justificada em cima" - a caixa tinha padding menor que TODAS as
+             outras .superficie-apoio da mesma tela (que usam p-3) e o texto
+             saiu menor que o resto do formulário, destoando visualmente.
+             Corrigido SEM voltar ao tamanho original (o ganho de espaço até
+             a Justificativa clínica continua valendo, só bem menor): mesmo
+             padding p-3 das demais seções, texto no tamanho normal do corpo
+             (tirado o ".small"), respiro maior entre as duas linhas (mb-2) e
+             a nota de rodapé separada por um filete (border-top) em vez de
+             emendada por cima com só mt-2 - vira uma explicação, não um
+             apêndice espremido. O .secao-rotulo voltou a usar só a margem
+             padrão da classe (.35rem, ver app.css) - o "mb-1" (0.25rem via
+             utilitário Bootstrap, !important) que a primeira versão
+             adicionava na verdade ENCOLHIA esse respiro abaixo do padrão de
+             toda outra seção da tela, contribuindo pro efeito "espremido". -->
+        <div class="secao-rotulo">Quem está enviando</div>
+        <div class="superficie-apoio p-3 mb-3">
+            <p class="text-break mb-2">
                 <i class="bi bi-hospital-fill text-muted" aria-hidden="true"></i>
                 <span class="text-muted">Equipe/hospital:</span>
                 <strong th:text="${equipe}">Equipe</strong>
             </p>
-            <p class="text-break small mb-0">
+            <p class="text-break mb-0">
                 <i class="bi bi-envelope-fill text-muted" aria-hidden="true"></i>
                 <span class="text-muted">E-mail:</span>
                 <strong th:text="${email}">E-mail</strong>
             </p>
-            <p class="text-muted mb-0 mt-2 text-detail-xs">
+            <p class="text-muted mb-0 mt-3 pt-2 border-top text-detail-xs">
                 <i class="bi bi-lock-fill" aria-hidden="true"></i>
                 Preenchidos automaticamente a partir do seu cadastro (não editáveis aqui).
             </p>
