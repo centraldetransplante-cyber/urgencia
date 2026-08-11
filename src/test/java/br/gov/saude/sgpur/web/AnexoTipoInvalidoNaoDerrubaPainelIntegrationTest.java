@@ -16,6 +16,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -65,6 +66,29 @@ class AnexoTipoInvalidoNaoDerrubaPainelIntegrationTest {
     @PersistenceContext
     private EntityManager em;
 
+    /**
+     * Contador ESTATICO, determinístico, incrementado a cada chamada de
+     * {@link #preparar()} - fonte do sequencial/numero "unico" usado abaixo.
+     *
+     * <p><b>Bug real corrigido aqui (achado no CI, run
+     * {@code 31514984633}, commit {@code 8af1a8a} em {@code main}):</b> a
+     * versao anterior sorteava o sequencial via
+     * {@code 900 + (int) (System.nanoTime() % 90)} - so 90 valores
+     * possiveis. Como esta classe tem 3 metodos {@code @Test} e o Spring
+     * reaproveita o MESMO contexto/banco H2 nomeado
+     * ({@code jdbc:h2:mem:sgpur-anexo-tipo-invalido;DB_CLOSE_DELAY=-1})
+     * entre eles, {@code preparar()} roda 3 vezes na mesma instancia de
+     * banco, cada vez inserindo um {@code Processo} com um numero "unico"
+     * sorteado desses 90 valores - em runners de CI com resolucao de clock
+     * mais grosseira, 3 sorteios de {@code nanoTime() % 90} proximos no
+     * tempo colidem com chance real (~3%), violando a constraint
+     * {@code UNIQUE} de {@code processo.numero}
+     * ({@code Unique index or primary key violation... PROCESSO(NUMERO...)}).
+     * Um contador estatico incrementado a cada chamada elimina a colisao
+     * por construcao, sem depender de timing.</p>
+     */
+    private static final AtomicInteger PROXIMO_SEQUENCIAL = new AtomicInteger(900);
+
     @BeforeEach
     void preparar() {
         // Cada teste usa um numero/sequencial UNICO (nunca reaproveitado nem
@@ -77,7 +101,7 @@ class AnexoTipoInvalidoNaoDerrubaPainelIntegrationTest {
         tx.executeWithoutResult(s -> {
             Processo p = new Processo();
             int ano = java.time.Year.now().getValue();
-            int sequencial = 900 + (int) (System.nanoTime() % 90);
+            int sequencial = PROXIMO_SEQUENCIAL.getAndIncrement();
             p.setNumero(sequencial + "/" + ano);
             p.setSequencial(sequencial);
             p.setAno(ano);
