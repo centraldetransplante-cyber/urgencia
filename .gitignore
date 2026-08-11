@@ -68,3 +68,4 @@ package-lock.json
 ### Claude Code (settings pessoais, fora do git) ###
 .claude/settings.local.json
 
+.claude/worktrees/

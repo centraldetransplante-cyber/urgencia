@@ -5549,3 +5549,17 @@ de `lista()` (`open-in-view: false`). Guardas:
 `ResponsividadeSolicitanteIT` verdes e `FluxoCompletoProcessoIT` falhando só na
 linha 228 pré-existente de SMTP local ausente; de **12 ocorrências de estouro
 horizontal para 0**; todos os screenshots relidos após as correções.
+
+## Texto simplificado: "Processos decididos sem o seu voto" não cita mais a exceção do coordenador (2026-08-11)
+
+Pedido direto do dono do produto: o card "Processos decididos sem o seu voto"
+(`avaliador/lista.html`, Achado 10 / F6 da vistoria de brechas de decisão,
+2026-08-10) dizia *"...decididos por maioria simples (2 de 3) ou pela exceção
+do coordenador antes que seu parecer fosse necessário..."* — a menção à
+exceção do coordenador foi removida do texto exibido ao avaliador, que agora
+lê só *"Estes processos foram decididos por maioria simples (2 de 3) antes
+que seu parecer fosse necessário — não é preciso votar neles."* Mudança
+puramente de copy, sem efeito em `ParecerRepository.findDispensadosComProcesso`
+nem em nenhuma regra de decisão — o comentário Java/HTML acima do bloco, que
+documenta por que a seção existe (cobre os dois motivos de dispensa), foi
+mantido como está, só o texto visível ao usuário mudou.
