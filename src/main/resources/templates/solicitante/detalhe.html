@@ -87,8 +87,14 @@
             </div>
 
             <!-- Ação: enviar nova solicitação (devolvida / processo excluído). -->
+            <!--/* btn-resultado-danger (solido, variante -dark) e nao
+                   btn-outline-danger: contorno vermelho claro sobre a superficie
+                   .r-danger do proprio cartao praticamente sumia (mesma regra de
+                   contraste do Anexo C do relatorio de redesign, que ja motivou
+                   a familia .btn-resultado-*). Alem do contraste, esta e a acao
+                   de SAIDA do estado - precisa de peso de acao primaria. */-->
             <div class="mt-2" th:if="${situacao.mostrarNovaSolicitacao}">
-                <a th:href="@{/solicitante/nova}" class="btn btn-outline-danger">
+                <a th:href="@{/solicitante/nova}" class="btn btn-resultado-danger">
                     <i class="bi bi-plus-lg"></i> Enviar nova solicitação
                 </a>
             </div>
@@ -104,7 +110,13 @@
                     <label for="arquivosInfoComplementar" class="form-label">Arquivo(s) com as informações pedidas</label>
                     <input type="file" class="form-control" id="arquivosInfoComplementar" name="arquivos" multiple>
                 </div>
-                <button type="submit" class="btn btn-warning">
+                <!--/* btn-resultado-attention e nao btn-warning: btn-warning usa
+                       --rs-gold puro sobre a superficie --rs-gold-light do proprio
+                       cartao .r-attention, ficando quase do mesmo matiz do fundo.
+                       A classe existe desde 2026-08-08 exatamente por isso (foi
+                       criada para o cartao equivalente do Portal do Avaliador) -
+                       esta tela, que e a origem do padrao, tinha ficado de fora. */-->
+                <button type="submit" class="btn btn-resultado-attention">
                     <i class="bi bi-upload"></i> Enviar informações complementares
                 </button>
             </form>
@@ -195,10 +207,16 @@
                      icone=${ext.endsWith('.pdf')} ? 'bi-file-earmark-pdf text-danger'
                          : (${ext.endsWith('.png') or ext.endsWith('.jpg') or ext.endsWith('.jpeg')} ? 'bi-file-earmark-image text-primary'
                          : (${ext.endsWith('.eml') or ext.endsWith('.msg')} ? 'bi-file-earmark-text text-secondary' : 'bi-file-earmark text-muted'))">
+            <!--/* text-break (nao text-truncate): nome de anexo clinico e
+                   longo por natureza ("Laudo_Doppler_Venoso_Membros_...pdf") e
+                   com reticencias o solicitante nao conseguia confirmar QUAL
+                   arquivo tinha enviado. Mesma correcao ja aplicada a
+                   solicitante/nova.html em 2026-08-04 (ver CLAUDE.md, "Lista de
+                   documentos selecionados") - esta tela tinha ficado de fora. */-->
             <a class="d-flex align-items-center gap-2"
                th:href="@{/solicitante/{id}/anexos/{anexoId}(id=${solicitacao.id},anexoId=${a.id})}">
-                <i class="bi" th:classappend="${icone}"></i>
-                <span class="text-truncate" th:text="${a.nomeArquivo}">documento.pdf</span>
+                <i class="bi flex-shrink-0" th:classappend="${icone}"></i>
+                <span class="text-break" th:text="${a.nomeArquivo}">documento.pdf</span>
                 <span class="text-muted small text-nowrap ms-auto"
                       th:text="${#temporals.format(a.dataUpload, 'dd/MM/yyyy')}">-</span>
                 <i class="bi bi-download text-muted"></i>

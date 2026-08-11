@@ -288,6 +288,78 @@ class SolicitanteControllerTest {
                 "aguardando sua resposta")));
     }
 
+    /**
+     * Correcao da §4 do relatorio de responsividade/cores de 2026-08-11
+     * (opcao "a", aprovada pelo dono do produto): a lista mostrava o MESMO
+     * badge verde "Convertida em processo" para todo pedido convertido -
+     * deferido, indeferido e ainda em analise ficavam visualmente identicos,
+     * e verde significa "sucesso" em todo o resto do Portal.
+     *
+     * <p>Assercao NEGATIVA proposital em "Convertida em processo"/"bg-success"
+     * na linha indeferida: sem ela, o teste passaria de novo se alguem voltasse
+     * a ler {@code StatusSolicitacaoOnline.getBootstrapBadge()} no template
+     * (o rotulo "Indeferido" continuaria aparecendo em outro lugar da pagina).
+     */
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void listaDistingueVisualmentePedidoIndeferidoDeDeferidoEDeEmAnalise() throws Exception {
+        SolicitacaoOnline indeferida = converterComProcesso(51L, "Paciente Indeferido",
+            "111111111-11111", "01/2026", br.gov.saude.sgpur.domain.StatusProcesso.INDEFERIDO);
+        SolicitacaoOnline deferida = converterComProcesso(52L, "Paciente Deferido",
+            "222222222-22222", "02/2026", br.gov.saude.sgpur.domain.StatusProcesso.DEFERIDO);
+        SolicitacaoOnline emAnalise = converterComProcesso(53L, "Paciente Em Analise",
+            "333333333-33333", "03/2026", br.gov.saude.sgpur.domain.StatusProcesso.ENVIADO);
+        java.util.List<SolicitacaoOnline> todas = java.util.List.of(indeferida, deferida, emAnalise);
+
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.listarMinhas(1L)).thenReturn(todas);
+        when(solicitacaoService.resumir(todas))
+            .thenReturn(new br.gov.saude.sgpur.service.SolicitacaoOnlineService.Resumo(3, 0, 1, 2, 0));
+        when(mensagemService.contarNaoLidasSolicitantePorSolicitacao(any(), any())).thenReturn(0L);
+
+        String html = mvc.perform(get("/solicitante"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html)
+            .as("pedido indeferido tem que sair em vermelho, com o rotulo do desfecho real")
+            .contains("badge rounded-pill bg-danger")
+            .contains("bi-x-circle-fill")
+            .contains("Indeferido");
+        org.assertj.core.api.Assertions.assertThat(html)
+            .as("pedido deferido continua verde")
+            .contains("badge rounded-pill bg-success")
+            .contains("Deferido");
+        org.assertj.core.api.Assertions.assertThat(html)
+            .as("pedido ainda em analise sai em azul (nem sucesso nem falha)")
+            .contains("badge rounded-pill bg-primary")
+            .contains("Em análise");
+        org.assertj.core.api.Assertions.assertThat(html)
+            .as("o rotulo do enum (compartilhado com a triagem do OPERADOR) nao aparece mais aqui")
+            .doesNotContain("Convertida em processo");
+    }
+
+    /** Solicitacao CONVERTIDA com o Processo gerado no status informado. */
+    private SolicitacaoOnline converterComProcesso(Long id, String paciente, String rgct,
+            String numeroProcesso, br.gov.saude.sgpur.domain.StatusProcesso statusProcesso) {
+        br.gov.saude.sgpur.domain.Processo processo = new br.gov.saude.sgpur.domain.Processo();
+        processo.setId(id);
+        processo.setNumero(numeroProcesso);
+        processo.setPacienteNome(paciente);
+        processo.setStatus(statusProcesso);
+
+        SolicitacaoOnline s = new SolicitacaoOnline();
+        s.setId(id);
+        s.setUsuarioSolicitante(dono);
+        s.setPacienteNome(paciente);
+        s.setPacienteRgct(rgct);
+        s.setDataSituacaoEspecial(LocalDate.now());
+        s.setJustificativaClinica("Quadro grave.");
+        s.setStatus(StatusSolicitacaoOnline.CONVERTIDA);
+        s.setProcessoGerado(processo);
+        return s;
+    }
+
     @Test
     @WithMockUser(username = "usuarioSemCadastro", roles = "SOLICITANTE")
     void resolverUsuarioLancaSessaoInvalidaQuandoUsuarioAutenticadoNaoExisteNoBanco() throws Exception {
