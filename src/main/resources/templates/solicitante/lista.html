@@ -135,10 +135,15 @@
         </div>
     </div>
 
-    <!-- Desktop/tablet: tabela (>=768px, breakpoint md do Bootstrap). elev-2
+    <!-- Desktop: tabela (>=992px, breakpoint lg do Bootstrap). elev-2
          (M3, V5 do redesign visual) só quando a lista está vazia - é o único
-         cartão que "importa" na tela nesse caso (regra do M3). -->
-    <div class="card d-none d-md-block" th:classappend="${solicitacoes.isEmpty()} ? ' elev-2' : ''">
+         cartão que "importa" na tela nesse caso (regra do M3).
+         O corte era md (>=768px) até a vistoria de responsividade de
+         2026-08-11: entre 768 e 991px a tabela de 6 colunas espremia TODAS as
+         células em 3-4 linhas cada (nome do paciente, RGCT e data quebrados,
+         e o próprio botão "Ver" com ícone e rótulo em linhas separadas) -
+         pior de ler que os cards empilhados que já existiam logo abaixo. -->
+    <div class="card d-none d-lg-block" th:classappend="${solicitacoes.isEmpty()} ? ' elev-2' : ''">
         <div class="table-responsive">
             <table class="table table-hover align-middle mb-0" id="tabelaSolicitacoes">
                 <thead class="table-light">
@@ -213,10 +218,12 @@
         </div>
     </div>
 
-    <!-- Mobile (<768px): cards empilhados em vez de tabela espremida - mais
-         nativo pra quem acessa do celular fora do hospital. Mesmos dados/
-         atributos do model que a tabela acima, só a apresentação muda. -->
-    <div class="d-md-none">
+    <!-- Celular e tablet (<992px): cards empilhados em vez de tabela espremida
+         - mais nativo pra quem acessa do celular fora do hospital. Mesmos
+         dados/atributos do model que a tabela acima, só a apresentação muda.
+         Par obrigatório do d-lg-block da tabela: os dois têm que trocar no
+         MESMO breakpoint, senão a lista some ou duplica numa faixa de largura. -->
+    <div class="d-lg-none">
         <div th:if="${solicitacoes.isEmpty()}" class="card elev-2">
             <div class="estado-vazio">
                 <div class="estado-vazio-icone ev-info"><i class="bi bi-send-plus"></i></div>

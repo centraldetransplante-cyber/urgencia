@@ -5320,3 +5320,83 @@ o cargo "ao vivo") como pendente de decisão de produto — já estava
 implementado desde o commit `3dac941` (2026-08-07), só o texto do guia
 não tinha sido atualizado (ver a correção logo acima, na mesma seção
 "Vistoria de bugs de 2026-08-03").
+
+## Vistoria de responsividade e cores do Portal do Solicitante (2026-08-11)
+
+`docs/RELATORIO-RESPONSIVIDADE-CORES-SOLICITANTE-2026-08.md` — **IMPLEMENTADO**
+(o relatório é registro, não plano pendente). Gatilho: pedido do dono do
+produto, *"verifique responsividade e as cores, ajuste todo css, tinha texto
+saindo da tela"*. Só o Portal do Solicitante; nenhuma regra de negócio,
+controller, endpoint ou `name=`/`id` de campo mudou.
+
+**O bug relatado era real e mensurável: a página tinha 642px de largura numa
+tela de 360px** (282px de estouro), nos estados Aguardando triagem, Deferido e
+Indeferido de `/solicitante/{id}` — o solicitante precisava rolar de lado para
+ler a decisão do próprio pedido.
+
+**Causa raiz (vale para qualquer cartão flex do sistema):** `.cartao-resultado`
+é `display:flex`, e **item de flex nasce com `min-width: auto`** — nunca encolhe
+abaixo da largura *min-content* do conteúdo. As mensagens desse cartão carregam
+o e-mail institucional da equipe solicitante, **um token sem nenhum espaço**, o
+que fixava a largura do conteúdo em ~519px em qualquer viewport. `flex-grow` não
+ajuda (só distribui sobra, não autoriza encolher). A correção é sempre **um
+par**: `min-width: 0` (autoriza encolher) **+** `overflow-wrap: anywhere`
+(autoriza o token a quebrar no espaço encolhido) — uma sem a outra não resolve.
+Mesmo remédio que `.text-pre-wrap` já aplicava na justificativa clínica desde
+2026-08-06; só não tinha sido estendido ao cartão de resultado, criado depois.
+
+**Achado estrutural: o bloco de redesign V1–V6 do `app.css` não tinha UMA
+media query.** A última `@media` do arquivo estava na linha ~1318 e todo o
+bloco do Portal (`.pagina-cabecalho`, `.cartao-resultado`, `.estado-vazio`,
+`.chip-protocolo`, `.zona-upload`) vem depois — tudo calibrado no mockup de
+desktop e servido igual no celular. Criado um bloco responsivo novo
+(`max-width: 767.98px` e `max-width: 575.98px`, sempre com `.98` pela armadilha
+de sobreposição em pixel exato já documentada acima): o cartão de resultado
+**empilha** em celular (ícone acima do texto), ícone 64→52px, título de destaque
+1.75→1.35rem, ação principal em largura total.
+
+Demais correções: tabela da lista trocou o corte `md` (768px) por `lg` (992px)
+— entre 768 e 991px as 6 colunas quebravam todas as células em 3-4 linhas, pior
+que os cards que já existiam logo abaixo (os dois lados, `d-lg-block` e
+`d-lg-none`, **têm** que trocar no mesmo breakpoint); `text-truncate` →
+`text-break` no nome do anexo em `detalhe.html` (**recaída** do bug já corrigido
+em `nova.html` em 2026-08-04, ver "Lista de documentos selecionados" acima —
+aquela correção não cobriu a tela de detalhe); `btn-warning` →
+`btn-resultado-attention` e `btn-outline-danger` → `btn-resultado-danger` nos
+dois botões dentro de cartão tintado (a família `.btn-resultado-*` foi criada em
+2026-08-08 exatamente por esse motivo de contraste, para o Portal do Avaliador —
+a tela que originou o padrão tinha ficado de fora); barra de ações e contador de
+caracteres de `nova.html` com `flex-wrap`.
+
+**`.w-sm-auto` foi definida no `app.css`**: o Bootstrap 5 **não** gera variantes
+responsivas das utilities de largura, então `w-sm-auto` simplesmente não
+existiria e o `w-100` valeria em todas as larguras.
+
+**Guarda novo: `ResponsividadeSolicitanteIT`** (Playwright, profile `e2e`).
+Semeia os 8 estados do portal com dados do tamanho dos reais (o e-mail curto de
+fixture não reproduz o defeito) e percorre 10 telas × 6 larguras (360/390/576/
+768/992/1440), falhando se qualquer uma estourar a largura da viewport —
+nomeando tela, largura, pixels de estouro e elementos culpados. Nenhum outro
+teste do projeto mede isso: a suíte olha status/model/texto e o
+`RedesignVisualSolicitanteIT` olha cor e tamanho de fonte, nunca a largura do
+documento. **Verificado que o guarda falha de verdade** ao reintroduzir a causa
+raiz. Nota metodológica: removendo **só** o `min-width: 0` o teste continuava
+passando (o `overflow-wrap` sozinho já bastava naquele breakpoint) — para
+provar que um guarda pega o bug é preciso desfazer a causa raiz inteira, não um
+pedaço dela.
+
+**PENDENTE DE DECISÃO DO DONO DO PRODUTO (não implementado):** na lista
+`/solicitante`, todo pedido convertido mostra o mesmo badge **verde**
+"Convertida em processo" — inclusive os **INDEFERIDOS** (confirmado por
+screenshot: #18 indeferido, #17/#16 deferidos e #14 em análise, visualmente
+idênticos). Verde significa "deferido/sucesso" em todo o resto do Portal. Não
+foi mexido porque (1) mostrar o desfecho na lista é decisão de informação, e
+(2) a cor vem de `StatusSolicitacaoOnline.getBootstrapBadge()`
+(`CONVERTIDA -> "bg-success"`), enum **compartilhado com a tela de triagem do
+OPERADOR** — mudá-lo muda as duas telas. As 3 opções estão na §4 do relatório.
+
+**Validação:** suíte completa **977 testes, 0 falhas** (JDK 21); E2E com
+`RedesignVisualSolicitanteIT`/`PortaisVisualCompletoIT`/`ChatVisualVerificacaoIT`/
+`ResponsividadeSolicitanteIT` verdes e `FluxoCompletoProcessoIT` falhando só na
+linha 228 pré-existente de SMTP local ausente; de **12 ocorrências de estouro
+horizontal para 0**; todos os screenshots relidos após as correções.
