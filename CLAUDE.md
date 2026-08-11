@@ -5705,3 +5705,86 @@ visual real com Playwright** (IT temporário, não commitado): as duas telas em
 modo leitura e a lista, em desktop (1440px) e celular (390px), inspecionadas
 uma a uma — sem vazamento de decisão/nome, sem formulário de voto, chat
 visível e o badge da navbar caindo de 2 para 1 ao abrir a primeira conversa.
+
+## Topo de `/solicitante/nova` compactado (2026-08-11)
+
+**Pedido do dono do produto**, olhando `/solicitante/nova` em produção: os
+blocos "Equipe solicitante" (Equipe/hospital + E-mail, ambos readonly) e
+"Paciente" (Nome/RGCT/Data) juntos empurravam "Justificativa clínica" — de
+longe o campo mais importante da tela, onde a equipe de Urgência Renal
+decide se aceita a urgência (tem contador de caracteres e a lista "O que a
+equipe precisa saber") — para fora da primeira dobra. Pedido explícito de
+"bom senso": aplicar o mesmo ajuste em qualquer outra tela do Portal do
+Solicitante/Avaliador com o mesmo padrão (bloco de identificação/readonly
+ocupando espaço desproporcional antes do conteúdo principal).
+
+**Mudança só visual/CSS/template — nenhum `name`/`id` de campo, controller,
+endpoint ou regra de negócio mexida.**
+
+1. **Equipe/E-mail viraram uma faixa de identificação compacta**, em vez de
+   dois pares `<label>` + `<input class="form-control" readonly>` inteiros
+   (cada um com a altura de um campo editável de verdade, quando na
+   prática são só informativos — sem `name`, nunca mudam, nunca são
+   submetidos). Cada linha virou um `<p>` de largura total dentro do mesmo
+   `.superficie-apoio`, com ícone (`bi-hospital-fill`/`bi-envelope-fill`) +
+   rótulo em `text-muted` + valor em `<strong>`. **Cada linha continua em
+   bloco (nunca lado a lado num `.row`/`.d-flex`)** — é a mesma defesa já
+   documentada no commit de 2026-08-06 contra o bug real de e-mail
+   institucional cortado: um `<p>` em bloco com `.text-break` só quebra de
+   linha, nunca força a largura do cartão; um item de flex/grid teria a
+   mesma armadilha de `min-width: auto` já documentada em `app.css` para
+   `.cartao-resultado` (que exigiria `overflow-wrap: anywhere` para não
+   estourar a tela com um e-mail institucional sem espaços). O texto de
+   ajuda ("Preenchidos automaticamente...") ganhou a classe
+   `.text-detail-xs` (já existente em `app.css`) para pesar menos
+   visualmente, mantendo `form-text` para o espaçamento padrão.
+2. **Nome/RGCT/Data do paciente passaram para uma única linha** em telas
+   ≥768px (`col-md-6/col-md-3/col-md-3`, era `col-md-8/col-md-4` numa linha
+   + `col-md-4` sozinho numa segunda linha, desperdiçando 8/12 da largura)
+   — economiza uma linha inteira de altura sem tirar nenhum campo do lugar.
+   Em telas menores os 3 continuam empilhando normalmente (comportamento
+   inalterado). Os textos de ajuda de RGCT/Data também ganharam
+   `.text-detail-xs` e foram encurtados ("Registro no Sistema Nacional de
+   Transplantes (SNT)."/"Quando a equipe constatou a urgência (não pode ser
+   futura).").
+
+**Medido de verdade (Playwright, IT temporário, não commitado), não
+estimado:** a distância do topo da página até o campo de justificativa caiu
+de **1312px para 982px** em desktop (1440px) — uma redução de ~25%; em
+celular (390px), de 1408px para 1320px (menor ganho, porque os campos já
+empilham). **Nenhum estouro horizontal em nenhum breakpoint** (360/390/576/
+768/992/1440px, `scrollWidth == clientWidth` em todos), confirmado tanto
+pela medição própria quanto pelos guardas já existentes
+(`ResponsividadeSolicitanteIT`, `RedesignVisualSolicitanteIT`) rodados após
+a mudança — os mesmos textos longos de fixture (equipe/e-mail institucional
+sem espaços, o gatilho original do bug de 2026-08-11 documentado acima em
+"Vistoria de responsividade e cores do Portal do Solicitante") continuam
+sem cortar nem estourar, agora também mais legíveis (o e-mail institucional
+inteiro passou a ficar visível — antes era clipado dentro do `<input>`, sem
+indicação visual de que havia mais texto).
+
+**"Bom senso" — outras telas verificadas, nenhuma alterada:**
+- `solicitante/detalhe.html`: a identificação (RGCT/data/justificativa) fica
+  **depois** do cartão de resultado principal, num `<dl>` compacto — não é o
+  mesmo padrão (bloco pesado *antes* do conteúdo principal).
+- `avaliador/votar.html`: o cartão de identificação (Processo/Paciente/
+  Enviado em, `.superficie-apoio` + `<dl>` de 3 linhas) fica logo acima do
+  formulário de voto — é o candidato mais próximo ao padrão, mas já é
+  compacto (dl enxuto, não o par `<label>`+`<input class="form-control">`
+  que `nova.html` tinha). Mantido como está: o número do processo aparece
+  duas vezes de propósito (no `.chip-protocolo` do cabeçalho **e** no
+  cartão) porque a coluna inteira é `sticky-lg-top` — se o cabeçalho rolar
+  para fora da viewport, o número do processo continua visível dentro do
+  cartão que ficou grudado no topo; removê-lo dali reduziria espaço às
+  custas de perder essa referência quando a tela rola.
+- `avaliador/lista.html`, `solicitante/lista.html`,
+  `solicitante/indisponivel.html`: telas de lista/aviso, sem bloco de
+  identificação antes de conteúdo principal — padrão não se aplica.
+
+**Testes:** suíte completa **991 testes, 0 falhas** (JDK 21, `mvn clean
+test`). `RedesignVisualSolicitanteIT` e `ResponsividadeSolicitanteIT`
+(Playwright, profile `e2e`) revalidados sem regressão — o primeiro confirma
+que `.secao-rotulo`/`.secao-titulo` continuam presentes e com a escala
+tipográfica esperada; o segundo confirma ausência de estouro horizontal em
+todas as 6 larguras testadas, incluindo `/solicitante/nova` com o e-mail
+institucional de fixture (`nefrologia.transplante.renal@...`).

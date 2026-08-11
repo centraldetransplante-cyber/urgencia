@@ -57,58 +57,71 @@
              2026-08-06, M2 + M3): cada bloco do formulário vira sua própria
              seção com rótulo + título, dentro de uma superfície de apoio -
              em vez de um único cartão contínuo separado só por réguas
-             cinzas de 1px. -->
-        <div class="secao-rotulo">Quem está enviando</div>
-        <h2 class="secao-titulo">Equipe solicitante</h2>
-        <div class="superficie-apoio p-3 mb-3">
-            <div class="row g-3">
-                <!--/* col-12 cada um (empilhados), nao col-md-8/col-md-4 lado a lado:
-                       bug real relatado em producao (2026-08-06) - e-mail institucional
-                       cortado visualmente porque 4/12 da largura do container-narrow
-                       (760px) nao comporta a maioria dos enderecos reais. Ambos os
-                       campos sao so informativos (readonly, sem "name"), e "equipe"
-                       tambem pode ser longo (ex. nome de hospital por extenso) -
-                       empilhar da largura total pros dois e a unica forma de garantir
-                       que nenhum dos dois corta, independente do tamanho do conteudo. */-->
-                <div class="col-12">
-                    <label class="form-label" for="equipeSolicitanteInfo">Equipe / hospital</label>
-                    <!--/* so readonly (sem disabled): disabled tira o campo da ordem de
-                           tabulacao/leitor de tela; sem "name", nao e enviado no submit de
-                           qualquer forma - so informativo, exatamente como antes. */-->
-                    <input type="text" id="equipeSolicitanteInfo" class="form-control" th:value="${equipe}" readonly>
-                </div>
-                <div class="col-12">
-                    <label class="form-label" for="emailSolicitanteInfo">E-mail</label>
-                    <input type="text" id="emailSolicitanteInfo" class="form-control" th:value="${email}" readonly>
-                </div>
-            </div>
-            <p class="small text-muted mb-0 mt-2">
+             cinzas de 1px.
+
+             COMPACTAÇÃO DO TOPO (2026-08-11, pedido do dono do produto
+             olhando /solicitante/nova em produção): "Equipe solicitante" e
+             "Paciente" juntos empurravam "Justificativa clínica" - de longe
+             o campo mais importante da tela, onde a equipe decide se aceita
+             a urgência - para fora da primeira dobra. Duas mudanças, só
+             visuais/CSS, nenhum name/id de campo mudou: -->
+
+        <!-- 1) Equipe/E-mail viraram uma faixa de identificação compacta, em
+             vez de dois pares <label>+<input class="form-control"> inteiros
+             (cada um com a altura de um campo editável de verdade). Os dois
+             dados são só informativos (readonly, sem "name", nunca mudam) -
+             não precisam do mesmo peso visual dos campos que o solicitante
+             de fato preenche logo abaixo. Cada linha continua um <p> de
+             LARGURA TOTAL (nunca lado a lado num .row/.d-flex): é a mesma
+             defesa documentada no commit anterior (2026-08-06) contra o bug
+             real de e-mail institucional cortado - um <p> em bloco só
+             quebra de linha (text-break) sem nunca forçar a largura do
+             cartão, diferente de um item de flex/grid (que teria a mesma
+             armadilha de min-width:auto já documentada em app.css para
+             .cartao-resultado). -->
+        <div class="secao-rotulo mb-1">Quem está enviando</div>
+        <div class="superficie-apoio px-3 py-2 mb-3">
+            <p class="text-break small mb-1">
+                <i class="bi bi-hospital-fill text-muted" aria-hidden="true"></i>
+                <span class="text-muted">Equipe/hospital:</span>
+                <strong th:text="${equipe}">Equipe</strong>
+            </p>
+            <p class="text-break small mb-0">
+                <i class="bi bi-envelope-fill text-muted" aria-hidden="true"></i>
+                <span class="text-muted">E-mail:</span>
+                <strong th:text="${email}">E-mail</strong>
+            </p>
+            <p class="text-muted mb-0 mt-2 text-detail-xs">
+                <i class="bi bi-lock-fill" aria-hidden="true"></i>
                 Preenchidos automaticamente a partir do seu cadastro (não editáveis aqui).
             </p>
         </div>
 
+        <!-- 2) Nome/RGCT/Data numa única linha em telas ≥768px (era Nome+RGCT
+             numa linha e Data sozinha na linha de baixo, desperdiçando 8/12
+             da largura) - economiza uma linha inteira de altura sem tirar
+             nenhum campo do lugar. Em telas menores os 3 continuam
+             empilhando normalmente (comportamento inalterado). -->
         <div class="secao-rotulo">Dados do paciente</div>
         <h2 class="secao-titulo">Paciente</h2>
         <div class="superficie-apoio p-3 mb-3">
             <div class="row g-3">
-                <div class="col-md-8">
+                <div class="col-md-6">
                     <label class="form-label" th:for="pacienteNome">Nome do paciente *</label>
                     <input type="text" th:field="*{pacienteNome}" class="form-control" maxlength="200" required>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label" th:for="pacienteRgct">RGCT / SNT *</label>
                     <input type="text" th:field="*{pacienteRgct}" class="form-control" placeholder="123456789-12345" required maxlength="60">
-                    <div class="form-text text-muted">
-                        Número de registro do paciente no Sistema Nacional de Transplantes (SNT).
+                    <div class="form-text text-muted text-detail-xs">
+                        Registro no Sistema Nacional de Transplantes (SNT).
                     </div>
                 </div>
-            </div>
-            <div class="row g-3 mt-1">
-                <div class="col-md-4">
-                    <label class="form-label" th:for="dataSituacaoEspecial">Data em que a urgência foi identificada *</label>
+                <div class="col-md-3">
+                    <label class="form-label" th:for="dataSituacaoEspecial">Data da urgência *</label>
                     <input type="date" th:field="*{dataSituacaoEspecial}" class="form-control" required>
-                    <div class="form-text text-muted">
-                        Data em que a equipe constatou a situação de urgência (não pode ser no futuro).
+                    <div class="form-text text-muted text-detail-xs">
+                        Quando a equipe constatou a urgência (não pode ser futura).
                     </div>
                 </div>
             </div>
