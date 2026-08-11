@@ -77,7 +77,7 @@ class UsuarioServiceTest {
         ArgumentCaptor<String> corpoCaptor = ArgumentCaptor.forClass(String.class);
         verify(emailSenderService).enviar(eq("operador1@example.com"), anyString(), corpoCaptor.capture());
         // A senha temporaria gerada aparece no corpo do e-mail, nunca em um valor de retorno do metodo.
-        assertThat(corpoCaptor.getValue()).contains("Nova senha temporaria:");
+        assertThat(corpoCaptor.getValue()).contains("Nova senha temporária:");
     }
 
     @Test

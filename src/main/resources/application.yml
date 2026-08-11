@@ -213,6 +213,10 @@ sgpur:
   # e a cidade impressa na linha "Cidade, dd de mes de aaaa" - antes de
   # 2026-08-04 saia a palavra literal "Local," no documento oficial.
   email:
-    assinatura: ${SGPUR_EMAIL_ASSINATURA:Equipe de Urgencia Renal - Secretaria de Saude}
-    prefixo-assunto: ${SGPUR_EMAIL_PREFIXO_ASSUNTO:Urgencia Renal}
+    # ACENTUADOS desde 2026-08-11 (texto institucional que sai para a equipe
+    # solicitante). ATENCAO: se a VM de producao definir SGPUR_EMAIL_ASSINATURA /
+    # SGPUR_EMAIL_PREFIXO_ASSUNTO em /opt/sgpur/sgpur.env (fora do git), o valor
+    # de la vence este default e precisa ser acentuado manualmente la.
+    assinatura: ${SGPUR_EMAIL_ASSINATURA:Equipe de Urgência Renal - Secretaria de Saúde}
+    prefixo-assunto: ${SGPUR_EMAIL_PREFIXO_ASSUNTO:Urgência Renal}
     oficio-cidade: ${SGPUR_OFICIO_CIDADE:Porto Alegre}
