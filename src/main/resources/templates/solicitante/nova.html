@@ -130,9 +130,15 @@
             </div>
             <textarea th:field="*{justificativaClinica}" class="form-control" rows="5" required
                       placeholder="Descreva o quadro clínico e o motivo do pedido de urgência renal."></textarea>
-            <div class="form-text d-flex justify-content-between">
+            <!--/* flex-wrap + gap: sem wrap, o contador ("0 caracteres",
+                   text-nowrap) dividia a linha com a frase de ajuda em telas
+                   estreitas e o resultado lido era "Quanto mais completo, menor
+                   a  0 caracteres / chance de a equipe pedir..." - as duas
+                   informacoes entrelacadas. Com wrap, o contador desce inteiro
+                   para a linha de baixo. */-->
+            <div class="form-text d-flex flex-wrap justify-content-between gap-1">
                 <span>Quanto mais completo, menor a chance de a equipe pedir informação complementar.</span>
-                <span id="justificativaContador" class="text-muted text-nowrap ms-2">0 caracteres</span>
+                <span id="justificativaContador" class="text-muted text-nowrap">0 caracteres</span>
             </div>
         </div>
 
@@ -169,17 +175,23 @@
             <ul id="documentosSelecionados" class="list-group mt-2"></ul>
         </div>
 
-        <div class="card d-flex flex-row justify-content-between align-items-center p-3">
+        <!--/* flex-wrap + gap: em 360px os 3 controles ficavam espremidos numa
+               linha unica (flex-row fixo, sem wrap), com "Salvar rascunho" e
+               "Enviar solicitacao" quebrando o proprio rotulo em duas linhas
+               dentro de botoes minusculos - justamente a acao final do
+               formulario. Agora empilham, com o botao primario em largura
+               total no celular (w-100 d-sm-auto). */-->
+        <div class="card d-flex flex-row flex-wrap justify-content-between align-items-center gap-2 p-3">
             <a th:href="@{/solicitante}" class="btn btn-link text-muted p-0"
                data-confirm-msg="Descartar o preenchimento desta solicitação? Os dados digitados serão perdidos.">
                 Cancelar
             </a>
-            <div class="d-flex align-items-center gap-3">
+            <div class="d-flex flex-wrap align-items-center gap-2 gap-sm-3 ms-auto">
                 <span id="rascunhoStatus" class="small text-muted"></span>
                 <button type="button" id="btnSalvarRascunho" class="btn btn-outline-secondary">
                     <i class="bi bi-save"></i> Salvar rascunho
                 </button>
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" class="btn btn-primary w-100 w-sm-auto">
                     <i class="bi bi-send"></i> Enviar solicitação
                 </button>
             </div>

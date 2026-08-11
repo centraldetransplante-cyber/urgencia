@@ -1728,6 +1728,36 @@ tr.linha-inativa > td:first-child {
     border: 1px solid var(--r-bd);
     color: var(--r-tx);
 }
+/* min-width:0 no filho de conteudo (.flex-grow-1 do template) - SEM isso o
+   cartao estourava a tela em ate 282px num celular de 360px, e o solicitante
+   precisava rolar de lado para ler a propria decisao (bug real reportado:
+   "tinha texto saindo da tela", vistoria de 2026-08-11).
+
+   Causa: item de flex nasce com `min-width: auto`, ou seja, NAO encolhe
+   abaixo da largura min-content do proprio conteudo. As mensagens deste
+   cartao carregam o e-mail institucional da equipe solicitante
+   (ex. "nefrologia.transplante.renal@hospital...com.br"), um token sem
+   espaco algum - a largura min-content virava ~519px fixos, independente da
+   viewport, e o documento inteiro passava a ter 642px de largura. `flex-grow`
+   nao ajuda aqui: ele so distribui sobra, nunca autoriza encolhimento.
+   O `overflow-wrap: anywhere` abaixo e o par obrigatorio do min-width:0 -
+   um sem o outro nao resolve (o primeiro permite encolher, o segundo permite
+   quebrar o token dentro do espaco ja encolhido). Mesmo remedio que
+   .text-pre-wrap ja aplica na justificativa clinica. */
+.cartao-resultado > *:not(.cartao-resultado-icone) {
+    min-width: 0;
+}
+.cartao-resultado h2,
+.cartao-resultado p,
+.cartao-resultado-detalhe {
+    overflow-wrap: anywhere;
+}
+/* Rotulo longo ("Baixar comprovante de inserção no SNT") num btn-lg nao pode
+   forcar a largura do cartao: sem isso o proprio botao media 446px numa tela
+   de 360px. */
+.cartao-resultado .btn {
+    white-space: normal;
+}
 .cartao-resultado-icone {
     width: 64px;
     height: 64px;
@@ -1837,3 +1867,113 @@ tr.linha-inativa > td:first-child {
     margin: 0 auto;
 }
 .zona-upload .form-text { max-width: 420px; margin: .35rem auto 0; }
+
+/* ============================================================================
+   === Responsividade do Portal do Solicitante (vistoria de 2026-08-11) ===
+   docs/RELATORIO-RESPONSIVIDADE-CORES-SOLICITANTE-2026-08.md
+
+   O bloco de redesign V1-V6 acima foi escrito SEM nenhuma media query: todo
+   espacamento, tamanho de icone e escala tipografica era fixo, calibrado no
+   mockup de desktop. Em celular isso se manifestava como cartoes com pouca
+   area util (o icone de 64px + gap de 1.25rem comem 84px de uma tela de
+   390px), faixa de cabecalho alta demais e a marca d'agua de 170px por cima
+   do titulo. As regras abaixo sao a unica camada responsiva desses
+   componentes - nao ha equivalente no Bootstrap, porque sao classes proprias.
+
+   Os cortes seguem os breakpoints padrao do Bootstrap e usam sempre `.98`
+   para nunca coincidir com um `min-width` existente no mesmo pixel (armadilha
+   real ja documentada no CLAUDE.md: `max-width: 768px` e `min-width: 768px`
+   valendo ao mesmo tempo em exatamente 768px). ==============================
+   ============================================================================ */
+
+/* --- Tablet retrato e abaixo (< 768px) --- */
+@media (max-width: 767.98px) {
+    .pagina-cabecalho .pc-inner {
+        padding: 1.25rem 1rem 1.15rem;
+    }
+    /* A marca d'agua e decorativa (aria-hidden): em tela estreita ela ocupava
+       quase metade da largura atras do titulo. Fica menor e mais para fora. */
+    .pagina-cabecalho .pc-marca {
+        width: 120px;
+        height: 120px;
+        top: -18px;
+        right: -20px;
+    }
+    .estado-vazio {
+        padding: 2.25rem 1rem;
+    }
+    .cartao-resultado {
+        padding: 1.15rem 1.15rem;
+        gap: 1rem;
+    }
+}
+
+/* --- Celular (< 576px) --- */
+@media (max-width: 575.98px) {
+    /* O cartao de resultado passa a EMPILHAR: em 360px, icone (64px) + gap
+       (20px) sobravam ~250px de coluna de texto, deixando ate o titulo
+       "Devolvida para correcao" quebrado em duas linhas. Empilhado, o texto
+       usa a largura inteira e o icone continua sendo a primeira coisa que o
+       olho encontra. */
+    .cartao-resultado {
+        flex-direction: column;
+        gap: .85rem;
+        padding: 1.1rem 1rem;
+        border-radius: var(--saur-radius-md);
+    }
+    .cartao-resultado-icone {
+        width: 52px;
+        height: 52px;
+        font-size: 1.6rem;
+    }
+    /* 1.75rem (--saur-font-xl) num container de ~330px quebrava o titulo do
+       resultado em 3 linhas. */
+    .cartao-resultado-destaque h2 {
+        font-size: 1.35rem;
+    }
+    .cartao-resultado h2 {
+        font-size: 1.15rem;
+    }
+    /* Acao principal do cartao (baixar comprovante/oficio, enviar informacao
+       complementar, nova solicitacao) ocupa a largura toda - alvo de toque
+       confortavel e sem competir por espaco horizontal. */
+    .cartao-resultado .btn {
+        width: 100%;
+    }
+    .pagina-titulo {
+        font-size: 1.35rem;
+    }
+    .pagina-cabecalho .pc-inner {
+        padding: 1.1rem .9rem 1rem;
+    }
+    .pagina-cabecalho .pc-marca {
+        width: 96px;
+        height: 96px;
+        top: -12px;
+        right: -16px;
+    }
+    .estado-vazio {
+        padding: 1.75rem .9rem;
+    }
+    .estado-vazio-icone {
+        width: 60px;
+        height: 60px;
+        font-size: 1.5rem;
+    }
+    .secao-titulo {
+        font-size: 1.1rem;
+    }
+    .zona-upload {
+        padding: 1rem .75rem;
+    }
+}
+
+/* Utilitario que o Bootstrap 5 NAO traz por padrao: as utilities de largura
+   (.w-100/.w-auto) nao tem variante responsiva gerada, entao "w-sm-auto" nao
+   existiria e o w-100 valeria em TODAS as larguras. Usado no botao "Enviar
+   solicitação" (nova.html), que deve ocupar a largura toda so no celular. */
+@media (min-width: 576px) {
+    .w-sm-auto {
+        width: auto !important;
+    }
+}
