@@ -721,4 +721,153 @@ class SolicitanteControllerTest {
             .andExpect(content().string(org.hamcrest.Matchers.not(
                 org.hamcrest.Matchers.containsString("Ofício ainda sendo providenciado pela equipe"))));
     }
+
+    // ----- Cartao de situacao: nunca repetir a mesma informacao duas vezes -----
+    // Relato do dono do produto olhando /solicitante/16 em producao (2026-08): o
+    // cartao mostrava a prosa polida do controller e, LOGO ABAIXO, o corpo bruto
+    // do e-mail institucional (Processo.mensagemResposta) dizendo exatamente a
+    // mesma coisa em linguagem de oficio. O "detalhe" do cartao so deve existir
+    // quando acrescenta informacao NOVA.
+
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void deferidoNaoRepeteOCorpoBrutoDoEmailInstitucionalNoCartao() throws Exception {
+        br.gov.saude.sgpur.domain.Processo processo = new br.gov.saude.sgpur.domain.Processo();
+        processo.setId(210L);
+        processo.setNumero("11/2026");
+        processo.setStatus(br.gov.saude.sgpur.domain.StatusProcesso.DEFERIDO);
+        processo.setEmailEnviadoSolicitante(true);
+        processo.setMensagemResposta("Prezados(as), Informamos que o processo de Urgencia Renal 11/2026 "
+            + "foi DEFERIDO. Permanecemos a disposicao para esclarecimentos.");
+        solicitacaoDoDono.setStatus(StatusSolicitacaoOnline.CONVERTIDA);
+        solicitacaoDoDono.setProcessoGerado(processo);
+
+        br.gov.saude.sgpur.domain.Anexo comprovante = new br.gov.saude.sgpur.domain.Anexo();
+        comprovante.setId(910L);
+        comprovante.setTipo(br.gov.saude.sgpur.domain.TipoAnexo.COMPROVANTE_SNT);
+
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.buscarParaDetalhe(50L)).thenReturn(solicitacaoDoDono);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(1, "bg-secondary"));
+        when(mensagemService.listarPorSolicitacao(50L)).thenReturn(java.util.List.of());
+        when(anexoStorageProcesso.buscarUltimoPorTipo(210L, br.gov.saude.sgpur.domain.TipoAnexo.COMPROVANTE_SNT))
+            .thenReturn(comprovante);
+        when(anexoStorageProcesso.buscarUltimoPorTipo(210L, br.gov.saude.sgpur.domain.TipoAnexo.OFICIO_INDEFERIMENTO))
+            .thenReturn(null);
+
+        mvc.perform(get("/solicitante/50"))
+            .andExpect(status().isOk())
+            // o corpo bruto do e-mail nunca mais aparece na tela
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Permanecemos a disposicao para esclarecimentos"))))
+            // a mensagem polida (unica) continua la
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "A resposta oficial foi enviada por e-mail")))
+            // e o detalhe traz so o que e NOVO: nada mais pendente do lado do solicitante
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "Não é preciso fazer mais nada por aqui")));
+    }
+
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void deferidoAindaSemRespostaEnviadaNaoMostraDetalheNenhum() throws Exception {
+        br.gov.saude.sgpur.domain.Processo processo = new br.gov.saude.sgpur.domain.Processo();
+        processo.setId(211L);
+        processo.setNumero("12/2026");
+        processo.setStatus(br.gov.saude.sgpur.domain.StatusProcesso.DEFERIDO);
+        processo.setEmailEnviadoSolicitante(false);
+        processo.setMensagemResposta("Prezados(as), Permanecemos a disposicao para esclarecimentos.");
+        solicitacaoDoDono.setStatus(StatusSolicitacaoOnline.CONVERTIDA);
+        solicitacaoDoDono.setProcessoGerado(processo);
+
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.buscarParaDetalhe(50L)).thenReturn(solicitacaoDoDono);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(1, "bg-secondary"));
+        when(mensagemService.listarPorSolicitacao(50L)).thenReturn(java.util.List.of());
+        when(anexoStorageProcesso.buscarUltimoPorTipo(anyLong(), any())).thenReturn(null);
+
+        mvc.perform(get("/solicitante/50"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Permanecemos a disposicao para esclarecimentos"))))
+            // sem resposta enviada, quem tem pendencia e a equipe - nao afirmar
+            // que o solicitante nao precisa fazer mais nada
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Não é preciso fazer mais nada por aqui"))))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "Comprovante SNT ainda sendo providenciado pela equipe")));
+    }
+
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void indeferidoComMotivoContinuaExibindoOMotivoInformado() throws Exception {
+        br.gov.saude.sgpur.domain.Processo processo = new br.gov.saude.sgpur.domain.Processo();
+        processo.setId(212L);
+        processo.setNumero("13/2026");
+        processo.setStatus(br.gov.saude.sgpur.domain.StatusProcesso.INDEFERIDO);
+        processo.setEmailEnviadoSolicitante(true);
+        processo.setMotivoIndeferimento("Criterios clinicos de urgencia nao atendidos.");
+        processo.setMensagemResposta("Prezados(as), Permanecemos a disposicao para esclarecimentos.");
+        solicitacaoDoDono.setStatus(StatusSolicitacaoOnline.CONVERTIDA);
+        solicitacaoDoDono.setProcessoGerado(processo);
+
+        br.gov.saude.sgpur.domain.Anexo oficio = new br.gov.saude.sgpur.domain.Anexo();
+        oficio.setId(911L);
+        oficio.setTipo(br.gov.saude.sgpur.domain.TipoAnexo.OFICIO_INDEFERIMENTO);
+
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.buscarParaDetalhe(50L)).thenReturn(solicitacaoDoDono);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(1, "bg-secondary"));
+        when(mensagemService.listarPorSolicitacao(50L)).thenReturn(java.util.List.of());
+        when(anexoStorageProcesso.buscarUltimoPorTipo(212L, br.gov.saude.sgpur.domain.TipoAnexo.COMPROVANTE_SNT))
+            .thenReturn(null);
+        when(anexoStorageProcesso.buscarUltimoPorTipo(212L, br.gov.saude.sgpur.domain.TipoAnexo.OFICIO_INDEFERIMENTO))
+            .thenReturn(oficio);
+
+        mvc.perform(get("/solicitante/50"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "Motivo informado: Criterios clinicos de urgencia nao atendidos.")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Permanecemos a disposicao para esclarecimentos"))));
+    }
+
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void indeferidoSemMotivoApontaParaOOficioEmVezDeRepetirOEmail() throws Exception {
+        br.gov.saude.sgpur.domain.Processo processo = new br.gov.saude.sgpur.domain.Processo();
+        processo.setId(213L);
+        processo.setNumero("14/2026");
+        processo.setStatus(br.gov.saude.sgpur.domain.StatusProcesso.INDEFERIDO);
+        processo.setEmailEnviadoSolicitante(true);
+        processo.setMotivoIndeferimento(null);
+        processo.setMensagemResposta("Prezados(as), Informamos que o processo foi INDEFERIDO. "
+            + "Permanecemos a disposicao para esclarecimentos.");
+        solicitacaoDoDono.setStatus(StatusSolicitacaoOnline.CONVERTIDA);
+        solicitacaoDoDono.setProcessoGerado(processo);
+
+        br.gov.saude.sgpur.domain.Anexo oficio = new br.gov.saude.sgpur.domain.Anexo();
+        oficio.setId(912L);
+        oficio.setTipo(br.gov.saude.sgpur.domain.TipoAnexo.OFICIO_INDEFERIMENTO);
+
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.buscarParaDetalhe(50L)).thenReturn(solicitacaoDoDono);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(1, "bg-secondary"));
+        when(mensagemService.listarPorSolicitacao(50L)).thenReturn(java.util.List.of());
+        when(anexoStorageProcesso.buscarUltimoPorTipo(213L, br.gov.saude.sgpur.domain.TipoAnexo.COMPROVANTE_SNT))
+            .thenReturn(null);
+        when(anexoStorageProcesso.buscarUltimoPorTipo(213L, br.gov.saude.sgpur.domain.TipoAnexo.OFICIO_INDEFERIMENTO))
+            .thenReturn(oficio);
+
+        mvc.perform(get("/solicitante/50"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Permanecemos a disposicao para esclarecimentos"))))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "A fundamentação completa da decisão está no ofício, disponível abaixo.")));
+    }
 }

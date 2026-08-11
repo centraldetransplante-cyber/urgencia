@@ -5320,3 +5320,57 @@ o cargo "ao vivo") como pendente de decisão de produto — já estava
 implementado desde o commit `3dac941` (2026-08-07), só o texto do guia
 não tinha sido atualizado (ver a correção logo acima, na mesma seção
 "Vistoria de bugs de 2026-08-03").
+
+## Cartão de situação do Portal do Solicitante deixou de repetir o corpo do e-mail (2026-08-11)
+
+**Relato do dono do produto olhando `/solicitante/16` em produção:** o
+cartão de resultado mostrava a prosa polida do controller ("...foi
+analisado e DEFERIDO... A resposta oficial foi enviada por e-mail à sua
+equipe, com o comprovante de inserção no SNT em anexo") e, **logo abaixo**,
+o corpo BRUTO do e-mail institucional dizendo exatamente a mesma coisa em
+linguagem de ofício ("Prezados(as), Informamos que o processo... foi
+DEFERIDO... Segue EM ANEXO o comprovante... Atenciosamente, Equipe de
+Urgência Renal"). Duas vezes a mesma informação, uma embaixo da outra.
+
+**Causa:** `SolicitanteController.montarSituacaoPedido` usava
+`Processo.mensagemResposta` (gravado por `ProcessoService.finalizarResposta`
+com o corpo do e-mail de fato enviado) como o `detalhe` do
+`SituacaoPedidoView` — no ramo Deferido sempre, e no ramo Indeferido como
+**fallback** quando não havia `motivoIndeferimento`. Isso vinha da Fase 6 da
+UI (2026-08-03/04), que preencheu o `detalhe` com esse campo para consertar
+um `${mensagemResposta}` morto no template; o efeito colateral de
+duplicidade só ficou visível com um processo real já finalizado.
+
+**Correção (`montarSituacaoPedido`, único ponto — o template não recalcula
+nada):**
+- **Deferido:** `mensagemResposta` não alimenta mais o `detalhe`. Quando a
+  resposta já saiu (`respostaJaEnviada`, a mesma condição da correção de
+  contradição documentada acima), o `detalhe` traz só o que é **novo** —
+  *"Não é preciso fazer mais nada por aqui — guarde o comprovante para os
+  seus registros."*; enquanto a resposta está pendente, `detalhe` é `null`
+  (quem tem pendência é a equipe, e a `mensagem` acima já diz isso).
+- **Indeferido COM motivo:** inalterado — `"Motivo informado: ..."` é
+  informação nova e continua sendo o texto mais útil da tela (só ganhou uma
+  checagem de `isBlank`, para um motivo em branco não renderizar o rótulo
+  sozinho).
+- **Indeferido SEM motivo:** o fallback deixou de ser o corpo do e-mail e
+  passou a apontar para o documento — *"A fundamentação completa da decisão
+  está no ofício, disponível abaixo."* (o botão de download já está logo em
+  seguida, no mesmo cartão); sem ofício anexado ainda, `detalhe` é `null`.
+- As duas `mensagem` (Deferido/Indeferido) perderam o trecho redundante com
+  o próprio título do cartão ("resultando no reconhecimento/indeferimento da
+  urgência renal", com o título já dizendo "Deferido — Urgência renal
+  reconhecida"). **As frases "A resposta oficial foi enviada por e-mail" e
+  "O ofício com os detalhes foi enviado por e-mail" foram preservadas
+  literalmente** — são o que os testes de contradição usam para provar que o
+  cartão nunca afirma um envio que não ocorreu.
+
+Nada mais mudou: `respostaJaEnviada`, a condição do botão de download, o
+whitelist de anexos e `solicitante/detalhe.html` seguem intactos.
+
+**Validação:** 4 testes novos em `SolicitanteControllerTest` (o corpo bruto
+do e-mail some do HTML nos 3 casos; Deferido sem resposta enviada não ganha
+detalhe nenhum; Indeferido com motivo segue exibindo o motivo) e **captura
+visual real** com Playwright (IT temporário, não commitado) dos 3 cartões
+renderizados — inspecionados um a um, sem repetição e com o botão de
+download visível. Suíte completa: **981 testes, 0 falhas** (JDK 21).

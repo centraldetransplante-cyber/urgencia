@@ -374,16 +374,26 @@ public class SolicitanteController {
                 && proc != null && proc.isEmailEnviadoSolicitante();
             String mensagem = respostaJaEnviada
                 ? "Seu pedido (processo " + numero + ") foi analisado e DEFERIDO pela Central "
-                    + "de Transplantes do Estado do Rio Grande do Sul, resultando no reconhecimento da urgência "
-                    + "renal. A resposta oficial foi enviada por e-mail à sua equipe ("
-                    + s.getSolicitanteEmail() + "), contendo o comprovante de inserção no Sistema Nacional de "
-                    + "Transplantes (SNT) em anexo."
+                    + "de Transplantes do Estado do Rio Grande do Sul. A resposta oficial foi enviada por "
+                    + "e-mail à sua equipe (" + s.getSolicitanteEmail() + "), com o comprovante de inserção "
+                    + "no Sistema Nacional de Transplantes (SNT) em anexo."
                 : "Seu pedido (processo " + numero + ") foi analisado e DEFERIDO pela Central "
-                    + "de Transplantes do Estado do Rio Grande do Sul, resultando no reconhecimento da urgência "
-                    + "renal. A equipe está providenciando o envio formal da resposta, com o comprovante de "
-                    + "inserção no Sistema Nacional de Transplantes (SNT), à sua equipe ("
-                    + s.getSolicitanteEmail() + ").";
-            String detalhe = proc != null ? proc.getMensagemResposta() : null;
+                    + "de Transplantes do Estado do Rio Grande do Sul. A equipe está providenciando o envio "
+                    + "formal da resposta, com o comprovante de inserção no Sistema Nacional de Transplantes "
+                    + "(SNT), à sua equipe (" + s.getSolicitanteEmail() + ").";
+            // O corpo BRUTO do e-mail institucional (Processo.mensagemResposta) NAO
+            // entra mais aqui. Ele repetia, em prosa de oficio, exatamente o que a
+            // "mensagem" acima ja diz em linguagem direta (deferido + e-mail enviado +
+            // comprovante em anexo): o cartao exibia a mesma informacao duas vezes
+            // seguidas, uma logo abaixo da outra (relato do dono do produto olhando
+            // /solicitante/16 em producao, 2026-08). O "detalhe" so existe quando
+            // acrescenta algo NOVO - aqui, o que o solicitante precisa (ou nao)
+            // fazer a partir de agora; e so faz sentido depois que a resposta saiu
+            // de fato (com a resposta pendente, quem tem pendencia e a equipe, e o
+            // proprio texto acima ja diz isso).
+            String detalhe = respostaJaEnviada
+                ? "Não é preciso fazer mais nada por aqui — guarde o comprovante para os seus registros."
+                : null;
             return new SituacaoPedidoView("Deferido", "success", "check-circle-fill",
                 "Deferido — Urgência renal reconhecida", mensagem, detalhe, false, false, anexo, numero);
         }
@@ -400,16 +410,26 @@ public class SolicitanteController {
                 && proc != null && proc.isEmailEnviadoSolicitante();
             String mensagem = respostaJaEnviada
                 ? "Seu pedido (processo " + numero + ") foi analisado e INDEFERIDO pela Central "
-                    + "de Transplantes do Estado do Rio Grande do Sul, resultando no indeferimento da urgência "
-                    + "renal. O ofício com os detalhes foi enviado por e-mail à sua equipe ("
-                    + s.getSolicitanteEmail() + ")."
+                    + "de Transplantes do Estado do Rio Grande do Sul. O ofício com os detalhes foi enviado "
+                    + "por e-mail à sua equipe (" + s.getSolicitanteEmail() + ")."
                 : "Seu pedido (processo " + numero + ") foi analisado e INDEFERIDO pela Central "
-                    + "de Transplantes do Estado do Rio Grande do Sul, resultando no indeferimento da urgência "
-                    + "renal. A equipe está providenciando o envio formal do ofício com os detalhes, à sua "
-                    + "equipe (" + s.getSolicitanteEmail() + ").";
+                    + "de Transplantes do Estado do Rio Grande do Sul. A equipe está providenciando o envio "
+                    + "formal do ofício com os detalhes, à sua equipe (" + s.getSolicitanteEmail() + ").";
             String motivo = proc != null ? proc.getMotivoIndeferimento() : null;
-            String mensagemResposta = proc != null ? proc.getMensagemResposta() : null;
-            String detalhe = motivo != null ? "Motivo informado: " + motivo : mensagemResposta;
+            // Com motivo registrado, o detalhe e informacao NOVA (nao aparece na
+            // "mensagem" acima) e continua sendo o texto mais util da tela.
+            // Sem motivo, o fallback antigo era Processo.mensagemResposta - o corpo
+            // bruto do e-mail, que so repetia a mensagem acima (mesmo defeito
+            // corrigido no ramo deferido). Passou a apontar para o oficio anexo,
+            // que e onde a fundamentacao completa de fato esta.
+            String detalhe;
+            if (motivo != null && !motivo.isBlank()) {
+                detalhe = "Motivo informado: " + motivo;
+            } else if (anexo != null) {
+                detalhe = "A fundamentação completa da decisão está no ofício, disponível abaixo.";
+            } else {
+                detalhe = null;
+            }
             return new SituacaoPedidoView("Indeferido", "danger", "x-circle-fill",
                 "Indeferido — Urgência renal não reconhecida", mensagem, detalhe, false, false, anexo, numero);
         }
