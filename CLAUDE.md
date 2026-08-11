@@ -5957,3 +5957,59 @@ templates. `NovoProcessoPage` (E2E) localiza o botão "Cadastrar" por
 `AriaRole.BUTTON`/nome acessível, inalterado pela mudança (o texto do botão
 só troca para o spinner **depois** do clique, via `setTimeout(0)` — o clique
 em si e o `waitForURL` seguinte não são afetados).
+
+## CORRIGIDO — erro 500 em `/arquivo` com processo Deferido na página (2026-08-11)
+
+**Bug de produção ao vivo, relatado pelo dono do produto:** `GET /arquivo`
+devolvia "Erro interno do servidor" — reproduzido em H2 local antes de
+qualquer alteração de código, não presumido.
+
+**Causa raiz confirmada por reprodução direta.** `ArquivoController.listar`
+não era `@Transactional`, e `ProcessoRepository.buscarEncerrados` (a query
+paginada usada pelo Arquivo) **não traz `pareceres`** de propósito — mesma
+limitação documentada no próprio repositório: `Page` paginado + `left join
+fetch` de coleção na MESMA query faz o Hibernate paginar em memória. Desde o
+PR #90 (F2 da "Vistoria de brechas na decisão", 2026-08-10), o controller
+passou a chamar `ProcessoValidator.regraAplicada(p)` para cada processo da
+página, alimentando o badge da regra de decisão. Para status `DEFERIDO` (e
+só para `DEFERIDO` — `INDEFERIDO`/`CANCELADO` retornam antes de tocar a
+coleção, por curto-circuito do `&&`), `regraAplicada` chama
+`temVotoCoordenadorFavoravel`, que navega `processo.getPareceres()` (coleção
+LAZY). Como `spring.jpa.open-in-view: false` e o método não tinha transação
+própria, a sessão do Hibernate já tinha fechado — `LazyInitializationException`,
+sem nenhum `@ExceptionHandler` específico, 500 cru. Acontecia com **qualquer**
+processo Deferido na página (praticamente garantido em produção real: o
+Arquivo acumula todo processo encerrado, e Deferido é um desfecho comum).
+`ProcessoListaController`/`HomeController` (Painel) não sofriam do mesmo
+problema — já hidratavam `pareceres` antes (por outro motivo, anterior ao
+PR #90) dentro de um método `@Transactional(readOnly = true)`.
+
+**Correção, em duas partes (as duas são necessárias — só a primeira não
+bastou, confirmado reproduzindo):**
+1. `ArquivoController.listar` passou a chamar
+   `ProcessoRepository.inicializarPareceresComMembro(ids)` (o mesmo método já
+   usado por `ProcessoListaController`) logo após a paginação, antes do loop
+   que monta `regrasDecisao`.
+2. O método ganhou `@Transactional(readOnly = true)`. **Sem isso, a correção
+   1 sozinha não resolve** — `inicializarPareceresComMembro` só consegue
+   "casar" (pelo id, via o identity map da sessão) as coleções recém-
+   carregadas com as MESMAS instâncias de `Processo` já devolvidas por
+   `buscarEncerrados` se as duas consultas rodarem na MESMA sessão/
+   persistence context do Hibernate — o que só acontece com o método inteiro
+   dentro de uma única transação. Sem a anotação, cada chamada de repositório
+   abre e fecha sua própria transação/sessão, e a segunda consulta carrega
+   instâncias novas e descartadas, sem nenhum efeito sobre as instâncias que
+   `regraAplicada` de fato lê. Confirmado por reprodução: com só a correção 1
+   (sem `@Transactional`), o teste de regressão continuava falhando com o
+   mesmo `LazyInitializationException`, na mesma linha.
+
+**Teste de regressão:** `ArquivoLazyPareceresIntegrationTest`
+(`src/test/java/br/gov/saude/sgpur/web/`, `@SpringBootTest` + H2 real, sem
+mock — convenção do projeto: o `@WebMvcTest`/`@MockitoBean` existente
+(`ArquivoControllerTest`) mocka `ProcessoValidator` inteiro, então nunca
+navega `pareceres` de verdade e nunca pegaria este bug) — insere um
+`Processo` `DEFERIDO` com um `Parecer` `FAVORAVEL` real e confirma que
+`GET /arquivo` devolve 200, não 500.
+
+**Validação:** suíte completa **1012 testes, 0 falhas** (JDK 21,
+`mvn test`, 1011 + 1 novo).

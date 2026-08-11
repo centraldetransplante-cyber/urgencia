@@ -7,6 +7,7 @@ import br.gov.saude.sgpur.service.ProcessoValidator;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Controller;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -51,13 +52,41 @@ public class ArquivoController {
      * nada nunca sai dela -, enquanto /processos, naturalmente limitada pelo
      * trabalho ativo, ja era paginada em 15. O esforco de paginacao estava na
      * tela que nao precisava dele.</p>
+     *
+     * <p><b>{@code @Transactional(readOnly = true)}: obrigatorio para a
+     * hidratacao de pareceres funcionar (ver comentario mais abaixo).</b>
+     * {@code inicializarPareceresComMembro} so consegue "casar" as colecoes
+     * recem-carregadas com as MESMAS instancias de {@code Processo} ja
+     * devolvidas por {@code buscarEncerrados} se as duas consultas rodarem
+     * na MESMA sessao/persistence context do Hibernate - o que so acontece
+     * se o metodo inteiro estiver dentro de uma unica transacao. Sem essa
+     * anotacao, cada chamada de repositorio abre e fecha sua propria
+     * transacao/sessao, e a segunda consulta carrega instancias NOVAS e
+     * descartadas, sem nenhum efeito sobre as instancias que
+     * {@code regraAplicada} de fato le logo abaixo (mesmo padrao ja usado em
+     * {@code ProcessoListaController.listar}).</p>
      */
     @GetMapping
+    @Transactional(readOnly = true)
     public String listar(@RequestParam(required = false) String q,
                          @RequestParam(defaultValue = "0") int page,
                          Model model) {
         Page<Processo> pagina = processoRepository.buscarEncerrados(
             q, ENCERRADOS, PageRequest.of(Math.max(page, 0), TAMANHO_PAGINA));
+
+        // Bug real de producao (500 em /arquivo, corrigido em 2026-08-11):
+        // buscarEncerrados NAO traz pareceres (fetch join de colecao +
+        // paginacao na mesma query faz o Hibernate paginar em memoria - ver
+        // javadoc do repositorio), e este metodo nao e @Transactional. Sem
+        // hidratar pareceres AQUI, o loop abaixo (regraAplicada, que para
+        // status DEFERIDO navega processo.getPareceres() via
+        // temVotoCoordenadorFavoravel) lancava LazyInitializationException -
+        // 500 cru para QUALQUER processo Deferido na pagina. Mesma correcao
+        // ja aplicada em ProcessoListaController.listar.
+        if (!pagina.getContent().isEmpty()) {
+            processoRepository.inicializarPareceresComMembro(
+                pagina.getContent().stream().map(Processo::getId).toList());
+        }
 
         model.addAttribute("processos", pagina.getContent());
         model.addAttribute("q", q);
