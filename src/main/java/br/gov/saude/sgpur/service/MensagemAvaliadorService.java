@@ -87,6 +87,25 @@ public class MensagemAvaliadorService {
         return repository.countByRemetenteAndLidaFalseAndMembroId(RemetenteMensagemAvaliador.OPERADOR, membroId);
     }
 
+    /**
+     * Detalhamento por PROCESSO do total devolvido por
+     * {@link #contarNaoLidasParaMembro} - quantas mensagens do operador ainda
+     * nao lidas ha em cada processo deste avaliador. Usado pelo Portal do
+     * Avaliador para marcar, linha a linha, ONDE estao as mensagens que o
+     * badge da navbar esta somando (uma unica consulta agrupada para a tela
+     * inteira, nunca uma por linha). Processo sem nenhuma nao lida
+     * simplesmente nao aparece no mapa - o chamador trata ausencia como zero.
+     */
+    @Transactional(readOnly = true)
+    public Map<Long, Long> naoLidasPorProcessoParaMembro(Long membroId) {
+        Map<Long, Long> porProcesso = new LinkedHashMap<>();
+        for (Object[] linha : repository.contarNaoLidasPorProcessoAgrupado(
+                membroId, RemetenteMensagemAvaliador.OPERADOR)) {
+            porProcesso.put((Long) linha[0], (Long) linha[1]);
+        }
+        return porProcesso;
+    }
+
     /** Nao lidas de UMA thread (processo, membro) especifica, do ponto de vista do OPERADOR - badge por linha da tabela "Respostas dos Avaliadores". */
     @Transactional(readOnly = true)
     public long contarNaoLidasPorThreadParaOperador(Long processoId, Long membroId) {

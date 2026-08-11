@@ -68,6 +68,22 @@ public interface MensagemAvaliadorRepository extends JpaRepository<MensagemAvali
                                                     @Param("remetente") RemetenteMensagemAvaliador remetente);
 
     /**
+     * Nao lidas (do ponto de vista do AVALIADOR - mensagens do OPERADOR)
+     * agrupadas por PROCESSO, para UM membro, numa unica consulta. E o
+     * detalhamento do badge global do avaliador
+     * ({@link #countByRemetenteAndLidaFalseAndMembroId}, que so devolve o
+     * total): sem ele, a navbar dizia "2 novas mensagens" e o Portal nao
+     * indicava em qual processo elas estavam. Processo sem nenhuma nao lida
+     * nao aparece no resultado (GROUP BY nao gera linha zerada) - o chamador
+     * trata ausencia como zero.
+     */
+    @Query("SELECT m.processo.id, COUNT(m) FROM MensagemAvaliador m "
+        + "WHERE m.membro.id = :membroId AND m.lida = false AND m.remetente = :remetente "
+        + "GROUP BY m.processo.id")
+    List<Object[]> contarNaoLidasPorProcessoAgrupado(@Param("membroId") Long membroId,
+                                                      @Param("remetente") RemetenteMensagemAvaliador remetente);
+
+    /**
      * Ids dos membros que ja tem PELO MENOS 1 mensagem (de qualquer lado,
      * lida ou nao) neste processo - versao em lote de
      * {@code countByProcessoIdAndMembroId > 0}, mesma motivacao da consulta

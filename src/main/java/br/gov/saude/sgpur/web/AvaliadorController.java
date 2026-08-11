@@ -207,7 +207,8 @@ public class AvaliadorController {
         for (Parecer par : historicoEntidades) {
             iniciaisHistorico.put(par.getId(),
                 Iniciais.de(par.getProcesso().getPacienteNome()));
-            historico.add(new ParecerHistoricoView(par.getId(), par.getProcesso().getNumero(),
+            historico.add(new ParecerHistoricoView(par.getId(), par.getProcesso().getId(),
+                par.getProcesso().getNumero(),
                 par.getResultado(), par.getDataHoraVoto(), par.getDataResposta()));
         }
 
@@ -226,8 +227,16 @@ public class AvaliadorController {
         List<ParecerDispensadoView> dispensados = new java.util.ArrayList<>();
         for (Parecer par : dispensadosEntidades) {
             iniciaisDispensados.put(par.getId(), Iniciais.de(par.getProcesso().getPacienteNome()));
-            dispensados.add(new ParecerDispensadoView(par.getId(), par.getProcesso().getNumero()));
+            dispensados.add(new ParecerDispensadoView(par.getId(), par.getProcesso().getId(),
+                par.getProcesso().getNumero()));
         }
+
+        // Mensagens do operador ainda nao lidas, agrupadas por processo (UMA
+        // consulta para a tela inteira, nunca uma por linha). Sem isso o badge
+        // global da navbar dizia "2 novas mensagens" sem nenhuma indicacao de
+        // EM QUAL processo elas estao - o avaliador teria que abrir um a um.
+        Map<Long, Long> naoLidasPorProcesso =
+            mensagemAvaliadorService.naoLidasPorProcessoParaMembro(membroId);
 
         // Contadores consolidados (reutilizam as queries de contagem do repo).
         long totalAtribuidos = parecerRepo.countByMembroId(membroId);
@@ -251,6 +260,7 @@ public class AvaliadorController {
         model.addAttribute("iniciaisHistorico", iniciaisHistorico);
         model.addAttribute("dispensados", dispensados);
         model.addAttribute("iniciaisDispensados", iniciaisDispensados);
+        model.addAttribute("naoLidasPorProcesso", naoLidasPorProcesso);
         // String, nao a entidade: membro ja vem totalmente carregado por
         // resolverMembro (MembroUrgenciaRenalRepository.findById, sem proxy
         // lazy), mas mesmo assim so passamos o rotulo pronto - nao a entidade
@@ -267,34 +277,78 @@ public class AvaliadorController {
     }
 
     /**
-     * Exibe o formulario de voto para um processo especifico.
-     * 403 se: nao for avaliador do processo, parecer ja emitido, processo nao ativo.
+     * Exibe a tela do processo para o avaliador: formulario de voto quando o
+     * parecer dele ainda esta pendente, ou a MESMA tela em <b>modo leitura</b>
+     * (sem formulario) quando ele ja votou ou o processo ja foi decidido.
+     *
+     * <p><b>403 somente por POSSE</b> (nao e avaliador deste processo). Antes
+     * desta correcao, o metodo usava {@link #resolverParecerPendente} e
+     * devolvia 403 tambem quando o parecer ja tinha sido emitido ou quando o
+     * processo ja estava decidido — e como esta e a UNICA tela do Portal com
+     * o chat do processo, o avaliador ficava sem NENHUM caminho para ler/
+     * responder uma mensagem do operador sobre um processo desses. O badge de
+     * mensagens nao lidas da navbar
+     * ({@code MensagemAvaliadorService.contarNaoLidasParaMembro}) conta as
+     * mensagens de QUALQUER processo, sem filtro de status: ele somava "2
+     * novas mensagens", o avaliador clicava e caia em {@code /avaliador}, que
+     * nao mostrava nada — bug real relatado em producao (2026-08-11). E uma
+     * lacuna estrutural do Achado 10/F6 (secao "Processos decididos sem o seu
+     * voto"), que passou a listar esses processos mas sem link para abri-los.
+     *
+     * <p><b>O voto continua bloqueado</b>: {@link #registrarVoto} segue usando
+     * {@link #resolverParecerPendente} e devolve 403 nos dois casos — este
+     * metodo so libera LEITURA (o formulario nem e renderizado em modo
+     * leitura, mas isso e apresentacao; a trava de verdade e no POST).
+     *
+     * <p><b>Imparcialidade preservada:</b> em modo leitura nada de novo e
+     * exposto — nem o resultado da decisao do processo, nem a identidade/voto
+     * dos outros avaliadores, nem o nome do paciente (segue so iniciais). O
+     * unico resultado exibido e o <i>proprio</i> voto do avaliador, quando ele
+     * votou (dado dele mesmo, ja visivel no historico da lista).
      */
     @GetMapping("/{processoId}")
     public String votar(@PathVariable Long processoId, Principal principal, Model model) {
         MembroUrgenciaRenal membro = resolverMembro(principal);
-        Parecer parecer = resolverParecerPendente(processoId, membro);
+        // Posse (e SO posse): 403 se este medico nao for avaliador do processo.
+        Parecer parecer = resolverParecerDoMembro(processoId, membro);
+        Processo processo = parecer.getProcesso();
+
+        boolean jaVotou = parecer.getResultado() != null;
+        boolean statusAceitaVoto = processo.getStatus().aceitaVotoAvaliador();
+        boolean modoLeitura = jaVotou || !statusAceitaVoto;
+        model.addAttribute("modoLeitura", modoLeitura);
+        // Vocabulario fechado (o template so compara com estes dois literais):
+        // JA_VOTEI tem prioridade sobre DECIDIDO — quem ja votou ve a mensagem
+        // sobre o proprio parecer, nao sobre a decisao do processo (que ele
+        // nao deve inferir por esta tela).
+        model.addAttribute("motivoLeitura", jaVotou ? "JA_VOTEI" : (modoLeitura ? "DECIDIDO" : null));
 
         // "Processo X de N pendentes" (Fase 10 do relatorio de UI): da nocao de
         // progresso a quem tem varios pendentes, sem inventar nenhum estado novo -
         // so a posicao deste processo na MESMA lista/ordem de pendentesDoMembro().
         // Usa so dados DO PROPRIO membro logado, nunca informacao sobre o processo
         // em si (ex.: quantos votos ja tem) - isso quebraria a imparcialidade.
-        List<Parecer> pendentesDoMembro = parecerRepo.findPendentesComProcesso(membro.getId())
-            .stream()
-            .filter(AvaliadorController::pendenteAtivoParaVoto)
-            .toList();
-        int posicaoPendente = 1;
-        for (int i = 0; i < pendentesDoMembro.size(); i++) {
-            if (pendentesDoMembro.get(i).getProcesso().getId().equals(processoId)) {
-                posicaoPendente = i + 1;
-                break;
+        // Em modo leitura nao ha posicao nenhuma a mostrar (este processo NAO
+        // esta na fila de pendentes) - fica null e o template esconde a linha.
+        Integer posicaoPendente = null;
+        int totalPendentesMembro = 0;
+        if (!modoLeitura) {
+            List<Parecer> pendentesDoMembro = parecerRepo.findPendentesComProcesso(membro.getId())
+                .stream()
+                .filter(AvaliadorController::pendenteAtivoParaVoto)
+                .toList();
+            posicaoPendente = 1;
+            for (int i = 0; i < pendentesDoMembro.size(); i++) {
+                if (pendentesDoMembro.get(i).getProcesso().getId().equals(processoId)) {
+                    posicaoPendente = i + 1;
+                    break;
+                }
             }
+            totalPendentesMembro = pendentesDoMembro.size();
         }
         model.addAttribute("posicaoPendente", posicaoPendente);
-        model.addAttribute("totalPendentesMembro", pendentesDoMembro.size());
+        model.addAttribute("totalPendentesMembro", totalPendentesMembro);
 
-        Processo processo = parecer.getProcesso();
         List<Anexo> pdfsAvaliador = anexoRepo
             .findByProcessoIdAndTipo(processoId, TipoAnexo.SOLICITACAO_AVALIADOR);
         // O <iframe> da tela de voto nao tem como avisar sozinho se baixarPdf
@@ -310,7 +364,9 @@ public class AvaliadorController {
         // digitado errado nao consegue vazar o nome completo por acidente.
         model.addAttribute("iniciais", Iniciais.de(processo.getPacienteNome()));
         model.addAttribute("numero", processo.getNumero());
-        model.addAttribute("parecer", new ParecerVotoView(parecer.getDataEnvio()));
+        model.addAttribute("parecer", new ParecerVotoView(parecer.getDataEnvio(),
+            parecer.getResultado() == null ? null : parecer.getResultado().name(),
+            parecer.getDataHoraVoto(), parecer.getDataResposta()));
         model.addAttribute("processo", new ProcessoVotoView(processo.getId()));
         model.addAttribute("pdfsAvaliador", pdfsAvaliador);
         model.addAttribute("algumPdfIndisponivel", algumPdfIndisponivel);
@@ -323,7 +379,20 @@ public class AvaliadorController {
         // tudo lido) - so fica recolhido quando ainda nao ha nenhuma mensagem
         // (CLAUDE.md, 2026-08-07). Antes o card nascia SEMPRE recolhido, o que
         // escondia mensagens do operador ja recebidas (bug relatado em producao).
-        model.addAttribute("existeConversaAval", mensagemAvaliadorService.existeConversa(processoId, membro.getId()));
+        boolean existeConversaAval = mensagemAvaliadorService.existeConversa(processoId, membro.getId());
+        model.addAttribute("existeConversaAval", existeConversaAval);
+        // Em MODO LEITURA o chat deixa de ser um card secundario e vira o
+        // motivo pelo qual o avaliador abriu esta tela (veio do badge de
+        // mensagens ou do link da lista) - nasce sempre expandido, mesmo sem
+        // conversa ainda, porque nao ha formulario de voto competindo por
+        // espaco.
+        model.addAttribute("chatAvalExpandido", modoLeitura || existeConversaAval);
+        // Mesma regra do campo "podeEnviar" do poll (mensagensAvaliadorJson):
+        // depois de decidido, a conversa fica somente leitura (decisao de
+        // produto original do chat, NAO alterada aqui). O JS ja esconde o
+        // formulario ao receber podeEnviar=false; isto so permite dizer isso
+        // em texto, em vez de o campo sumir sem explicacao.
+        model.addAttribute("chatSomenteLeitura", processo.getStatus().isFinalizado());
         // Esta tela ja tem seu proprio poll de chat (iniciarChatSolicitacao,
         // 5s) - sem este atributo, o poll GLOBAL de mensagens do avaliador
         // (layout.html, 20s) tambem rodava aqui, duplicando som/toast com
@@ -802,21 +871,33 @@ public class AvaliadorController {
     /** Projecao de Processo para a tela de voto: so o id, usado pelas actions dos forms/links. */
     private record ProcessoVotoView(Long id) {}
 
-    /** Projecao de Parecer para a tela de voto: so a data de envio, exibida na tela. */
-    private record ParecerVotoView(LocalDate dataEnvio) {}
+    /**
+     * Projecao de Parecer para a tela de voto. Alem da data de envio, carrega
+     * o <b>proprio</b> voto do avaliador (resultado + quando), exibido apenas
+     * no modo leitura — dado dele mesmo, ja visivel no historico da lista,
+     * nunca voto de outro avaliador.
+     */
+    private record ParecerVotoView(LocalDate dataEnvio, String resultado,
+                                   LocalDateTime dataHoraVoto, LocalDate dataResposta) {}
 
     /** Projecao para a lista de pendentes (aba "Pendentes de voto" do painel). */
     private record ParecerPendenteView(Long processoId, String processoNumero, LocalDate dataEnvio) {}
 
-    /** Projecao para o historico de votos do proprio avaliador. */
-    private record ParecerHistoricoView(Long id, String processoNumero, ResultadoParecer resultado,
+    /**
+     * Projecao para o historico de votos do proprio avaliador. {@code processoId}
+     * existe para o link "Abrir processo" da lista (a tela de leitura, com o
+     * chat) - o {@code id} do parecer continua sendo a chave dos mapas de
+     * iniciais/nao-lidas montados pelo controller.
+     */
+    private record ParecerHistoricoView(Long id, Long processoId, String processoNumero, ResultadoParecer resultado,
                                         LocalDateTime dataHoraVoto, LocalDate dataResposta) {}
 
     /**
      * Projecao para processos DISPENSADOS antes do avaliador conseguir votar
      * (Achado 10 do relatorio de vistoria de brechas, 2026-08-10) - so
-     * numero do processo, DELIBERADAMENTE sem resultado da decisao nem
-     * qualquer dado de outro avaliador (imparcialidade).
+     * numero do processo (mais o id, para o link de leitura/chat),
+     * DELIBERADAMENTE sem resultado da decisao nem qualquer dado de outro
+     * avaliador (imparcialidade).
      */
-    private record ParecerDispensadoView(Long id, String processoNumero) {}
+    private record ParecerDispensadoView(Long id, Long processoId, String processoNumero) {}
 }

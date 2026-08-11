@@ -25,14 +25,18 @@
                 <i class="bi bi-arrow-left"></i> Meu painel do avaliador
             </a>
             <h1 class="pagina-titulo mt-2">
-                Emitir parecer
+                <span th:if="${!modoLeitura}">Emitir parecer</span>
+                <!-- Modo leitura (ja votei / processo ja decidido): o titulo nao
+                     pode prometer uma acao que a tela nao oferece mais. -->
+                <span th:if="${modoLeitura}">Consultar processo</span>
                 <span class="chip-protocolo">
                     <i class="bi bi-hash"></i><span th:text="${numero}">00/0000</span>
                 </span>
             </h1>
             <!-- Progresso entre OS PROPRIOS pendentes do avaliador (nunca dado do
-                 processo em si) - quem tem varios atrasados sabe onde esta na fila. -->
-            <p th:if="${totalPendentesMembro} > 1" class="pagina-contexto mb-0">
+                 processo em si) - quem tem varios atrasados sabe onde esta na fila.
+                 Em modo leitura nao existe posicao (o processo saiu da fila). -->
+            <p th:if="${posicaoPendente != null and totalPendentesMembro > 1}" class="pagina-contexto mb-0">
                 Processo <span th:text="${posicaoPendente}">1</span> de
                 <span th:text="${totalPendentesMembro}">1</span> pendentes na sua fila
             </p>
@@ -50,13 +54,18 @@
                     <i class="bi bi-file-earmark-pdf text-danger"></i> Material para análise
                 </div>
                 <div class="card-body">
-                    <p class="small text-muted mb-3">
+                    <p class="small text-muted mb-3" th:if="${!modoLeitura}">
                         Processo anonimizado (nome do paciente suprimido). Visualize abaixo antes
                         de registrar seu parecer — não é necessário baixar o arquivo.
                     </p>
+                    <p class="small text-muted mb-3" th:if="${modoLeitura}">
+                        Processo anonimizado (nome do paciente suprimido). O material continua
+                        disponível para consulta.
+                    </p>
                     <!-- So em celular: abaixo de 992px o voto fica soterrado sob o PDF
-                         (60vh); este atalho leva direto ao formulario. -->
-                    <a href="#formVotoAvaliador" class="btn btn-outline-primary btn-sm d-lg-none mb-3">
+                         (60vh); este atalho leva direto ao formulario. Em modo
+                         leitura nao ha formulario nenhum para onde apontar. -->
+                    <a th:if="${!modoLeitura}" href="#formVotoAvaliador" class="btn btn-outline-primary btn-sm d-lg-none mb-3">
                         <i class="bi bi-arrow-down-circle"></i> Ir para o voto
                     </a>
                     <div th:if="${algumPdfIndisponivel}" class="alert alert-warning py-2 mb-3">
@@ -139,11 +148,62 @@
         </div>
     </div>
 
+    <!-- MODO LEITURA: o formulario de voto e substituido por um cartao que
+         explica por que nao ha nada a votar aqui. Nunca revela o RESULTADO da
+         decisao do processo nem dado de outro avaliador - so o estado da
+         participacao DESTE medico (ver javadoc de AvaliadorController.votar).
+         A trava de verdade contra votar esta no POST (resolverParecerPendente),
+         nao neste th:if. -->
+    <div th:if="${modoLeitura}" class="card elev-2" id="cardModoLeitura">
+        <div class="card-header">
+            <i class="bi bi-check2-circle"></i> Nada a votar neste processo
+        </div>
+        <div class="card-body">
+            <th:block th:if="${motivoLeitura == 'JA_VOTEI'}">
+                <p class="mb-2">
+                    <strong>Seu parecer já foi registrado.</strong>
+                    Um parecer não pode ser alterado nem refeito depois de confirmado.
+                </p>
+                <p class="mb-0 small text-muted">
+                    Seu voto:
+                    <!-- Rotulo acentuado escrito aqui (nao ${...descricao}) pelo mesmo
+                         motivo do formulario de voto: o enum ResultadoParecer alimenta
+                         PDFs oficiais. -->
+                    <span th:switch="${parecer.resultado}">
+                        <span th:case="'FAVORAVEL'" class="badge bg-success">
+                            <i class="bi bi-hand-thumbs-up"></i> Favorável</span>
+                        <span th:case="'NAO_FAVORAVEL'" class="badge bg-danger">
+                            <i class="bi bi-hand-thumbs-down"></i> Não favorável</span>
+                        <span th:case="'SOLICITA_INFORMACAO'" class="badge bg-warning text-dark">
+                            <i class="bi bi-question-circle"></i> Solicita informação</span>
+                        <span th:case="*" class="badge bg-secondary">Registrado</span>
+                    </span>
+                    <span th:if="${parecer.dataHoraVoto != null}"
+                          th:text="'em ' + ${#temporals.format(parecer.dataHoraVoto, 'dd/MM/yyyy HH:mm')}">em</span>
+                    <span th:if="${parecer.dataHoraVoto == null and parecer.dataResposta != null}"
+                          th:text="'em ' + ${#temporals.format(parecer.dataResposta, 'dd/MM/yyyy')}">em</span>
+                </p>
+            </th:block>
+            <th:block th:if="${motivoLeitura == 'DECIDIDO'}">
+                <p class="mb-0">
+                    <strong>Este processo já foi concluído</strong> antes que o seu parecer
+                    fosse necessário — não é preciso votar nele. Você continua com acesso ao
+                    material e à conversa com a equipe da Secretaria.
+                </p>
+            </th:block>
+            <div class="mt-3">
+                <a th:href="@{/avaliador}" class="btn btn-outline-secondary btn-sm">
+                    <i class="bi bi-arrow-left"></i> Voltar ao meu painel
+                </a>
+            </div>
+        </div>
+    </div>
+
     <!-- Formulario de voto. UNICO elemento elev-2 desta tela (regra de uso do
          M3: se dois cartoes "importam", nenhum importa) - e a acao que o
          avaliador veio fazer. O material em PDF ao lado continua em cartao
          padrao: e leitura de apoio para chegar ate aqui. -->
-    <div class="card elev-2">
+    <div th:if="${!modoLeitura}" class="card elev-2">
         <div class="card-header">
             <i class="bi bi-check2-square"></i> Registrar meu voto
         </div>
@@ -238,18 +298,21 @@
          empurrar o formulario para fora da dobra em processo sem conversa
          nenhuma); se ja existe conversa (mesmo com tudo lido), nasce
          EXPANDIDO - antes ficava sempre recolhido e escondia mensagens do
-         operador ja recebidas, bug relatado em producao (CLAUDE.md, 2026-08-07). -->
+         operador ja recebidas, bug relatado em producao (CLAUDE.md, 2026-08-07).
+         Em MODO LEITURA nasce sempre expandido: nao ha formulario de voto
+         competindo por espaco e este card e, em geral, o motivo de o avaliador
+         ter aberto a tela (veio do badge de mensagens). -->
     <div class="card mt-3" id="cardChatAvaliador">
         <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-1" role="button"
              data-bs-toggle="collapse" data-bs-target="#chatBodyAvaliador"
-             th:attr="aria-expanded=${existeConversaAval}">
+             th:attr="aria-expanded=${chatAvalExpandido}">
             <span><i class="bi bi-chat-dots"></i> Dúvida sobre este processo</span>
             <span class="d-flex align-items-center gap-1">
                 <span id="chatBadgeTotalAval" class="badge bg-secondary d-none">0 total</span>
                 <i class="bi bi-chevron-down chevron-collapse ms-2"></i>
             </span>
         </div>
-        <div class="card-body collapse" th:classappend="${existeConversaAval} ? 'show' : ''" id="chatBodyAvaliador">
+        <div class="card-body collapse" th:classappend="${chatAvalExpandido} ? 'show' : ''" id="chatBodyAvaliador">
             <!-- Estado vazio desenhado (M5), mesma classe do Portal do
                  Solicitante. O id continua sendo o alvo de
                  chat-solicitacao.js (emptySelector), que so alterna d-none
@@ -270,12 +333,21 @@
                     </button>
                 </div>
             </form>
-            <div class="form-text mt-2">
+            <div class="form-text mt-2" th:if="${!modoLeitura}">
                 <i class="bi bi-info-circle"></i>
                 Para pedir <strong>informação clínica adicional</strong> sobre o caso, use o
                 parecer <strong>"Solicita informação"</strong> — é ele que aciona a equipe
                 solicitante e pausa o prazo do processo. Este chat é para dúvidas
                 operacionais (ex.: problema ao abrir o PDF).
+            </div>
+            <!-- Processo ja concluido: o formulario acima e escondido pelo proprio
+                 chat-solicitacao.js quando o poll devolve podeEnviar=false (regra
+                 de produto do chat, inalterada). Sem este aviso, o campo sumia sem
+                 nenhuma explicacao. -->
+            <div class="form-text mt-2" th:if="${chatSomenteLeitura}">
+                <i class="bi bi-lock"></i>
+                Este processo já foi concluído — a conversa fica disponível somente para
+                leitura. Para falar com a equipe da Secretaria, use os canais habituais.
             </div>
         </div>
     </div>
@@ -290,7 +362,7 @@
      entao em vez do confirm() nativo (facil de dispensar sem ler), este modal
      repete a escolha feita e exige um checkbox de ciencia antes de habilitar o
      envio de verdade (ver static/js/avaliador-votar.js). -->
-<div class="modal fade" id="modalConfirmarVoto" tabindex="-1" aria-labelledby="modalConfirmarVotoLabel" aria-hidden="true">
+<div th:if="${!modoLeitura}" class="modal fade" id="modalConfirmarVoto" tabindex="-1" aria-labelledby="modalConfirmarVotoLabel" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">

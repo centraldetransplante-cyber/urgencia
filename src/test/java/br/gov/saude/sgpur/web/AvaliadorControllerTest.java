@@ -71,6 +71,11 @@ class AvaliadorControllerTest {
     @BeforeEach
     void setUp() {
         when(tempoRespostaService.getPrazoDias()).thenReturn(7);
+        // Default seguro (mesmo padrao dos demais mocks desta classe): sem ele o
+        // Mockito devolveria null e o template estouraria ao ler o mapa de nao
+        // lidas por processo (badge por linha do Portal do Avaliador).
+        when(mensagemAvaliadorService.naoLidasPorProcessoParaMembro(any()))
+            .thenReturn(java.util.Map.of());
 
         membro = new MembroUrgenciaRenal("HCPA", "Veronica Horbe", "veronica@hcpa.edu.br");
         membro.setId(10L);
@@ -383,15 +388,62 @@ class AvaliadorControllerTest {
             .andExpect(status().isForbidden());
     }
 
+    /**
+     * Bug real de producao (2026-08-11): a tela devolvia 403 depois do voto, e
+     * como e a UNICA tela do Portal com o chat do processo, o avaliador ficava
+     * sem nenhum caminho para ler/responder uma mensagem do operador sobre um
+     * processo ja votado - enquanto o badge da navbar continuava somando essa
+     * mensagem. Agora abre em MODO LEITURA (sem formulario de voto); o 403
+     * continua valendo para o POST (ver {@link #registrarVotoExibe403QuandoParecerJaEmitido}).
+     */
     @Test
     @WithMockUser(username = "avaliador1", roles = "AVALIADOR")
-    void votarExibe403QuandoParecerJaEmitido() throws Exception {
+    void votarAbreEmModoLeituraQuandoParecerJaEmitido() throws Exception {
         parecer.setResultado(ResultadoParecer.FAVORAVEL); // ja votou
         when(usuarioRepo.findByUsername("avaliador1")).thenReturn(Optional.of(usuario));
         when(parecerRepo.findByProcessoIdAndMembroIdComProcesso(1L, 10L)).thenReturn(Optional.of(parecer));
+        when(anexoRepo.findByProcessoIdAndTipo(1L, TipoAnexo.SOLICITACAO_AVALIADOR))
+            .thenReturn(List.of());
 
         mvc.perform(get("/avaliador/1"))
-            .andExpect(status().isForbidden());
+            .andExpect(status().isOk())
+            .andExpect(view().name("avaliador/votar"))
+            .andExpect(model().attribute("modoLeitura", true))
+            .andExpect(model().attribute("motivoLeitura", "JA_VOTEI"))
+            // Formulario de voto NAO renderizado, chat renderizado.
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("id=\"formVotoAvaliador\""))))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("id=\"chatBodyAvaliador\"")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Maria Rosa Silva"))));
+    }
+
+    /**
+     * Mesmo caminho de leitura para o avaliador DISPENSADO (processo decidido
+     * antes de ele votar - Achado 10/F6). A tela nao pode revelar o RESULTADO
+     * da decisao: quem foi dispensado ve so numero do processo + iniciais, como
+     * na secao "Processos decididos sem o seu voto" da lista.
+     */
+    @Test
+    @WithMockUser(username = "avaliador1", roles = "AVALIADOR")
+    void votarAbreEmModoLeituraQuandoProcessoJaFoiDecididoSemOVotoDesteAvaliador() throws Exception {
+        processo.setStatus(StatusProcesso.DEFERIDO); // decidido, parecer nunca votado
+        when(usuarioRepo.findByUsername("avaliador1")).thenReturn(Optional.of(usuario));
+        when(parecerRepo.findByProcessoIdAndMembroIdComProcesso(1L, 10L)).thenReturn(Optional.of(parecer));
+        when(anexoRepo.findByProcessoIdAndTipo(1L, TipoAnexo.SOLICITACAO_AVALIADOR))
+            .thenReturn(List.of());
+
+        mvc.perform(get("/avaliador/1"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("modoLeitura", true))
+            .andExpect(model().attribute("motivoLeitura", "DECIDIDO"))
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("id=\"formVotoAvaliador\""))))
+            // Nunca o resultado da decisao nem o nome completo do paciente.
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Deferido"))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Maria Rosa Silva"))));
     }
 
     @Test

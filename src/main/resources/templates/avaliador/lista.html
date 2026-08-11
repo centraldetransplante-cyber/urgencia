@@ -125,10 +125,24 @@
                     </thead>
                     <tbody>
                         <tr th:each="par : ${pareceresAtrasados}">
-                            <td>
+                            <td th:with="naoLidas=${naoLidasPorProcesso[par.processoId]}">
                                 <a class="fw-semibold text-decoration-none"
                                    th:href="@{/avaliador/{id}(id=${par.processoId})}"
                                    th:text="${par.processoNumero}">00/0000</a>
+                                <!-- Fragmento LOCAL "badgeMsgNaoLidas": definido aqui (1o site
+                                     real de uso) e reutilizado via th:replace nas demais secoes
+                                     desta tela. Detalha, por processo, o total que o badge da
+                                     navbar soma - sem ele o avaliador via "2 novas mensagens" e
+                                     nao tinha como saber ONDE elas estavam (bug relatado em
+                                     producao, 2026-08-11). Processo sem nenhuma nao lida nao
+                                     aparece no mapa: naoLidas vem null e nada e renderizado. -->
+                                <span th:fragment="badgeMsgNaoLidas(naoLidas)"
+                                      th:if="${naoLidas != null and naoLidas > 0}"
+                                      class="badge bg-warning text-dark ms-1"
+                                      title="Mensagens da equipe da Secretaria ainda não lidas">
+                                    <i class="bi bi-chat-dots-fill"></i>
+                                    <span th:text="${naoLidas}">0</span>
+                                </span>
                             </td>
                             <td>
                                 <!-- SOMENTE INICIAIS — nunca nome completo, equipe ou co-avaliadores -->
@@ -187,7 +201,10 @@
             <div class="d-md-none list-group list-group-flush">
                 <div th:each="par : ${pareceresAtrasados}" class="list-group-item p-3">
                     <div class="d-flex justify-content-between align-items-start mb-1 gap-2">
-                        <span class="fw-semibold" th:text="${par.processoNumero}">00/0000</span>
+                        <span>
+                            <span class="fw-semibold" th:text="${par.processoNumero}">00/0000</span>
+                            <span th:replace="~{::badgeMsgNaoLidas(${naoLidasPorProcesso[par.processoId]})}"></span>
+                        </span>
                         <span class="font-monospace small" th:text="${iniciaisPorProcesso[par.processoId]}">X.X.X.</span>
                     </div>
                     <div class="small text-muted mb-2">
@@ -240,6 +257,7 @@
                                 <a class="fw-semibold text-decoration-none"
                                    th:href="@{/avaliador/{id}(id=${par.processoId})}"
                                    th:text="${par.processoNumero}">00/0000</a>
+                                <span th:replace="~{::badgeMsgNaoLidas(${naoLidasPorProcesso[par.processoId]})}"></span>
                             </td>
                             <td>
                                 <!-- SOMENTE INICIAIS — nunca nome completo, equipe ou co-avaliadores -->
@@ -276,7 +294,10 @@
             <div class="d-md-none list-group list-group-flush">
                 <div th:each="par : ${pareceresDemais}" class="list-group-item p-3">
                     <div class="d-flex justify-content-between align-items-start mb-1 gap-2">
-                        <span class="fw-semibold" th:text="${par.processoNumero}">00/0000</span>
+                        <span>
+                            <span class="fw-semibold" th:text="${par.processoNumero}">00/0000</span>
+                            <span th:replace="~{::badgeMsgNaoLidas(${naoLidasPorProcesso[par.processoId]})}"></span>
+                        </span>
                         <span class="font-monospace small" th:text="${iniciaisPorProcesso[par.processoId]}">X.X.X.</span>
                     </div>
                     <div class="small text-muted mb-2">
@@ -320,12 +341,14 @@
                         <th>Paciente</th>
                         <th>Meu voto</th>
                         <th>Data do voto</th>
+                        <th class="text-end">Ações</th>
                     </tr>
                 </thead>
                 <tbody>
                     <tr th:each="par : ${historico}">
                         <td>
                             <span class="fw-semibold" th:text="${par.processoNumero}">00/0000</span>
+                            <span th:replace="~{::badgeMsgNaoLidas(${naoLidasPorProcesso[par.processoId]})}"></span>
                         </td>
                         <td>
                             <!-- SOMENTE INICIAIS — nunca nome completo, equipe ou co-avaliadores -->
@@ -351,9 +374,21 @@
                             <span th:if="${par.dataHoraVoto == null}"
                                   th:text="${par.dataResposta != null} ? ${#temporals.format(par.dataResposta, 'dd/MM/yyyy')} : '-'">-</span>
                         </td>
+                        <td class="text-end">
+                            <!-- Abre a MESMA tela do processo em modo leitura (sem
+                                 formulario de voto) - e o unico lugar do Portal com o
+                                 chat com a equipe da Secretaria. Sem este link, uma
+                                 mensagem do operador sobre um processo ja votado
+                                 ficava contabilizada no badge da navbar e inalcancavel
+                                 pela UI (bug relatado em producao, 2026-08-11). -->
+                            <a th:href="@{/avaliador/{id}(id=${par.processoId})}"
+                               class="btn btn-outline-secondary btn-sm">
+                                <i class="bi bi-box-arrow-up-right"></i> Abrir processo
+                            </a>
+                        </td>
                     </tr>
                     <tr th:if="${historico.isEmpty()}">
-                        <td colspan="4">
+                        <td colspan="5">
                             <div class="estado-vazio estado-vazio-compacto">
                                 <div class="estado-vazio-icone"><i class="bi bi-inbox"></i></div>
                                 <h3>Você ainda não registrou nenhuma avaliação</h3>
@@ -369,7 +404,12 @@
         <div class="d-md-none list-group list-group-flush">
             <div th:each="par : ${historico}" class="list-group-item p-3">
                 <div class="d-flex justify-content-between align-items-start mb-1 gap-2">
-                    <span class="fw-semibold" th:text="${par.processoNumero}">00/0000</span>
+                    <span>
+                        <a class="fw-semibold text-decoration-none"
+                           th:href="@{/avaliador/{id}(id=${par.processoId})}"
+                           th:text="${par.processoNumero}">00/0000</a>
+                        <span th:replace="~{::badgeMsgNaoLidas(${naoLidasPorProcesso[par.processoId]})}"></span>
+                    </span>
                     <span class="font-monospace small" th:text="${iniciaisHistorico[par.id]}">X.X.X.</span>
                 </div>
                 <div class="d-flex justify-content-between align-items-center">
@@ -417,9 +457,22 @@
             </p>
         </div>
         <div class="list-group list-group-flush">
-            <div th:each="par : ${dispensados}" class="list-group-item p-3 d-flex justify-content-between align-items-center">
-                <span class="fw-semibold" th:text="${par.processoNumero}">00/0000</span>
-                <span class="font-monospace small text-muted" th:text="${iniciaisDispensados[par.id]}">X.X.X.</span>
+            <div th:each="par : ${dispensados}" class="list-group-item p-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+                <span>
+                    <span class="fw-semibold" th:text="${par.processoNumero}">00/0000</span>
+                    <span th:replace="~{::badgeMsgNaoLidas(${naoLidasPorProcesso[par.processoId]})}"></span>
+                </span>
+                <span class="d-flex align-items-center gap-2">
+                    <span class="font-monospace small text-muted" th:text="${iniciaisDispensados[par.id]}">X.X.X.</span>
+                    <!-- Mesmo motivo do link do historico: e o unico caminho da UI
+                         para a conversa com a equipe da Secretaria neste processo.
+                         A tela abre em modo LEITURA (sem formulario de voto) e sem
+                         revelar o resultado da decisao - ver AvaliadorController.votar. -->
+                    <a th:href="@{/avaliador/{id}(id=${par.processoId})}"
+                       class="btn btn-outline-secondary btn-sm">
+                        <i class="bi bi-box-arrow-up-right"></i> Abrir processo
+                    </a>
+                </span>
             </div>
         </div>
     </div>

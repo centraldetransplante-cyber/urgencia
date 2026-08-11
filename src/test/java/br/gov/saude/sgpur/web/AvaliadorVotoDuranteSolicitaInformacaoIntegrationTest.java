@@ -28,6 +28,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.model;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.flash;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.redirectedUrl;
@@ -213,12 +214,25 @@ class AvaliadorVotoDuranteSolicitaInformacaoIntegrationTest {
                 .andExpect(content().string(org.hamcrest.Matchers.containsString("88/2026")));
     }
 
-    /** NAO regride: o medico A, que causou a pausa, continua proibido de votar de novo. */
+    /**
+     * NAO regride: o medico A, que causou a pausa, continua proibido de VOTAR
+     * de novo.
+     *
+     * <p>A tela em si passou a abrir para ele em <b>modo leitura</b> (200, sem
+     * formulario de voto) desde a correcao de 2026-08-11 — ela e o unico lugar
+     * do Portal com o chat do processo, e o badge de mensagens nao lidas conta
+     * mensagens de processo ja votado; ver
+     * {@code AvaliadorLeituraProcessoConcluidoIntegrationTest}. O que importa
+     * aqui é a trava do POST, que nunca mudou.</p>
+     */
     @Test
     @WithMockUser(username = "avaliador-pausa-a", roles = "AVALIADOR")
     void medicoQuePediuInformacaoContinuaBloqueadoDeVotarDeNovo() throws Exception {
         mvc.perform(get("/avaliador/" + processoId))
-                .andExpect(status().isForbidden());
+                .andExpect(status().isOk())
+                .andExpect(model().attribute("modoLeitura", true))
+                .andExpect(content().string(org.hamcrest.Matchers.not(
+                        org.hamcrest.Matchers.containsString("id=\"formVotoAvaliador\""))));
 
         mvc.perform(post("/avaliador/" + processoId + "/votar")
                         .with(csrf())

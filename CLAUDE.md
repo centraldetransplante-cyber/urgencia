@@ -5612,3 +5612,96 @@ real com Playwright (IT temporário, não commitado): lista vazia, lista com
 pedido e cartão "Aguardando triagem", em 1440/390/360px — texto quebra
 normalmente, sem estouro horizontal. Suíte completa: **986 testes, 0 falhas**
 (JDK 21); `ResponsividadeSolicitanteIT` verde.
+## Portal do Avaliador: mensagem de processo já votado/decidido era inalcançável (2026-08-11)
+
+**Bug real relatado pelo dono do produto em produção:** *"no portal do
+avaliador da Ana indica que tenho 2 novas mensagens, e clico nesse indicador
+amarelo de 2 mensagem e nada acontece"*.
+
+**Causa raiz (confirmada reproduzindo, não presumida):** o badge da navbar do
+avaliador (`MensagemAvaliadorService.contarNaoLidasParaMembro` →
+`countByRemetenteAndLidaFalseAndMembroId`) conta mensagens do operador em
+**qualquer** processo, sem filtro de status, e é um link para `/avaliador` (a
+lista). Mas a **única** tela do Portal que contém o chat do processo é
+`GET /avaliador/{processoId}`, que usava `resolverParecerPendente` e devolvia
+**403** quando (a) o avaliador já tinha votado ou (b) o processo já estava
+decidido. Somado a isso, as duas seções da lista que exibem esses processos —
+"Histórico das minhas avaliações" e "Processos decididos sem o seu voto" —
+eram **somente leitura, sem nenhum link**. Resultado: a mensagem era contada
+pelo badge e não havia **nenhum** caminho na UI para abri-la; clicar no badge
+levava a `/avaliador`, onde nada mudava.
+
+**Não é regressão recente — é lacuna estrutural do Achado 10/F6** da vistoria
+de brechas de decisão (2026-08-10, PR #94): aquela fase passou a *listar* os
+processos "decididos sem o seu voto" (antes eles evaporavam da tela), mas sem
+link para abri-los; e o caso "já votei" nunca teve caminho nenhum desde que o
+chat Avaliador↔Operador foi criado (2026-08-07).
+
+**Correção — `GET /avaliador/{processoId}` abre em MODO LEITURA:**
+- `AvaliadorController.votar` passou a resolver o parecer por **posse apenas**
+  (`resolverParecerDoMembro`, o mesmo predicado que os endpoints de chat já
+  usavam) em vez de `resolverParecerPendente`. Calcula `modoLeitura`
+  (`jaVotou || !status.aceitaVotoAvaliador()`) e `motivoLeitura`
+  (`JA_VOTEI` | `DECIDIDO`, com `JA_VOTEI` tendo prioridade).
+- **O voto continua 403 nos dois casos**: `registrarVoto` (POST) **não foi
+  tocado** — segue usando `resolverParecerPendente`. Em modo leitura o
+  formulário e o modal de confirmação nem são renderizados, mas isso é
+  apresentação; a trava de verdade é no POST (coberta por teste que tenta
+  votar de novo e confirma que o voto original não é sobrescrito).
+- `avaliador/votar.html`: título "Emitir parecer" → "Consultar processo"; o
+  card do formulário é substituído por um card explicando o estado; o chat
+  nasce **sempre expandido** em modo leitura (`chatAvalExpandido`), já que é o
+  motivo de o avaliador ter aberto a tela. A "posição na fila de pendentes"
+  some (o processo não está mais na fila — `posicaoPendente` é `null`).
+- **Envio pelo chat não mudou**: processo ainda em análise → o avaliador
+  responde normalmente; processo decidido → continua somente leitura (regra de
+  produto original do chat, Q4 do relatório de 2026-08-06, **não** alterada) —
+  só ganhou um texto explicando isso, no lugar do campo sumir sem aviso.
+- `avaliador/lista.html`: botão **"Abrir processo"** nas linhas de Histórico e
+  de "decididos sem o seu voto", e um **badge por linha** com a contagem de
+  mensagens não lidas daquele processo (`MensagemAvaliadorService.
+  naoLidasPorProcessoParaMembro` + `contarNaoLidasPorProcessoAgrupado`, **uma**
+  consulta agrupada para a tela inteira, nunca uma por linha) — é o
+  detalhamento do total que o badge da navbar já somava.
+
+**Imparcialidade preservada (revisado com atenção — é a tela mais sensível do
+sistema):** o modo leitura não expõe **nada** de novo. Nunca o resultado da
+decisão para quem foi dispensado, nunca o nome completo do paciente (segue só
+iniciais), nunca identidade/voto de outro avaliador. O único resultado exibido
+é o **próprio** voto do avaliador, quando ele votou — dado dele mesmo, já
+visível no histórico da lista. Coberto por asserções **negativas** em
+`AvaliadorLeituraProcessoConcluidoIntegrationTest` e no
+`AvaliadorControllerTest`.
+
+### "E NÃO QUERO ESSE BUG EM OUTRO LUGAR" — verificação ampliada, negativa
+
+A pedido explícito do dono do produto, a mesma classe de bug ("um contador/
+badge soma uma mensagem não lida de uma thread que a UI não deixa mais abrir")
+foi procurada nos **dois** canais de mensagem do sistema, por **teste HTTP
+real** (não leitura de código). **Nenhum outro caso encontrado** — registrado
+aqui como verificação concluída, não como suposição:
+
+| Canal / lado | Leitura bloqueada por status? | Verificado por |
+|---|---|---|
+| Avaliador → operador (`/avaliador/{id}`) | **ERA** (bug acima) — corrigido | `AvaliadorLeituraProcessoConcluidoIntegrationTest` |
+| Solicitante (`/solicitante/{id}` e `.../mensagens`) | Não, em **nenhum** dos 7 valores de `StatusSolicitacaoOnline` (inclusive `CANCELADA` e `PROCESSO_EXCLUIDO`, que restringem só o ENVIO) | `ChatLeituraNuncaBloqueadaPorStatusIntegrationTest` (`@ParameterizedTest`/`@EnumSource`, com e sem processo vinculado) |
+| Operador ↔ solicitante (`/processos/{id}`, `.../mensagens`) | Não — `bloqueadoPorEncerrado` só trava escrita | idem |
+| Operador ↔ avaliador (`.../avaliador/{membroId}/mensagens`) | Não — leitura liberada com o processo encerrado; só `podeEnviar` fica `false` | idem |
+| Caixa de entrada `/processos/mensagens-avaliadores` | Não — lista a thread de processo encerrado e o link dela de fato abre | idem |
+
+`ChatLeituraNuncaBloqueadaPorStatusIntegrationTest` fica como **guarda de
+regressão da classe de bug** (não de um endpoint): se alguém adicionar um gate
+de status a qualquer um desses GETs de leitura, ele falha alto.
+
+**Validação:** suíte completa **1011 testes, 0 falhas** (JDK 21) — 25 novos
+(8 + 16 dos dois testes de integração novos, mais o ajuste de 2 testes
+existentes cujo comportamento esperado mudou de propósito:
+`AvaliadorControllerTest.votarExibe403QuandoParecerJaEmitido` virou
+`votarAbreEmModoLeituraQuandoParecerJaEmitido`, e o GET de
+`AvaliadorVotoDuranteSolicitaInformacaoIntegrationTest
+.medicoQuePediuInformacaoContinuaBloqueadoDeVotarDeNovo` passou a esperar 200
+em modo leitura — o POST daquele teste continua exigindo 403). **Validação
+visual real com Playwright** (IT temporário, não commitado): as duas telas em
+modo leitura e a lista, em desktop (1440px) e celular (390px), inspecionadas
+uma a uma — sem vazamento de decisão/nome, sem formulário de voto, chat
+visível e o badge da navbar caindo de 2 para 1 ao abrir a primeira conversa.
