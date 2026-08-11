@@ -5788,3 +5788,22 @@ que `.secao-rotulo`/`.secao-titulo` continuam presentes e com a escala
 tipográfica esperada; o segundo confirma ausência de estouro horizontal em
 todas as 6 larguras testadas, incluindo `/solicitante/nova` com o e-mail
 institucional de fixture (`nefrologia.transplante.renal@...`).
+
+### Ajuste no mesmo dia: `rows` da Justificativa clínica aumentado de 5 para 10
+
+Pedido separado do dono do produto, na sequência da compactação acima: com o
+topo mais enxuto, ele quis que o `<textarea>` de "Descrição" (Justificativa
+clínica) nascesse **maior por padrão** — é o campo mais importante da tela, e
+não há nenhum JS de auto-resize (`solicitante-nova.js` só cuida do contador
+de caracteres). Trocado `rows="5"` → `rows="10"` em
+`solicitante/nova.html`, único caractere que mudou no template. Nenhum outro
+campo/textarea do sistema tem esse padrão de bloco-checklist-antes-do-campo
+(`avaliador/votar.html` — motivo do voto — e o campo de resposta do chat são
+de tamanho fixo pequeno de propósito, por design diferente), então não havia
+"outro lugar" para replicar dessa vez.
+
+Validado com screenshot real (Playwright, desktop 1440px e celular 390px,
+usuário SOLICITANTE de teste criado ao vivo) — o campo cresce visivelmente
+sem cortar nada nem empurrar o botão de envio para fora da tela em nenhum
+dos dois tamanhos. Suíte completa revalidada: **997 testes, 0 falhas** (JDK
+21).
