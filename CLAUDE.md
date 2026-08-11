@@ -5320,3 +5320,28 @@ o cargo "ao vivo") como pendente de decisão de produto — já estava
 implementado desde o commit `3dac941` (2026-08-07), só o texto do guia
 não tinha sido atualizado (ver a correção logo acima, na mesma seção
 "Vistoria de bugs de 2026-08-03").
+
+## Acentuação e formatação dos e-mails prontos (2026-08-11)
+
+Relato do dono do produto sobre um e-mail real de produção (processo 11/2026,
+Deferido): *"a formatação dele está ridículo"*. Três defeitos sistêmicos em
+`EmailTemplateService` — o arquivo nunca passou pela leva de acentuação de
+2026-08-03/04 (só templates HTML) nem pela de 2026-08-08 (4 controllers).
+Passaram a valer 3 regras, documentadas no javadoc da classe e travadas por
+teste (`EmailTemplateServiceTest`, 3 casos novos que varrem TODOS os
+templates): (1) **acentuação correta** — inclusive nos defaults
+`sgpur.email.assinatura`/`prefixo-assunto` (`EmailProperties`/
+`application.yml`); (2) **nunca CAIXA ALTA no meio de frase** ("foi
+DEFERIDO", "Segue EM ANEXO", "foi CANCELADO") — o envio é em texto puro
+(`EmailSenderService`, `setText(body, false)`), não há negrito, então caixa
+alta não vira ênfase, só parece grito; (3) **bloco de identificação
+(Processo/Paciente/Equipe solicitante) antes da prosa** nos e-mails à
+equipe solicitante, em vez de uma linha de dado solta entre parágrafos.
+`UsuarioService` (e-mail de redefinição de senha) foi acentuado junto. Nada
+de regra de negócio, rota ou `gerar(Processo)` mudou;
+`ResultadoParecer.descricao`/`StatusProcesso.descricao` seguem sem acento
+de propósito (PDF oficial). **Ressalva de produção:** se a VM definir
+`SGPUR_EMAIL_ASSINATURA`/`SGPUR_EMAIL_PREFIXO_ASSUNTO` em
+`/opt/sgpur/sgpur.env` (fora do git), o valor de lá vence o default e
+precisa ser acentuado manualmente. Suíte: **980 testes, 0 falhas** (JDK
+21). PR #99.
