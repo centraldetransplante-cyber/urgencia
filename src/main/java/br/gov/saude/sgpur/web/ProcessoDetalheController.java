@@ -490,8 +490,16 @@ public class ProcessoDetalheController {
             // N voto(s)", escondendo que cobrar o voto pendente nao desbloqueia o
             // processo sozinho - quem desbloqueia e o solicitante mandar a
             // informacao e o operador retomar a analise.
-            fraseMaioria = "PAUSADO (aguardando informação complementar) — faltam " + pendentesVoto
-                + (pendentesVoto == 1 ? " voto" : " votos");
+            fraseMaioria = pendentesVoto == 0
+                // Todos os avaliadores ja "responderam", mas parte respondeu
+                // pedindo informacao (nao e veredito): "faltam 0 votos" dava a
+                // entender que so faltava clicar em decidir. Caso real do
+                // processo 12/2026 (2 de 3 pedindo informacao); vale igual para
+                // 3 de 3.
+                ? "PAUSADO (aguardando informação complementar) — nenhum voto pendente, "
+                    + "mas os pedidos de informação precisam ser resolvidos"
+                : "PAUSADO (aguardando informação complementar) — faltam " + pendentesVoto
+                    + (pendentesVoto == 1 ? " voto" : " votos");
         } else if (pendentesVoto == 0) {
             fraseMaioria = "Todos os votos recebidos";
         } else {

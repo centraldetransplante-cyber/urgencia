@@ -3,7 +3,6 @@ package br.gov.saude.sgpur.web;
 import br.gov.saude.sgpur.domain.Anexo;
 import br.gov.saude.sgpur.domain.AnexoSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.MensagemSolicitacao;
-import br.gov.saude.sgpur.domain.Parecer;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.ResultadoParecer;
 import br.gov.saude.sgpur.domain.RascunhoSolicitacaoOnline;
@@ -157,7 +156,15 @@ public class SolicitanteController {
             if (s.getStatus() == StatusSolicitacaoOnline.ENVIADA) {
                 diasEspera.put(s.getId(), solicitacaoService.diasEspera(s));
             }
-            acaoNecessaria.put(s.getId(), solicitacaoService.precisaInformacaoComplementar(s));
+            // "Acao necessaria" (badge ambar) = ha pedido de informacao AINDA
+            // SEM RESPOSTA. Antes usava so `precisaInformacaoComplementar`
+            // (pausa ativa), entao a lista continuava cobrando acao do
+            // solicitante DEPOIS de ele ja ter enviado tudo - contradizendo o
+            // detalhe do mesmo pedido, que ja dizia "Informacoes complementares
+            // recebidas". Mesma fonte unica do detalhe
+            // (SolicitacaoOnlineService.EstadoInformacaoComplementar).
+            acaoNecessaria.put(s.getId(),
+                solicitacaoService.estadoInformacaoComplementar(s).precisaEnviar());
             mensagensNaoLidas.put(s.getId(),
                 mensagemService.contarNaoLidasSolicitantePorSolicitacao(s.getId(), usuario.getId()) > 0);
             situacoesLista.put(s.getId(), montarSituacaoLista(s));
@@ -285,8 +292,18 @@ public class SolicitanteController {
         // aceitaria (ver SolicitacaoOnlineService.podeCancelar).
         model.addAttribute("podeCancelar", solicitacaoService.podeCancelar(s));
         model.addAttribute("diasEspera", solicitacaoService.diasEspera(s));
-        boolean precisaInformacaoComplementar = solicitacaoService.precisaInformacaoComplementar(s);
-        boolean jaEnviouInfoComplementar = solicitacaoService.jaEnviouInformacaoComplementarNestaRodada(s);
+        // FONTE UNICA da pausa "Solicita informacao" nesta tela: calculado uma
+        // vez e derivado dali. Antes, "precisa enviar" e "ja enviou" eram duas
+        // chamadas independentes com criterios diferentes (status derivado x
+        // janela de tempo global da "rodada"), e podiam contar historias
+        // diferentes - inclusive mudando sozinhas entre dois carregamentos,
+        // sem nenhuma acao do solicitante, quando um SEGUNDO avaliador pedia
+        // informacao depois de ele ja ter respondido ao primeiro (caso real do
+        // processo 12/2026 em producao). Ver
+        // SolicitacaoOnlineService.EstadoInformacaoComplementar.
+        var estadoInfo = solicitacaoService.estadoInformacaoComplementar(s);
+        boolean precisaInformacaoComplementar = estadoInfo.pausaAtiva();
+        boolean jaEnviouInfoComplementar = estadoInfo.jaEnviouTudo();
         model.addAttribute("precisaInformacaoComplementar", precisaInformacaoComplementar);
         model.addAttribute("jaEnviouInfoComplementar", jaEnviouInfoComplementar);
         // Previsao de prazo (so faz sentido enquanto os avaliadores estao de fato
@@ -312,8 +329,7 @@ public class SolicitanteController {
         // de status/cor/texto e feita AQUI, uma unica vez - o template so
         // consome situacao.*, nunca recalcula a regra sozinho.
         model.addAttribute("situacao", montarSituacaoPedido(
-            s, precisaInformacaoComplementar, jaEnviouInfoComplementar,
-            comprovanteSnt, oficioIndeferimento, previsaoPrazo));
+            s, estadoInfo, comprovanteSnt, oficioIndeferimento, previsaoPrazo));
         List<MensagemSolicitacao> mensagens = mensagemService.listarPorSolicitacao(id);
         model.addAttribute("mensagens", mensagens);
         long msgNaoLidas = mensagens.stream()
@@ -407,8 +423,11 @@ public class SolicitanteController {
      * processo (ENVIADA/DEVOLVIDA/CANCELADA/PROCESSO_EXCLUIDO) vem por
      * ultimo, sao mutuamente exclusivos por definicao.
      */
-    private SituacaoPedidoView montarSituacaoPedido(SolicitacaoOnline s, boolean precisaInfo,
-            boolean jaEnviouInfo, Anexo comprovanteSnt, Anexo oficioIndeferimento, String previsaoPrazo) {
+    private SituacaoPedidoView montarSituacaoPedido(SolicitacaoOnline s,
+            SolicitacaoOnlineService.EstadoInformacaoComplementar estadoInfo,
+            Anexo comprovanteSnt, Anexo oficioIndeferimento, String previsaoPrazo) {
+        boolean precisaInfo = estadoInfo.pausaAtiva();
+        boolean jaEnviouInfo = estadoInfo.jaEnviouTudo();
         Processo proc = s.getProcessoGerado();
         String numero = proc != null ? proc.getNumero() : null;
         boolean processoFinalizado = proc != null && proc.getStatus().isFinalizado();
@@ -516,11 +535,21 @@ public class SolicitanteController {
 
         if (s.getStatus() == StatusSolicitacaoOnline.CONVERTIDA) {
             if (precisaInfo && !jaEnviouInfo) {
-                String mensagem = "Seu pedido virou o processo " + numero + ", mas um(a) avaliador(a) da "
-                    + "Urgência Renal pediu mais informações sobre este pedido. Envie os documentos/dados "
-                    + "solicitados abaixo para que a análise possa continuar.";
+                // Plural correto quando MAIS DE UM avaliador pediu informacao ao
+                // mesmo tempo (o caso real do processo 12/2026 tinha dois; nada
+                // impede os tres). O texto do que foi pedido lista SO os pedidos
+                // ainda sem resposta - relistar um pedido ja atendido, como
+                // acontecia antes, fazia parecer que o envio nao tinha valido.
+                int pendentes = estadoInfo.pedidosPendentes();
+                String mensagem = "Seu pedido virou o processo " + numero + ", mas "
+                    + (pendentes > 1
+                        ? pendentes + " avaliadores(as) da Urgência Renal pediram mais informações"
+                        : "um(a) avaliador(a) da Urgência Renal pediu mais informações")
+                    + " sobre este pedido. Envie os documentos/dados solicitados abaixo para que a "
+                    + "análise possa continuar.";
                 return new SituacaoPedidoView("Informação necessária", "warning", "exclamation-triangle-fill",
-                    "Informação complementar necessária", mensagem, textoDoPedidoDeInformacao(proc),
+                    "Informação complementar necessária", mensagem,
+                    textoDoPedidoDeInformacao(estadoInfo.textosPendentes()),
                     true, false, null, numero);
             }
             if (precisaInfo) {
@@ -584,17 +613,14 @@ public class SolicitanteController {
      * num fallback educado que aponta o chat como caminho para perguntar o
      * que e necessario.
      *
+     * @param pedidos justificativas dos pedidos AINDA nao respondidos, ja
+     *                filtradas por {@code SolicitacaoOnlineService
+     *                .estadoInformacaoComplementar} (fonte unica) — um pedido
+     *                ja atendido nunca aparece aqui
      * @return o texto pronto para o {@code detalhe} do cartao (nunca
      *         {@code null} — sempre ha algo util a dizer ao solicitante).
      */
-    private String textoDoPedidoDeInformacao(Processo proc) {
-        List<String> pedidos = proc == null ? List.of() : proc.getPareceres().stream()
-            .filter(par -> par.getResultado() == ResultadoParecer.SOLICITA_INFORMACAO)
-            .map(Parecer::getJustificativa)
-            .filter(j -> j != null && !j.isBlank())
-            .map(String::trim)
-            .toList();
-
+    private String textoDoPedidoDeInformacao(List<String> pedidos) {
         if (pedidos.isEmpty()) {
             return "O detalhe do que foi pedido não ficou registrado aqui. Use a conversa com a "
                 + "equipe de Urgência Renal, mais abaixo nesta página, para perguntar quais "

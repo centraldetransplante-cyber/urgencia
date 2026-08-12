@@ -93,6 +93,16 @@ class SolicitanteControllerTest {
         solicitacaoDoDono.setDataSituacaoEspecial(LocalDate.now());
         solicitacaoDoDono.setJustificativaClinica("Quadro grave.");
         solicitacaoDoDono.setStatus(StatusSolicitacaoOnline.ENVIADA);
+
+        // Default seguro: sem pausa de informacao complementar. O controller
+        // passou a derivar "precisa enviar"/"ja enviou" de UMA fonte unica
+        // (SolicitacaoOnlineService.estadoInformacaoComplementar) - sem este
+        // stub o mock devolveria null e toda renderizacao do detalhe/lista
+        // quebraria com NPE.
+        when(solicitacaoService.estadoInformacaoComplementar(
+                org.mockito.ArgumentMatchers.any(SolicitacaoOnline.class)))
+            .thenReturn(new SolicitacaoOnlineService.EstadoInformacaoComplementar(
+                false, 0, java.util.List.of(), 0));
     }
 
     @Test
@@ -307,7 +317,13 @@ class SolicitanteControllerTest {
         when(mensagemService.contarNaoLidasSolicitantePorSolicitacao(any(), any())).thenReturn(0L);
         when(solicitacaoService.diasEspera(solicitacaoDoDono))
             .thenReturn(new SolicitacaoOnlineService.DiasEspera(2, "bg-secondary"));
-        when(solicitacaoService.precisaInformacaoComplementar(solicitacaoDoDono)).thenReturn(true);
+        // "Acao necessaria" na lista = pedido de informacao AINDA SEM RESPOSTA
+        // (pausa ativa sozinha nao basta: depois de o solicitante enviar, o
+        // badge tem que apagar - antes ele continuava aceso, contradizendo o
+        // detalhe do mesmo pedido).
+        when(solicitacaoService.estadoInformacaoComplementar(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.EstadoInformacaoComplementar(
+                true, 1, java.util.List.of("Falta o laudo."), 1));
 
         mvc.perform(get("/solicitante"))
             .andExpect(status().isOk())
@@ -1008,6 +1024,20 @@ class SolicitanteControllerTest {
         when(solicitacaoService.precisaInformacaoComplementar(solicitacaoDoDono)).thenReturn(true);
         when(solicitacaoService.jaEnviouInformacaoComplementarNestaRodada(solicitacaoDoDono))
             .thenReturn(false);
+        // Espelha o que o servico real calcularia para este processo: todos os
+        // pedidos de informacao ainda pendentes de resposta.
+        java.util.List<String> pendentes = solicitacaoDoDono.getProcessoGerado() == null
+            ? java.util.List.of()
+            : solicitacaoDoDono.getProcessoGerado().getPareceres().stream()
+                .filter(par -> par.getResultado()
+                    == br.gov.saude.sgpur.domain.ResultadoParecer.SOLICITA_INFORMACAO)
+                .map(br.gov.saude.sgpur.domain.Parecer::getJustificativa)
+                .filter(j -> j != null && !j.isBlank())
+                .map(String::trim)
+                .toList();
+        when(solicitacaoService.estadoInformacaoComplementar(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.EstadoInformacaoComplementar(
+                true, Math.max(pendentes.size(), 1), pendentes, Math.max(pendentes.size(), 1)));
         when(mensagemService.listarPorSolicitacao(50L)).thenReturn(java.util.List.of());
     }
 

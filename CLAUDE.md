@@ -6241,3 +6241,127 @@ altura uniforme nas linhas — perderia informação hoje mostrada inline).
 **Guarda de regressão:** `HomeControllerTest
 .cabecalhoDaTabelaDoPainelNaoUsaStickyTop` — falha se `sticky-top` voltar
 para o `<thead>` do Painel.
+
+## Bug grave corrigido: pausa "Solicita informação" com MAIS DE UM pedido simultâneo (processo 12/2026, 2026-08-11)
+
+**Relato do dono do produto, em produção**, sobre o processo 12/2026: no
+Portal do Solicitante a tela mostrava, **ao longo do tempo e sem nenhuma ação
+dele**, dois estados contraditórios da mesma pausa — ora "Informação
+complementar necessária", ora "Informações complementares recebidas" —
+enquanto a tela do Operador do mesmo processo dava a entender que estava tudo
+pronto para decidir.
+
+### Estado real de produção (conferido por SELECT, não inferido)
+
+Consulta somente-leitura ao Postgres da VM (`ubuntu@163.176.163.213`, nenhuma
+escrita), processo `id=17` / `12/2026`, `SolicitacaoOnline id=17`:
+
+| Parecer | Membro | Resultado | `data_hora_voto` |
+|---|---|---|---|
+| 50 | Ana Lúcia | `FAVORAVEL` | 2026-08-11 15:49 |
+| 49 | Marcia Abichequer | `SOLICITA_INFORMACAO` | 2026-08-11 **20:37** |
+| 51 | Verônica Horbe | `SOLICITA_INFORMACAO` | 2026-08-11 **21:59** |
+
+Um único anexo `INFO_COMPLEMENTAR` (22:04), `processo.status =
+SOLICITA_INFORMACAO`, `solicitacao_online.status = CONVERTIDA`, e **nenhum**
+`ANALISE_RETOMADA` na auditoria. Ou seja: **DOIS pedidos de informação
+abertos ao mesmo tempo** — cenário que o código tratava como se fosse um só.
+Nada impede que sejam **três** (desde a correção de 2026-08-06 a pausa não
+bloqueia os outros avaliadores de votar).
+
+### Causa raiz — duas fontes de verdade e uma "rodada" global inexistente
+
+1. **O Portal do Solicitante era a única parte do sistema que decidia a pausa
+   pelo campo derivado `Processo.status`.** Todo o resto (`ProcessoValidator.
+   validarPausaDecisao`, `FluxoProcessoService`, placar do card de Respostas)
+   já usa desde o Achado 7 do relatório de status o predicado "status **OU**
+   fato" (`temPedidoInformacaoAtivo`). Duas fontes diferentes para a MESMA
+   pergunta = duas telas contando histórias diferentes assim que o campo
+   derivado dessincroniza (cenário dos achados C/D de
+   `docs/RELATORIO-BUG-DOIS-VOTOS-DEFEREM-DURANTE-PAUSA-2026-08.md`).
+2. **`jaEnviouInformacaoComplementarNestaRodada` tratava a pausa como UMA
+   "rodada" global, com UM instante inicial: `max(Parecer.dataHoraVoto)` entre
+   os pedidos.** Com N pedidos, um pedido NOVO empurrava esse instante para
+   frente e **apagava retroativamente** a resposta que o solicitante já tinha
+   enviado: o cartão voltava sozinho de "recebidas" para "necessária" — a
+   mudança de estado sem ação nenhuma que o dono do produto viu — e ainda
+   **relistava o pedido já respondido** junto com o novo, como se o envio não
+   tivesse valido.
+3. **A lista (`/solicitante`) e o detalhe discordavam:** o badge âmbar "Ação
+   necessária" saía de `precisaInformacaoComplementar` (pausa ativa), então
+   continuava aceso depois de o solicitante já ter enviado tudo, enquanto o
+   detalhe do mesmo pedido já dizia "Informações complementares recebidas".
+4. **Lado do operador:** `contarRespondidos()` conta qualquer `resultado !=
+   null`, e "Solicita informação" **não é veredito** (o parecer volta a ser
+   pendência limpa em `retomarAposInformacao`). Com 2 de 3 pedindo informação,
+   `todasRespondidas` ficava `true`, a etapa **"Respostas dos médicos"
+   aparecia CONCLUÍDA (verde)** com o texto *"3 pareceres recebidos.
+   Favoráveis: 1."*, e o placar dizia *"faltam 0 votos"* — tudo comunicando
+   "só falta decidir" num processo com **um único voto real**. (A decisão em
+   si nunca esteve destravada: `liberadoDecisao` já era `false` pela pausa, e
+   `ProcessoService.decidir` recusaria — era um defeito de comunicação, não de
+   regra.)
+
+### Correção — a pausa virou N pedidos independentes, com fonte única
+
+- **`SolicitacaoOnlineService.EstadoInformacaoComplementar`** (record novo) +
+  `estadoInformacaoComplementar(SolicitacaoOnline)`: **fonte única**,
+  calculada de uma vez a partir do MESMO conjunto de dados (pareceres +
+  anexos do processo). Expõe `pausaAtiva` (status **OU** fato — mesmo
+  predicado do resto do sistema), `totalPedidos`, `pedidosPendentes` e
+  `textosPendentes`, mais os derivados `precisaEnviar()` / `jaEnviouTudo()`.
+- **Cada pedido é avaliado individualmente**: respondido = existe anexo
+  `INFO_COMPLEMENTAR` enviado **depois daquele pedido específico**. Vale para
+  N de 1 a 3. Um pedido já atendido nunca é relistado; um pedido novo cobra
+  ação sem apagar a resposta anterior.
+- `precisaInformacaoComplementar` / `jaEnviouInformacaoComplementarNestaRodada`
+  continuam existindo com a mesma assinatura, mas **delegam** ao estado —
+  não reimplementar a condição em lugar nenhum.
+- `SolicitanteController.detalhe` chama o estado **UMA vez** e deriva tudo
+  (inclusive o texto "O que foi pedido", que agora vem de `textosPendentes`);
+  `lista()` usa `precisaEnviar()` no badge "Ação necessária", então lista e
+  detalhe não podem mais divergir. `enviarInformacaoComplementar` usa o mesmo
+  estado nas duas guardas.
+- O cartão passa a usar o **plural correto** quando mais de um avaliador
+  pediu informação.
+- **Lado do operador:** em `FluxoProcessoService.montarEtapas`, enquanto a
+  pausa estiver ativa só a **maioria de verdade** conclui a etapa "Respostas
+  dos médicos" (`todasRespondidas` sozinho não conclui mais) — processo já
+  decidido não regride. O texto passou a dizer *"Processo PAUSADO: N de 3
+  avaliadores pediram informação complementar..."*, e o placar do card de
+  Respostas, com 0 votos pendentes, deixou de dizer "faltam 0 votos".
+- **Edge case preservado:** `status == SOLICITA_INFORMACAO` sem nenhum parecer
+  que identifique o pedido (dessincronização/legado) mantém o comportamento
+  histórico global — pendente enquanto não houver nenhum envio —, para nunca
+  deixar o solicitante sem caminho de resposta.
+
+**Nada de regra de decisão foi tocado:** `ProcessoValidator` (contagens,
+`sugerirDecisao`, `validarPausaDecisao`, coordenador), `ProcessoService.decidir`
+/`tentarDecisaoAutomatica`/`retomarAposInformacao` estão idênticos.
+
+### Testes
+
+`src/test/java/br/gov/saude/sgpur/web/InformacaoComplementarMultiplosPedidos
+IntegrationTest.java` (`@SpringBootTest` + H2 real, serviços reais, sem
+`@MockitoBean` — a divergência era entre coleções/consultas JPA de verdade),
+8 casos cobrindo **N = 1, 2 e 3** pedidos simultâneos: o caso clássico de 1
+pedido; o bug exato (2º pedido depois da resposta não apaga a resposta e
+relista só o pedido novo); a sequência real de produção (2 pedidos + 1
+favorável + 1 envio) com **três leituras consecutivas sem ação nenhuma**
+confirmando que o estado não oscila; lista × detalhe concordando depois do
+envio; 3 de 3 pedindo informação (os três listados, um envio resolve todos);
+`retomar-analise` com 3 pedidos reabrindo os três (`resultado`/`dataHoraVoto`/
+`justificativa` nulos, `dataEnvio` preservada) **sem decidir nada** (não há
+maioria); a pausa detectada pelo FATO mesmo com `Processo.status`
+dessincronizado na marra; e a etapa "Respostas" do operador não ficando
+concluída com pedido de informação em aberto.
+
+**Validação:** suíte completa **1037 testes** — as 2 únicas falhas
+(`ComprovanteSntPendenteQueriesIntegrationTest`,
+`LembreteAvaliadorTimestampIntegrationTest`) são a flakiness de precisão de
+nanossegundo do H2 já documentada; confirmada **pré-existente** rodando a
+segunda em `main` limpo (`git stash`), com a mesma falha.
+
+**Nenhuma escrita foi feita em produção** — o diagnóstico usou apenas
+`SELECT`.
+

@@ -130,7 +130,6 @@ public class FluxoProcessoService {
         var sugestaoResp = processoService.sugerirDecisao(p);
         boolean maioria = sugestaoResp.isPresent();
         boolean todasRespondidas = totalMedicos > 0 && respondidos == totalMedicos;
-        boolean respostasOk = maioria || todasRespondidas;
         // Achado 7 (relatorio de status 2026-08-11): pausa ativa = status OU
         // fato (mesmo predicado usado por ProcessoValidator.
         // validarPausaDecisao), nao mais so o campo derivado `status`. Evita
@@ -142,6 +141,18 @@ public class FluxoProcessoService {
         boolean pausaBloqueiaDecisao = pausaAtiva
             && !processoService.temVotoCoordenadorFavoravel(p);
         boolean decididoResp = p.getStatus().isFinalizado();
+        // "Solicita informacao" NAO e um veredito: o parecer volta a ser
+        // pendencia limpa em retomarAposInformacao. Mas contarRespondidos()
+        // conta qualquer resultado != null, entao um processo com N pedidos de
+        // informacao (2 de 3 no caso real do processo 12/2026; nada impede 3 de
+        // 3) contava como "todos os pareceres recebidos" e esta etapa ficava
+        // CONCLUIDA/verde - a tela do operador dizia "3 pareceres recebidos"
+        // com UM voto de verdade, e o wizard liberava visualmente o caminho
+        // ate a Decisao que `decidir` recusaria em seguida. Enquanto a pausa
+        // estiver ativa, so a MAIORIA de verdade conclui esta etapa. Processo
+        // ja decidido (ex.: deferido pelo coordenador durante a pausa) nao
+        // regride para "pendente" - mantem o comportamento historico.
+        boolean respostasOk = maioria || (todasRespondidas && (!pausaAtiva || decididoResp));
         String detResp;
         if (totalMedicos == 0) {
             detResp = "Aguardando definição dos médicos.";
@@ -170,7 +181,18 @@ public class FluxoProcessoService {
         } else if (maioria) {
             detResp = "Maioria formada (" + sugestaoResp.get().getDescricao()
                 + ") - pronto para decidir. Favoráveis: " + favoraveis + ".";
-        } else if (pausaAtiva && !todasRespondidas) {
+        } else if (pausaAtiva && todasRespondidas) {
+            // Todos os pareceres "chegaram", mas parte deles e pedido de
+            // informacao (nao veredito) - dizer "N pareceres recebidos" aqui,
+            // como o texto antigo fazia, sugeria que so faltava decidir.
+            long pedidosAbertos = p.getPareceres().stream()
+                .filter(par -> par.getResultado() == ResultadoParecer.SOLICITA_INFORMACAO)
+                .count();
+            detResp = "Processo PAUSADO: " + pedidosAbertos + " de " + totalMedicos
+                + " avaliadores pediram informação complementar (esses pareceres voltam a ser "
+                + "votados depois que a análise for retomada). Favoráveis até agora: "
+                + favoraveis + ".";
+        } else if (pausaAtiva) {
             // Achado 1 (relatorio de status 2026-08-11): quando a pausa
             // chega ANTES de a maioria se formar, o texto antigo dizia so
             // "Faltam N pareceres" - dando a entender que o 3o voto

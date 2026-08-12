@@ -94,42 +94,145 @@ public class SolicitacaoOnlineService {
     }
 
     /**
-     * Verdadeiro quando o pedido ja virou {@link Processo} e esse processo
-     * esta pausado aguardando informacao complementar de um avaliador
-     * (ver regra "Solicita informacao (PAUSA)" no CLAUDE.md). Usado para
-     * decidir se o Portal do Solicitante mostra o formulario de upload
-     * direto de informacao complementar.
+     * Estado da pausa "Solicita informacao" como o Portal do Solicitante
+     * precisa ve-la — <b>FONTE UNICA</b>, calculada de uma vez so a partir
+     * do MESMO conjunto de dados (pareceres + anexos do processo).
+     *
+     * <p><b>Bug real que este record corrige</b> (relato do dono do produto
+     * em producao, processo 12/2026, 2026-08-11): a tela do solicitante
+     * mostrava, ao longo do tempo e <i>sem nenhuma acao dele</i>, dois
+     * estados contraditorios ("precisa enviar" x "ja enviou"). A causa era
+     * o modelo antigo tratar a pausa como UMA "rodada" global com UM unico
+     * instante inicial ({@code max(Parecer.dataHoraVoto)} entre os pedidos),
+     * quando na verdade cada avaliador abre um <b>pedido independente</b> —
+     * e mais de um pode estar aberto ao mesmo tempo (em 12/2026 eram DOIS;
+     * nada no codigo impede os TRES). Com N pedidos, um pedido novo
+     * empurrava o inicio da "rodada" para frente e <i>apagava
+     * retroativamente</i> a resposta que o solicitante ja tinha enviado:
+     * o cartao voltava sozinho de "Informacoes complementares recebidas"
+     * para "Informacao complementar necessaria", relistando inclusive o
+     * pedido ja respondido.</p>
+     *
+     * <p>Agora cada pedido e avaliado individualmente: respondido = existe
+     * anexo {@link TipoAnexo#INFO_COMPLEMENTAR} enviado DEPOIS daquele
+     * pedido especifico. Vale para N de 1 a
+     * {@link ProcessoService#AVALIADORES_POR_PROCESSO}.</p>
+     *
+     * @param pausaAtiva      pausa vigente (status OU fato, ver
+     *                        {@code ProcessoValidator.temPedidoInformacaoAtivo})
+     * @param totalPedidos    quantos avaliadores estao com pedido em aberto
+     * @param textosPendentes justificativas dos pedidos AINDA nao respondidos,
+     *                        na ordem dos pareceres (sem os ja respondidos —
+     *                        relistar um pedido ja atendido foi exatamente o
+     *                        que confundiu o solicitante em producao)
+     * @param pedidosPendentes quantos pedidos seguem sem resposta
      */
-    public boolean precisaInformacaoComplementar(SolicitacaoOnline s) {
-        return s.getStatus() == StatusSolicitacaoOnline.CONVERTIDA
-            && s.getProcessoGerado() != null
-            && s.getProcessoGerado().getStatus() == StatusProcesso.SOLICITA_INFORMACAO;
+    public record EstadoInformacaoComplementar(boolean pausaAtiva, int totalPedidos,
+            List<String> textosPendentes, int pedidosPendentes) {
+
+        static final EstadoInformacaoComplementar SEM_PAUSA =
+            new EstadoInformacaoComplementar(false, 0, List.of(), 0);
+
+        /** O solicitante precisa agir: ha pelo menos um pedido sem resposta. */
+        public boolean precisaEnviar() {
+            return pausaAtiva && pedidosPendentes > 0;
+        }
+
+        /** Pausa vigente, mas TODOS os pedidos abertos ja foram respondidos. */
+        public boolean jaEnviouTudo() {
+            return pausaAtiva && pedidosPendentes == 0;
+        }
     }
 
     /**
-     * Verdadeiro se o solicitante ja enviou a informacao complementar desta
-     * rodada de pausa (o processo pode entrar em SOLICITA_INFORMACAO mais de
-     * uma vez ao longo da vida). O inicio da rodada atual e o maior
-     * {@code Parecer.dataHoraVoto} entre os pareceres com resultado
-     * SOLICITA_INFORMACAO (setado no voto autenticado do Portal do
-     * Avaliador); qualquer anexo INFO_COMPLEMENTAR enviado depois desse
-     * instante ja e desta rodada. Usado pro Portal do Solicitante esconder o
-     * formulario apos o primeiro envio, ate o operador retomar a analise.
+     * Calcula {@link EstadoInformacaoComplementar} — chame UMA vez por
+     * requisicao e derive tudo dali (nunca recalcule "precisa enviar" e "ja
+     * enviou" separadamente: foi a divergencia entre duas leituras que gerou
+     * o bug documentado no record).
      */
-    public boolean jaEnviouInformacaoComplementarNestaRodada(SolicitacaoOnline s) {
-        if (!precisaInformacaoComplementar(s)) {
-            return false;
-        }
+    public EstadoInformacaoComplementar estadoInformacaoComplementar(SolicitacaoOnline s) {
         Processo processo = s.getProcessoGerado();
-        LocalDateTime inicioRodada = processo.getPareceres().stream()
+        if (s.getStatus() != StatusSolicitacaoOnline.CONVERTIDA || processo == null) {
+            return EstadoInformacaoComplementar.SEM_PAUSA;
+        }
+        List<Parecer> pedidos = processo.getPareceres().stream()
             .filter(par -> par.getResultado() == ResultadoParecer.SOLICITA_INFORMACAO)
-            .map(Parecer::getDataHoraVoto)
+            .toList();
+        // Pausa ativa = status OU fato observavel. O resto do sistema
+        // (ProcessoValidator.validarPausaDecisao, FluxoProcessoService,
+        // card de Respostas do operador) ja usava esse OU desde o Achado 7 do
+        // relatorio de status de 2026-08-11; SO o Portal do Solicitante
+        // continuava olhando apenas o campo derivado Processo.status — duas
+        // fontes de verdade diferentes para a MESMA pergunta, que e como as
+        // duas telas passaram a contar historias diferentes.
+        boolean pausaAtiva = processo.getStatus() == StatusProcesso.SOLICITA_INFORMACAO
+            || !pedidos.isEmpty();
+        if (!pausaAtiva) {
+            return EstadoInformacaoComplementar.SEM_PAUSA;
+        }
+        LocalDateTime ultimoEnvio = processo.getAnexos().stream()
+            .filter(a -> a.getTipo() == TipoAnexo.INFO_COMPLEMENTAR)
+            .map(Anexo::getDataUpload)
             .filter(java.util.Objects::nonNull)
             .max(LocalDateTime::compareTo)
             .orElse(null);
-        return processo.getAnexos().stream()
-            .anyMatch(a -> a.getTipo() == TipoAnexo.INFO_COMPLEMENTAR
-                && (inicioRodada == null || a.getDataUpload().isAfter(inicioRodada)));
+        if (pedidos.isEmpty()) {
+            // Status diz SOLICITA_INFORMACAO mas nenhum parecer identifica o
+            // pedido (dessincronizacao do campo derivado, ou dado legado). Sem
+            // instante de referencia, mantem o comportamento historico global:
+            // pendente enquanto nao houver NENHUM envio de informacao
+            // complementar. Nunca deixa o solicitante sem caminho de resposta.
+            return new EstadoInformacaoComplementar(true, 0, List.of(), ultimoEnvio == null ? 1 : 0);
+        }
+        List<Parecer> pendentes = pedidos.stream()
+            .filter(par -> !pedidoRespondido(par, ultimoEnvio))
+            .toList();
+        List<String> textos = pendentes.stream()
+            .map(Parecer::getJustificativa)
+            .filter(j -> j != null && !j.isBlank())
+            .map(String::trim)
+            .toList();
+        return new EstadoInformacaoComplementar(true, pedidos.size(), textos, pendentes.size());
+    }
+
+    /**
+     * Um pedido especifico foi respondido? So se houver um envio de
+     * informacao complementar POSTERIOR a ele.
+     *
+     * <p>{@code dataHoraVoto} nulo (parecer legado, anterior ao voto
+     * autenticado do Portal do Avaliador, ou construido em teste) nao tem
+     * instante conhecido: mantem-se o comportamento historico permissivo —
+     * qualquer envio ja existente conta como resposta —, para nunca deixar o
+     * solicitante preso num pedido que ele nao tem como "responder de
+     * novo".</p>
+     */
+    private boolean pedidoRespondido(Parecer pedido, LocalDateTime ultimoEnvio) {
+        if (ultimoEnvio == null) {
+            return false;
+        }
+        LocalDateTime pedidoEm = pedido.getDataHoraVoto();
+        return pedidoEm == null || ultimoEnvio.isAfter(pedidoEm);
+    }
+
+    /**
+     * Verdadeiro quando o pedido ja virou {@link Processo} e esse processo
+     * esta pausado aguardando informacao complementar de um avaliador
+     * (ver regra "Solicita informacao (PAUSA)" no CLAUDE.md).
+     *
+     * <p>Delega a {@link #estadoInformacaoComplementar} — nao reimplementar
+     * a condicao aqui.</p>
+     */
+    public boolean precisaInformacaoComplementar(SolicitacaoOnline s) {
+        return estadoInformacaoComplementar(s).pausaAtiva();
+    }
+
+    /**
+     * Verdadeiro se o solicitante ja respondeu a TODOS os pedidos de
+     * informacao em aberto (com N pedidos simultaneos, responder um so nao
+     * basta). Delega a {@link #estadoInformacaoComplementar}.
+     */
+    public boolean jaEnviouInformacaoComplementarNestaRodada(SolicitacaoOnline s) {
+        return estadoInformacaoComplementar(s).jaEnviouTudo();
     }
 
     /**
@@ -146,11 +249,14 @@ public class SolicitacaoOnlineService {
      */
     @Transactional
     public void enviarInformacaoComplementar(SolicitacaoOnline s, List<MultipartFile> arquivos) {
-        if (!precisaInformacaoComplementar(s)) {
+        // Estado calculado UMA vez: as duas guardas abaixo tem que enxergar
+        // exatamente o mesmo cenario (ver EstadoInformacaoComplementar).
+        EstadoInformacaoComplementar estado = estadoInformacaoComplementar(s);
+        if (!estado.pausaAtiva()) {
             throw new IllegalStateException(
                 "Este pedido nao esta aguardando informacao complementar no momento.");
         }
-        if (jaEnviouInformacaoComplementarNestaRodada(s)) {
+        if (estado.jaEnviouTudo()) {
             throw new IllegalStateException(
                 "Voce ja enviou as informacoes complementares para esta solicitacao. "
                 + "Aguarde a analise da equipe de Urgencia Renal.");
