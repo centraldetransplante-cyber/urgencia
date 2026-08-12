@@ -19,6 +19,7 @@ import br.gov.saude.sgpur.domain.MensagemAvaliador.RemetenteMensagemAvaliador;
 import br.gov.saude.sgpur.service.MensagemSolicitacaoService;
 import br.gov.saude.sgpur.service.MensagemAvaliadorService;
 import br.gov.saude.sgpur.service.VerificadorNomePaciente;
+import br.gov.saude.sgpur.service.InfoComplementarAvaliadorService;
 import br.gov.saude.sgpur.service.SolicitacaoOnlineService;
 import br.gov.saude.sgpur.service.dto.EstadoEtapa;
 import br.gov.saude.sgpur.service.dto.PassoWizard;
@@ -116,6 +117,8 @@ public class ProcessoDetalheController {
      * {@link ProcessoService}.
      */
     private final ProcessoValidator processoValidator;
+    /** Encaminhamento revisado da informacao complementar aos avaliadores que a pediram. */
+    private final InfoComplementarAvaliadorService infoComplementarAvaliadorService;
 
     public ProcessoDetalheController(ProcessoService processoService,
                                      FluxoProcessoService fluxoService,
@@ -137,7 +140,8 @@ public class ProcessoDetalheController {
                                      VerificadorNomePaciente verificadorNomePaciente,
                                      ParecerRepository parecerRepo,
                                      MembroUrgenciaRenalRepository membroRepo,
-                                     ProcessoValidator processoValidator) {
+                                     ProcessoValidator processoValidator,
+                                     InfoComplementarAvaliadorService infoComplementarAvaliadorService) {
         this.processoService = processoService;
         this.fluxoService = fluxoService;
         this.emailTemplateService = emailTemplateService;
@@ -159,6 +163,7 @@ public class ProcessoDetalheController {
         this.parecerRepo = parecerRepo;
         this.membroRepo = membroRepo;
         this.processoValidator = processoValidator;
+        this.infoComplementarAvaliadorService = infoComplementarAvaliadorService;
     }
 
     /**
@@ -615,10 +620,37 @@ public class ProcessoDetalheController {
         model.addAttribute("aguardandoInfo", aguardandoInfo);
         // Anexos de informacao complementar ja recebidos (via e-mail lancado pelo
         // operador OU enviados diretamente pelo solicitante no Portal do Solicitante).
-        model.addAttribute("anexosInfoComplementar",
-            p.getAnexos().stream()
-                .filter(a -> a.getTipo() == TipoAnexo.INFO_COMPLEMENTAR)
-                .sorted(java.util.Comparator.comparing(Anexo::getDataUpload))
+        var anexosInfoComplementar = p.getAnexos().stream()
+            .filter(a -> a.getTipo() == TipoAnexo.INFO_COMPLEMENTAR)
+            .sorted(java.util.Comparator.comparing(Anexo::getDataUpload))
+            .toList();
+        model.addAttribute("anexosInfoComplementar", anexosInfoComplementar);
+        // Conteudo inline dos .txt (resposta que o solicitante DIGITOU no
+        // portal, desde 2026-08-11): o operador precisa LER esse texto para
+        // redigir o que vai ao avaliador - obriga-lo a baixar um .txt para
+        // isso seria atrito puro. Mapa anexoId -> texto; nulo/ausente quando
+        // o anexo nao e texto (o template cai no link de download).
+        java.util.Map<Long, String> textosInfoComplementar = new java.util.HashMap<>();
+        for (Anexo a : anexosInfoComplementar) {
+            String texto = anexoStorage.lerTextoInline(a);
+            if (texto != null) {
+                textosInfoComplementar.put(a.getId(), texto);
+            }
+        }
+        model.addAttribute("textosInfoComplementar", textosInfoComplementar);
+        // Material JA encaminhado aos avaliadores (revisado pelo operador) -
+        // tipo diferente e separado do bruto acima, ver TipoAnexo.
+        var materialEncaminhado = p.getAnexos().stream()
+            .filter(a -> a.getTipo() == TipoAnexo.INFO_COMPLEMENTAR_AVALIADOR)
+            .sorted(java.util.Comparator.comparing(Anexo::getDataUpload))
+            .toList();
+        model.addAttribute("materialInfoComplementarAvaliador", materialEncaminhado);
+        // Quem seria avisado por e-mail se o operador encaminhar agora (so
+        // quem pediu a informacao E continua com parecer pendente) - exibido
+        // no formulario para ele saber exatamente quem vai receber.
+        model.addAttribute("destinatariosInfoComplementar",
+            infoComplementarAvaliadorService.destinatarios(id).stream()
+                .map(InfoComplementarAvaliadorService.DestinatarioAviso::nome)
                 .toList());
 
         // Anexos da aba Finalizacao
@@ -722,6 +754,65 @@ public class ProcessoDetalheController {
         auditoria.registrar("PROCESSO_EDITADO", "Processo id " + id);
         ra.addFlashAttribute("msg", "Processo atualizado.");
         return "redirect:/processos/" + id;
+    }
+
+    /**
+     * Encaminha aos avaliadores que pediram informacao complementar o
+     * conteudo REDIGIDO pelo operador a partir da resposta do solicitante.
+     *
+     * <p>Fecha a lacuna diagnosticada em 2026-08-11: quem votou
+     * {@code SOLICITA_INFORMACAO} nunca conseguia ler o que o solicitante
+     * respondeu (o material bruto e {@code INFO_COMPLEMENTAR}, visivel so ao
+     * operador). Toda a regra vive em
+     * {@link InfoComplementarAvaliadorService} - aqui so ficam a guarda de
+     * processo encerrado, a auditoria e o aviso por e-mail pos-commit.</p>
+     *
+     * <p><b>Sem {@code @Transactional} no controller</b> (ver javadoc da
+     * classe): a escrita roda na transacao propria do servico e o aviso por
+     * e-mail acontece DEPOIS do commit, nunca dentro dele - falha de SMTP
+     * vira flash {@code aviso}, jamais desfaz o encaminhamento (mesmo
+     * contrato do convite automatico ao registrar o envio).</p>
+     */
+    @PostMapping("/{id}/info-complementar/encaminhar-avaliadores")
+    public String encaminharInfoComplementar(@PathVariable Long id,
+                                             @RequestParam(required = false) String texto,
+                                             @RequestParam(required = false) MultipartFile arquivo,
+                                             Principal principal,
+                                             RedirectAttributes ra) {
+        Processo p = processoService.buscar(id);
+        if (bloqueadoPorEncerrado(p, ra)) {
+            return "redirect:/processos/" + id + "?aba=pane-respostas";
+        }
+        try {
+            infoComplementarAvaliadorService.encaminhar(id, texto, arquivo);
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            ra.addFlashAttribute("erro", e.getMessage());
+            return "redirect:/processos/" + id + "?aba=pane-respostas";
+        }
+        String quem = principal != null ? principal.getName() : "desconhecido";
+        // Auditoria: NUNCA o texto encaminhado nem o nome do paciente.
+        // Acao com no MAXIMO 40 caracteres: LogAuditoria.acao e
+        // @Column(length = 40) e AuditoriaService.registrar engole a excecao
+        // (auditoria nunca derruba a acao principal) - um nome mais longo
+        // sumiria em silencio, sem nenhum registro. "..._ENCAMINHADA_AVALIADORES"
+        // (41) foi exatamente esse caso, pego pelo teste de integracao.
+        auditoria.registrar("INFO_COMPLEMENTAR_ENCAMINHADA",
+            "Processo " + p.getNumero() + " - material liberado aos avaliadores que pediram informação, por " + quem);
+        ra.addFlashAttribute("msg",
+            "Informação complementar encaminhada: os avaliadores que pediram já veem o material no Portal.");
+        try {
+            var resultado = infoComplementarAvaliadorService.avisarAvaliadores(id);
+            if (!resultado.avisos().isEmpty()) {
+                ra.addFlashAttribute("aviso",
+                    "Material liberado no Portal, mas o aviso por e-mail não saiu para: "
+                        + String.join(", ", resultado.avisos()) + ".");
+            }
+        } catch (RuntimeException e) {
+            ra.addFlashAttribute("aviso",
+                "Material liberado no Portal, mas houve falha ao avisar os avaliadores por e-mail: "
+                    + e.getMessage());
+        }
+        return "redirect:/processos/" + id + "?aba=pane-respostas";
     }
 
     /**

@@ -236,19 +236,33 @@ public class SolicitacaoOnlineService {
     }
 
     /**
-     * Recebe o(s) arquivo(s) de informacao complementar enviados pelo
-     * SOLICITANTE diretamente no portal, como alternativa ao e-mail externo.
-     * So grava o anexo {@code TipoAnexo.INFO_COMPLEMENTAR} no {@link Processo}
-     * - quem decide retomar a analise continua sendo exclusivamente o
-     * OPERADOR via {@code ProcessoService.retomarAposInformacao}
-     * (este metodo NUNCA muda o status do processo).
+     * Recebe a resposta de informacao complementar enviada pelo SOLICITANTE
+     * diretamente no portal, como alternativa ao e-mail externo: um TEXTO
+     * digitado, ARQUIVO(S), ou os dois. So grava anexo(s)
+     * {@code TipoAnexo.INFO_COMPLEMENTAR} no {@link Processo} - quem decide
+     * retomar a analise continua sendo exclusivamente o OPERADOR via
+     * {@code ProcessoService.retomarAposInformacao} (este metodo NUNCA muda o
+     * status do processo).
+     *
+     * <p><b>Texto aceito desde 2026-08-11:</b> antes o metodo exigia ao menos
+     * um arquivo, o que obrigava o solicitante a produzir um documento so
+     * para responder algo que cabe em duas linhas ("o paciente foi
+     * transplantado em 05/08", "a creatinina de ontem foi X"). Agora basta
+     * <b>texto OU arquivo</b> (nunca os dois obrigatorios). O texto vira um
+     * {@code .txt} pelo MESMO pipeline de anexo
+     * ({@link AnexoStorageService#salvarTexto}) - nenhum schema novo, e o
+     * operador continua vendo tudo no mesmo lugar do card de Respostas.</p>
+     *
+     * <p><b>O que entra aqui NUNCA chega ao avaliador</b> (pode citar o nome
+     * do paciente/equipe). Ver {@code TipoAnexo.INFO_COMPLEMENTAR_AVALIADOR}
+     * e {@code InfoComplementarAvaliadorService} para o caminho revisado.</p>
      *
      * Revalida o estado aqui dentro (defesa em profundidade, mesmo padrao de
      * {@code ProcessoService.decidir}): cobre a corrida em que o operador ja
      * retomou a analise entre a tela abrir e o solicitante enviar.
      */
     @Transactional
-    public void enviarInformacaoComplementar(SolicitacaoOnline s, List<MultipartFile> arquivos) {
+    public void enviarInformacaoComplementar(SolicitacaoOnline s, String texto, List<MultipartFile> arquivos) {
         // Estado calculado UMA vez: as duas guardas abaixo tem que enxergar
         // exatamente o mesmo cenario (ver EstadoInformacaoComplementar).
         EstadoInformacaoComplementar estado = estadoInformacaoComplementar(s);
@@ -262,8 +276,28 @@ public class SolicitacaoOnlineService {
                 + "Aguarde a analise da equipe de Urgencia Renal.");
         }
         boolean algumArquivo = arquivos != null && arquivos.stream().anyMatch(a -> a != null && !a.isEmpty());
+        String textoLimpo = (texto == null || texto.isBlank()) ? null : texto.trim();
+        if (!algumArquivo && textoLimpo == null) {
+            throw new IllegalArgumentException(
+                "Escreva a resposta no campo de texto ou anexe pelo menos um arquivo.");
+        }
+        if (textoLimpo != null) {
+            try {
+                anexoStorageProcesso.salvarTexto(s.getProcessoGerado(), TipoAnexo.INFO_COMPLEMENTAR,
+                    "Resposta em texto enviada pelo solicitante via Portal do Solicitante",
+                    "resposta-informacao-complementar-"
+                        + LocalDateTime.now().format(java.time.format.DateTimeFormatter
+                            .ofPattern("yyyyMMdd-HHmmss")) + ".txt",
+                    textoLimpo);
+            } catch (IOException e) {
+                // Mesmo racional do catch do loop de arquivos abaixo: IOException
+                // e checked e nao dispara rollback sozinha.
+                throw new IllegalStateException(
+                    "Falha ao salvar a resposta em texto: " + e.getMessage(), e);
+            }
+        }
         if (!algumArquivo) {
-            throw new IllegalArgumentException("Anexe pelo menos um arquivo.");
+            return;
         }
         for (MultipartFile arquivo : arquivos) {
             if (arquivo == null || arquivo.isEmpty()) {

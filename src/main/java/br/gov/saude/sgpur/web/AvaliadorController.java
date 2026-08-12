@@ -9,6 +9,7 @@ import br.gov.saude.sgpur.repository.UsuarioRepository;
 import br.gov.saude.sgpur.service.AnexoStorageService;
 import br.gov.saude.sgpur.service.AuditoriaService;
 import br.gov.saude.sgpur.service.DecisaoFinalService;
+import br.gov.saude.sgpur.service.InfoComplementarAvaliadorService;
 import br.gov.saude.sgpur.service.Iniciais;
 import br.gov.saude.sgpur.service.MensagemAvaliadorService;
 import br.gov.saude.sgpur.service.ProcessoService;
@@ -80,6 +81,8 @@ public class AvaliadorController {
     private final AuditoriaService auditoria;
     private final DecisaoFinalService decisaoFinalService;
     private final MensagemAvaliadorService mensagemAvaliadorService;
+    /** Material de informacao complementar ja revisado pelo operador (ver o servico). */
+    private final InfoComplementarAvaliadorService infoComplementarService;
     /**
      * Transacoes explicitas e CURTAS do POST de voto. Ver o comentario grande em
      * {@link #registrarVoto}: o voto do medico precisa ser commitado numa
@@ -98,6 +101,7 @@ public class AvaliadorController {
                                AuditoriaService auditoria,
                                DecisaoFinalService decisaoFinalService,
                                MensagemAvaliadorService mensagemAvaliadorService,
+                               InfoComplementarAvaliadorService infoComplementarService,
                                PlatformTransactionManager txManager,
                                // Prazo-meta vem do TempoRespostaService (nao um @Value proprio):
                                // fonte unica de verdade pro mesmo criterio "fora do prazo" usado
@@ -113,6 +117,7 @@ public class AvaliadorController {
         this.auditoria = auditoria;
         this.decisaoFinalService = decisaoFinalService;
         this.mensagemAvaliadorService = mensagemAvaliadorService;
+        this.infoComplementarService = infoComplementarService;
         this.txTemplate = new TransactionTemplate(txManager);
         this.prazoDias = tempoRespostaService.getPrazoDias();
     }
@@ -370,6 +375,23 @@ public class AvaliadorController {
         model.addAttribute("processo", new ProcessoVotoView(processo.getId()));
         model.addAttribute("pdfsAvaliador", pdfsAvaliador);
         model.addAttribute("algumPdfIndisponivel", algumPdfIndisponivel);
+
+        // RESPOSTA A INFORMACAO COMPLEMENTAR (2026-08-11): so aparece para
+        // quem PEDIU a informacao neste processo em algum momento
+        // (HistoricoParecer) - um avaliador que nunca pediu nada nunca ve
+        // este material, mesmo que ele exista. O conteudo ja foi redigido e
+        // revisado pelo operador (INFO_COMPLEMENTAR_AVALIADOR), nunca e o
+        // texto bruto do solicitante. Predicado unico, o MESMO usado pelo
+        // download em baixarPdf.
+        boolean pediuInformacao = infoComplementarService.membroPodeVerMaterial(processoId, membro.getId());
+        List<InfoComplementarView> infoComplementar = List.of();
+        if (pediuInformacao) {
+            infoComplementar = infoComplementarService.materialEncaminhado(processoId).stream()
+                .map(a -> new InfoComplementarView(a.getId(), a.getNomeArquivo(), a.getDataUpload(),
+                    anexoStorage.lerTextoInline(a)))
+                .toList();
+        }
+        model.addAttribute("infoComplementar", infoComplementar);
         model.addAttribute("resultados", List.of(
             ResultadoParecer.FAVORAVEL,
             ResultadoParecer.NAO_FAVORAVEL,
@@ -623,12 +645,23 @@ public class AvaliadorController {
     private record VotoGravado(Parecer parecer, Processo processo, String membroNome) {}
 
     /**
-     * Download do PDF anonimizado (SOLICITACAO_AVALIADOR) do processo pelo
-     * proprio avaliador. Antes vinha de /processos/anexos/{id}/download, que
-     * exige ROLE_ADMIN/OPERADOR e por isso dava 403 para o avaliador - sem
-     * este endpoint o medico nao conseguia ler o material antes de votar.
-     * So permite o download se o membro for avaliador do processo (posse
-     * verificada via Parecer, independente de ja ter votado ou nao).
+     * Download do material de avaliacao do processo pelo proprio avaliador.
+     * Antes vinha de /processos/anexos/{id}/download, que exige
+     * ROLE_ADMIN/OPERADOR e por isso dava 403 para o avaliador - sem este
+     * endpoint o medico nao conseguia ler o material antes de votar.
+     *
+     * <p><b>Whitelist EXPLICITA de tipos</b> (nunca serve um anexo qualquer
+     * por id): {@code SOLICITACAO_AVALIADOR}, o PDF anonimizado de sempre, e
+     * {@code INFO_COMPLEMENTAR_AVALIADOR}, a resposta a informacao
+     * complementar ja revisada pelo operador (2026-08-11).</p>
+     *
+     * <p>Posse verificada em DUAS camadas: (1) o membro e avaliador do
+     * processo (via {@code Parecer}, independente de ja ter votado); (2) para
+     * {@code INFO_COMPLEMENTAR_AVALIADOR}, tambem e preciso ter PEDIDO a
+     * informacao neste processo ({@code HistoricoParecer}) - mesmo predicado
+     * usado por {@link #votar} para decidir se a secao aparece, nunca
+     * duplicado. Um avaliador que nunca pediu informacao recebe 403 mesmo
+     * sendo avaliador do processo.</p>
      */
     @GetMapping("/{processoId}/pdf/{anexoId}")
     public ResponseEntity<Resource> baixarPdf(@PathVariable Long processoId,
@@ -640,8 +673,13 @@ public class AvaliadorController {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "Você não é avaliador deste processo.");
         }
-        List<Anexo> pdfs = anexoRepo.findByProcessoIdAndTipo(processoId, TipoAnexo.SOLICITACAO_AVALIADOR);
-        Anexo anexo = pdfs.stream().filter(a -> a.getId().equals(anexoId)).findFirst()
+        List<Anexo> permitidos = new java.util.ArrayList<>(
+            anexoRepo.findByProcessoIdAndTipo(processoId, TipoAnexo.SOLICITACAO_AVALIADOR));
+        if (infoComplementarService.membroPodeVerMaterial(processoId, membro.getId())) {
+            permitidos.addAll(anexoRepo.findByProcessoIdAndTipo(
+                processoId, TipoAnexo.INFO_COMPLEMENTAR_AVALIADOR));
+        }
+        Anexo anexo = permitidos.stream().filter(a -> a.getId().equals(anexoId)).findFirst()
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN,
                 "Anexo não pertence ao material de avaliação deste processo."));
         Path arquivo = anexoStorage.resolverArquivo(anexo);
@@ -649,8 +687,21 @@ public class AvaliadorController {
         if (!resource.exists() || !resource.isReadable()) {
             return ResponseEntity.notFound().build();
         }
+        // O PDF anonimizado continua abrindo inline no <iframe> de sempre; o
+        // material de informacao complementar pode ser .txt/imagem, entao usa
+        // o content type gravado (fallback octet-stream).
+        MediaType tipo = MediaType.APPLICATION_PDF;
+        if (anexo.getTipo() != TipoAnexo.SOLICITACAO_AVALIADOR) {
+            try {
+                tipo = anexo.getContentType() == null || anexo.getContentType().isBlank()
+                    ? MediaType.APPLICATION_OCTET_STREAM
+                    : MediaType.parseMediaType(anexo.getContentType());
+            } catch (RuntimeException e) {
+                tipo = MediaType.APPLICATION_OCTET_STREAM;
+            }
+        }
         return ResponseEntity.ok()
-            .contentType(MediaType.APPLICATION_PDF)
+            .contentType(tipo)
             .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + anexo.getNomeArquivo() + "\"")
             .body(resource);
     }
@@ -900,4 +951,15 @@ public class AvaliadorController {
      * avaliador (imparcialidade).
      */
     private record ParecerDispensadoView(Long id, Long processoId, String processoNumero) {}
+
+    /**
+     * Projecao do material de informacao complementar liberado ao avaliador.
+     * {@code textoInline} vem preenchido quando o anexo e um {@code .txt}
+     * legivel (o caso comum - o operador digita a resposta), para o medico ler
+     * na propria tela; nulo em qualquer outro caso, e entao o template oferece
+     * o download. NUNCA carrega nome do paciente/equipe: o conteudo ja passou
+     * pela checagem de {@code VerificadorNomePaciente} antes de ser gravado.
+     */
+    private record InfoComplementarView(Long id, String nomeArquivo, LocalDateTime dataUpload,
+                                        String textoInline) {}
 }

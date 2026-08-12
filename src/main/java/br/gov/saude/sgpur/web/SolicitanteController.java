@@ -671,12 +671,13 @@ public class SolicitanteController {
     @PostMapping("/{id}/informacao-complementar")
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public String enviarInformacaoComplementar(@PathVariable Long id,
+            @RequestParam(value = "texto", required = false) String texto,
             @RequestParam(value = "arquivos", required = false) List<MultipartFile> arquivos,
             Principal principal, RedirectAttributes ra) {
         Usuario usuario = resolverUsuario(principal);
         SolicitacaoOnline s = conferirPosse(solicitacaoService.buscarParaDetalhe(id), usuario);
         try {
-            solicitacaoService.enviarInformacaoComplementar(s, arquivos);
+            solicitacaoService.enviarInformacaoComplementar(s, texto, arquivos);
             auditoria.registrar("INFO_COMPLEMENTAR_RECEBIDA_PORTAL",
                 "Solicitacao " + id + " - processo " + s.getProcessoGerado().getNumero());
             ra.addFlashAttribute("msg",

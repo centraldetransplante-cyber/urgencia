@@ -161,6 +161,66 @@ public class AnexoStorageService {
     }
 
     /**
+     * Salva um TEXTO digitado por um usuario como anexo {@code .txt} (UTF-8)
+     * do processo, pelo MESMO pipeline dos demais anexos (nome padrao,
+     * unicidade na pasta, registro em {@code anexo}) - nao existe schema
+     * proprio para "resposta em texto".
+     *
+     * <p>Usado pelos dois lados da informacao complementar: a resposta que o
+     * SOLICITANTE digita no portal ({@code INFO_COMPLEMENTAR}) e o texto que
+     * o OPERADOR redige para os avaliadores
+     * ({@code INFO_COMPLEMENTAR_AVALIADOR}). Passa por
+     * {@link #salvarBytes} de proposito: {@code .txt} nao esta (nem deve
+     * estar) na allowlist de UPLOAD ({@link #EXTENSOES_PERMITIDAS}), que
+     * existe para barrar arquivo enviado de fora - aqui o conteudo e uma
+     * string gerada pelo proprio sistema, sem arquivo recebido.</p>
+     *
+     * @param nomeBase nome logico do arquivo (a extensao {@code .txt} e
+     *                 acrescentada se faltar); o nome final segue o padrao de
+     *                 {@link NomePadraoAnexo} e nunca inclui o nome do paciente
+     */
+    @Transactional
+    public Anexo salvarTexto(Processo processo, TipoAnexo tipo, String descricao,
+                             String nomeBase, String texto) throws IOException {
+        if (texto == null || texto.isBlank()) {
+            throw new IllegalArgumentException("Texto vazio.");
+        }
+        String nome = (nomeBase == null || nomeBase.isBlank()) ? "texto.txt" : nomeBase.trim();
+        if (!nome.toLowerCase(Locale.ROOT).endsWith(".txt")) {
+            nome = nome + ".txt";
+        }
+        return salvarBytes(processo, tipo, descricao, nome,
+            "text/plain; charset=UTF-8", texto.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+    }
+
+    /**
+     * Conteudo textual de um anexo {@code .txt} gravado por
+     * {@link #salvarTexto}, para exibicao INLINE na tela (mais legivel que
+     * obrigar o usuario a baixar um arquivo de texto). Devolve {@code null}
+     * — nunca lanca — quando o anexo nao e texto, e maior que
+     * {@link #TEXTO_INLINE_MAX_BYTES} ou o arquivo sumiu do disco: nesses
+     * casos a tela cai no link de download de sempre.
+     */
+    public String lerTextoInline(Anexo anexo) {
+        if (anexo == null || anexo.getNomeArquivo() == null
+                || !anexo.getNomeArquivo().toLowerCase(Locale.ROOT).endsWith(".txt")) {
+            return null;
+        }
+        try {
+            Path arquivo = resolverArquivo(anexo);
+            if (!Files.isReadable(arquivo) || Files.size(arquivo) > TEXTO_INLINE_MAX_BYTES) {
+                return null;
+            }
+            return Files.readString(arquivo, java.nio.charset.StandardCharsets.UTF_8);
+        } catch (IOException | RuntimeException e) {
+            return null;
+        }
+    }
+
+    /** Teto de tamanho para exibir um .txt inline na tela (acima disso, so download). */
+    private static final long TEXTO_INLINE_MAX_BYTES = 64 * 1024;
+
+    /**
      * Remove os anexos de um tipo de um processo, EXCETO o informado em
      * {@code manterId}. Usado por "substituir": salva o novo anexo primeiro
      * e so entao remove os antigos, chamando este metodo com o id do que

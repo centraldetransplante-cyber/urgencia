@@ -35,7 +35,39 @@ public enum TipoAnexo {
     DOCUMENTO_PACIENTE("Documento do paciente"),
     EMAIL_PARECER_RECEBIDO("Copia do e-mail de parecer recebido do avaliador"),
     ANEXO_AVALIADOR("Documento anexado pelo avaliador junto ao parecer (Portal do Avaliador)"),
+    /**
+     * STAGING/BRUTO: o que o SOLICITANTE enviou em resposta a um pedido de
+     * informacao complementar (texto digitado no Portal e/ou arquivos), ou o
+     * que o operador lancou por e-mail. <b>Visivel apenas ao OPERADOR</b> -
+     * nunca chega ao avaliador, porque pode conter o nome completo do
+     * paciente, a equipe solicitante e qualquer outro dado identificador
+     * (o solicitante nao tem como saber o que quebra a imparcialidade).
+     *
+     * <p>O caminho para o material chegar aos avaliadores que pediram a
+     * informacao e {@link #INFO_COMPLEMENTAR_AVALIADOR}, sempre por acao
+     * explicita, revisada e auditada do operador - nunca por promocao
+     * automatica deste tipo.</p>
+     */
     INFO_COMPLEMENTAR("Pedido/resposta de informacao complementar (solicitante)"),
+    /**
+     * Conteudo de resposta a informacao complementar JA revisado/redigido pelo
+     * operador, liberado para os avaliadores que pediram a informacao nesta
+     * rodada (quem tem {@code HistoricoParecer} para o processo).
+     *
+     * <p><b>Nunca e gerado automaticamente a partir do envio bruto do
+     * solicitante</b> ({@link #INFO_COMPLEMENTAR}): so nasce por acao
+     * explicita do operador em
+     * {@code POST /processos/{id}/info-complementar/encaminhar-avaliadores},
+     * onde o texto que ele digita passa por {@code VerificadorNomePaciente}
+     * antes de qualquer gravacao. Espirito identico ao de
+     * {@link #DOCUMENTO_PORTAL_NAO_ANONIMIZADO}: material do solicitante so
+     * atravessa a barreira de imparcialidade com revisao humana registrada.
+     * Promover o texto bruto direto tornaria a checagem de nome um teatro -
+     * a checagem existe justamente sobre o texto que o operador vai de fato
+     * enviar.</p>
+     */
+    INFO_COMPLEMENTAR_AVALIADOR(
+        "Resposta a informacao complementar revisada pelo operador (liberada aos avaliadores)"),
     OFICIO_INDEFERIMENTO("Oficio de indeferimento"),
     COMPROVANTE_SNT("Comprovante de insercao da urgencia renal no SNT"),
     EMAIL_RESPOSTA_SOLICITANTE("Copia do e-mail de resposta ao solicitante"),

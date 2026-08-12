@@ -89,6 +89,49 @@ public class EmailTemplateService {
     }
 
     /**
+     * Avisa um avaliador que pediu informacao complementar de que a resposta
+     * ja esta disponivel no Portal, revisada pela equipe operacional.
+     *
+     * <p>SEM nome completo do paciente (so iniciais) e sem nenhum trecho do
+     * material em si — o conteudo mora no Portal, atras da autenticacao e da
+     * checagem de posse; o e-mail so avisa que ha o que ler. Mesmo tom/
+     * estrutura de {@link #emailConviteAvaliador}.</p>
+     *
+     * <p>Disparado por {@code InfoComplementarAvaliadorService.avisarAvaliadores},
+     * sempre DEPOIS do commit do encaminhamento e best-effort: falha de SMTP
+     * nunca desfaz o material ja liberado.</p>
+     */
+    public EmailTemplate emailInfoComplementarDisponivel(Processo p, MembroUrgenciaRenal membro) {
+        String iniciais = Iniciais.de(p.getPacienteNome());
+        String idProcesso = p.getNumero() + " - Paciente " + iniciais;
+        String portalUrl = baseUrl + "/avaliador";
+
+        String corpo = """
+            Prezado(a) %s,
+
+            A equipe solicitante respondeu ao pedido de informação complementar que
+            você registrou no processo abaixo. A resposta foi revisada pela equipe da
+            Secretaria e já está disponível na tela do processo, no Portal do Avaliador.
+
+            Processo: %s
+
+            Para ler a resposta e concluir seu parecer, acesse:
+            %s
+
+            O nome do paciente foi omitido para preservar a imparcialidade do
+            julgamento; ele é identificado apenas pelas iniciais.
+
+            Atenciosamente,
+            %s
+            """.formatted(membro.getNome(), idProcesso, portalUrl, assinatura());
+
+        return new EmailTemplate("info-complementar-disponivel",
+            "Informação complementar disponível - " + membro.getNome(), "info-circle",
+            assunto("Informação complementar disponível - Processo " + idProcesso),
+            corpo);
+    }
+
+    /**
      * Convite individual ao avaliador para votar no Portal do Avaliador.
      * Destinado a cada medico separadamente. Contem APENAS iniciais do paciente
      * (imparcialidade) e link de acesso ao portal.

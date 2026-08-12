@@ -71,6 +71,7 @@ class ProcessoDetalheControllerTest {
     // os testes que so setam processo.setStatus(SOLICITA_INFORMACAO) continuam
     // funcionando sem precisar estubar isto.
     @MockitoBean private ProcessoValidator processoValidator;
+    @MockitoBean private br.gov.saude.sgpur.service.InfoComplementarAvaliadorService infoComplementarAvaliadorService;
 
     private Processo processo;
 

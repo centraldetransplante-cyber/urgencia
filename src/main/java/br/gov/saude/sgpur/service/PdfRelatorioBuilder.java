@@ -737,6 +737,8 @@ class PdfRelatorioBuilder {
             case EMAIL_PARECER_RECEBIDO -> "Cópia do e-mail de parecer recebido do avaliador";
             case ANEXO_AVALIADOR -> "Documento anexado pelo avaliador junto ao parecer (Portal do Avaliador)";
             case INFO_COMPLEMENTAR -> "Pedido/resposta de informação complementar (solicitante)";
+            case INFO_COMPLEMENTAR_AVALIADOR ->
+                "Resposta à informação complementar revisada pelo operador (liberada aos avaliadores)";
             case OFICIO_INDEFERIMENTO -> "Ofício de indeferimento";
             case COMPROVANTE_SNT -> "Comprovante de inserção da urgência renal no SNT";
             case EMAIL_RESPOSTA_SOLICITANTE -> "Cópia do e-mail de resposta ao solicitante";

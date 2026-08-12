@@ -106,8 +106,24 @@
                   th:action="@{/solicitante/{id}/informacao-complementar(id=${solicitacao.id})}"
                   method="post" enctype="multipart/form-data" class="mt-3"
                   data-lock-submit="Enviando informações...">
+                <!--/* Texto OU arquivo (2026-08-11): antes so aceitava arquivo, o
+                       que obrigava o solicitante a produzir um documento so para
+                       responder algo de duas linhas. A regra "pelo menos um dos
+                       dois" e imposta no servidor
+                       (SolicitacaoOnlineService.enviarInformacaoComplementar) -
+                       nao ha "required" no HTML porque qualquer um dos dois
+                       campos satisfaz sozinho. */-->
                 <div class="mb-2">
-                    <label for="arquivosInfoComplementar" class="form-label">Arquivo(s) com as informações pedidas</label>
+                    <label for="textoInfoComplementar" class="form-label">Resposta (texto)</label>
+                    <textarea class="form-control" id="textoInfoComplementar" name="texto" rows="5"
+                              maxlength="4000"
+                              placeholder="Escreva aqui a resposta ao que foi pedido. Se preferir (ou além disso), anexe documentos abaixo."></textarea>
+                    <div class="form-text text-detail-xs">
+                        Preencha este campo, anexe arquivos, ou os dois — basta um dos dois.
+                    </div>
+                </div>
+                <div class="mb-2">
+                    <label for="arquivosInfoComplementar" class="form-label">Arquivo(s) com as informações pedidas (opcional)</label>
                     <input type="file" class="form-control" id="arquivosInfoComplementar" name="arquivos" multiple>
                 </div>
                 <!--/* btn-resultado-attention e nao btn-warning: btn-warning usa
@@ -342,6 +358,8 @@
 <script th:replace="~{layout :: confirmarAcaoScript}"></script>
 <script th:replace="~{layout :: lockSubmitScript}"></script>
 <script th:src="@{/js/solicitante-cancelar.js}"></script>
+<script th:replace="~{layout :: avisoSairScript}"></script>
+<script th:src="@{/js/solicitante-info-complementar.js}"></script>
 <script th:src="@{/js/chat-solicitacao.js}"></script>
 <script th:inline="javascript">
     iniciarChatSolicitacao({

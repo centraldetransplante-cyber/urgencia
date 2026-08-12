@@ -557,7 +557,7 @@ class SolicitanteControllerTest {
         mvc.perform(multipart("/solicitante/50/informacao-complementar").file(arquivo).with(csrf()))
             .andExpect(status().isForbidden());
 
-        verify(solicitacaoService, never()).enviarInformacaoComplementar(any(), any());
+        verify(solicitacaoService, never()).enviarInformacaoComplementar(any(), any(), any());
     }
 
     @Test
@@ -579,7 +579,7 @@ class SolicitanteControllerTest {
             .andExpect(redirectedUrl("/solicitante/50"))
             .andExpect(flash().attributeExists("msg"));
 
-        verify(solicitacaoService).enviarInformacaoComplementar(eq(solicitacaoDoDono), any());
+        verify(solicitacaoService).enviarInformacaoComplementar(eq(solicitacaoDoDono), any(), any());
         verify(auditoria).registrar(eq("INFO_COMPLEMENTAR_RECEBIDA_PORTAL"), any());
     }
 
@@ -594,7 +594,7 @@ class SolicitanteControllerTest {
         solicitacaoDoDono.setProcessoGerado(processo);
         when(solicitacaoService.buscarParaDetalhe(50L)).thenReturn(solicitacaoDoDono);
         doThrow(new IllegalStateException("Este pedido nao esta aguardando informacao complementar no momento."))
-            .when(solicitacaoService).enviarInformacaoComplementar(eq(solicitacaoDoDono), any());
+            .when(solicitacaoService).enviarInformacaoComplementar(eq(solicitacaoDoDono), any(), any());
 
         MockMultipartFile arquivo = new MockMultipartFile("arquivos", "resposta.pdf",
             MediaType.APPLICATION_PDF_VALUE, "conteudo".getBytes());

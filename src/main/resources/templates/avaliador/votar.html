@@ -118,6 +118,44 @@
                     </div>
                 </div>
             </div>
+
+            <!-- RESPOSTA À INFORMAÇÃO COMPLEMENTAR QUE ESTE AVALIADOR PEDIU.
+                 Card SEPARADO do material clínico de propósito: é conteúdo de
+                 outra natureza (resposta da equipe solicitante, redigida e
+                 revisada pela equipe operacional), e misturá-lo ao PDF
+                 anonimizado esconderia justamente o que o médico está
+                 esperando. Só renderiza para quem pediu a informação - o
+                 controller nem popula a lista para os demais. -->
+            <div class="card mt-3" th:if="${!infoComplementar.isEmpty()}" id="cardInfoComplementar">
+                <div class="card-header">
+                    <i class="bi bi-info-circle text-primary"></i> Resposta ao seu pedido de informação
+                </div>
+                <div class="card-body">
+                    <p class="small text-muted mb-3">
+                        A equipe solicitante respondeu ao pedido de informação complementar que você
+                        registrou neste processo. O texto abaixo foi revisado pela equipe da Secretaria
+                        antes de chegar até você — por isso o paciente continua identificado apenas
+                        pelas iniciais.
+                    </p>
+                    <div th:each="info : ${infoComplementar}" class="mb-3">
+                        <div class="text-muted text-detail-xs mb-1">
+                            Recebido em
+                            <span th:text="${#temporals.format(info.dataUpload,'dd/MM/yyyy HH:mm')}">-</span>
+                        </div>
+                        <!--/* .txt (o caso comum): exibido inline, sem obrigar o
+                               médico a baixar um arquivo para ler duas linhas.
+                               text-pre-wrap preserva as quebras de linha. */-->
+                        <div th:if="${info.textoInline != null}"
+                             class="superficie-apoio p-3 text-pre-wrap" th:text="${info.textoInline}">texto</div>
+                        <a th:if="${info.textoInline == null}"
+                           th:href="@{/avaliador/{id}/pdf/{anexoId}(id=${processo.id},anexoId=${info.id})}"
+                           class="btn btn-outline-secondary btn-sm" target="_blank">
+                            <i class="bi bi-box-arrow-up-right"></i>
+                            <span th:text="${info.nomeArquivo}">documento</span>
+                        </a>
+                    </div>
+                </div>
+            </div>
         </div>
 
     <!-- Coluna direita: contexto + voto, sticky (acompanha a rolagem do PDF) -->

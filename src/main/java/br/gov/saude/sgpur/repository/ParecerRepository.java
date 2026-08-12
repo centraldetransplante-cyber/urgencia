@@ -43,6 +43,14 @@ public interface ParecerRepository extends JpaRepository<Parecer, Long> {
     Optional<Parecer> findByProcessoIdAndMembroId(Long processoId, Long membroId);
 
     /**
+     * Todos os pareceres de um processo (os 3 avaliadores), sem filtro de
+     * resultado — usado por {@code InfoComplementarAvaliadorService} para
+     * saber quem pediu informacao complementar e quem ainda vai votar, sem
+     * depender da colecao LAZY {@code Processo.pareceres}.
+     */
+    List<Parecer> findByProcessoId(Long processoId);
+
+    /**
      * Contagem direta (sem carregar nenhuma entidade) de pareceres "pendentes
      * ativos para voto" de um membro — MESMO criterio de
      * {@link br.gov.saude.sgpur.web.AvaliadorController#pendenteAtivoParaVoto}

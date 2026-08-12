@@ -719,6 +719,78 @@
                             <span class="text-muted small ms-2" th:text="${a.descricao}"></span>
                             <span class="text-muted small ms-2"
                                   th:text="${#temporals.format(a.dataUpload,'dd/MM/yyyy HH:mm')}"></span>
+                            <!--/* Resposta que o solicitante DIGITOU no portal (.txt):
+                                   exibida inline para o operador poder ler e redigir o
+                                   encaminhamento sem baixar arquivo. text-pre-wrap
+                                   preserva as quebras de linha originais. */-->
+                            <div th:if="${textosInfoComplementar.containsKey(a.id)}"
+                                 class="mt-2 p-2 bg-white border rounded small text-pre-wrap"
+                                 th:text="${textosInfoComplementar.get(a.id)}">texto</div>
+                        </div>
+                    </div>
+
+                    <!-- ENCAMINHAR AOS AVALIADORES QUE PEDIRAM A INFORMAÇÃO.
+                         O texto do operador (não o bruto do solicitante) é o que
+                         passa pela checagem de imparcialidade no servidor - ver
+                         InfoComplementarAvaliadorService. -->
+                    <div class="border rounded p-3 mb-3" th:unless="${processo.status.finalizado}">
+                        <h6 class="small fw-semibold mb-2">
+                            <i class="bi bi-send-check"></i> Encaminhar aos avaliadores que pediram a informação
+                        </h6>
+                        <p class="small text-muted mb-2">
+                            O avaliador não vê o material acima (pode identificar o paciente ou a equipe).
+                            Escreva abaixo, com suas palavras, o que ele precisa saber para concluir o parecer —
+                            refira-se ao paciente <strong>apenas pelas iniciais</strong> e não cite a equipe
+                            solicitante. Um único encaminhamento atende todos os pedidos em aberto.
+                        </p>
+                        <div class="small mb-2" th:if="${!destinatariosInfoComplementar.isEmpty()}">
+                            <span class="text-muted">Será avisado por e-mail:</span>
+                            <span class="fw-semibold" th:text="${#strings.listJoin(destinatariosInfoComplementar, ', ')}">-</span>
+                        </div>
+                        <div class="alert alert-secondary py-2 small mb-2"
+                             th:if="${destinatariosInfoComplementar.isEmpty()}">
+                            Nenhum avaliador com pedido de informação e parecer pendente no momento —
+                            o material fica disponível para quem pediu, mas nenhum e-mail será enviado.
+                        </div>
+                        <form th:action="@{/processos/{id}/info-complementar/encaminhar-avaliadores(id=${processo.id})}"
+                              method="post" enctype="multipart/form-data"
+                              data-lock-submit="Encaminhando..."
+                              data-confirm-msg="Encaminhar este texto aos avaliadores que pediram a informação? Eles passam a ver o conteúdo no Portal do Avaliador e recebem um aviso por e-mail.">
+                            <div class="mb-2">
+                                <label class="form-label small fw-semibold" for="textoInfoAvaliador">Texto que será enviado ao avaliador</label>
+                                <textarea class="form-control form-control-sm" id="textoInfoAvaliador"
+                                          name="texto" rows="5" maxlength="4000" required
+                                          placeholder="Ex.: A equipe informou que o exame de imagem solicitado foi realizado em 05/08 e não evidenciou alteração..."></textarea>
+                            </div>
+                            <div class="row g-2 align-items-end">
+                                <div class="col-md-8">
+                                    <label class="form-label small fw-semibold" for="arquivoInfoAvaliador">
+                                        Documento já anonimizado (opcional)
+                                    </label>
+                                    <input type="file" name="arquivo" class="form-control form-control-sm"
+                                           accept=".pdf,.png,.jpg,.jpeg" id="arquivoInfoAvaliador">
+                                    <div class="form-text text-detail-xs">
+                                        Anexe só se já tiver removido o nome do paciente e a identificação da equipe.
+                                    </div>
+                                </div>
+                                <div class="col-md-4 d-flex align-items-end">
+                                    <button class="btn btn-primary btn-sm w-100">
+                                        <i class="bi bi-send"></i> Encaminhar aos avaliadores
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+
+                    <!-- Material JÁ encaminhado (histórico do que os avaliadores enxergam) -->
+                    <div th:if="${!materialInfoComplementarAvaliador.isEmpty()}" class="mb-3">
+                        <h6 class="small fw-semibold mb-2">Já encaminhado aos avaliadores</h6>
+                        <div th:each="a : ${materialInfoComplementarAvaliador}" class="alert alert-info py-2 mb-2">
+                            <i class="bi bi-send-check"></i>
+                            <a th:href="@{/processos/anexos/{id}/download(id=${a.id})}"
+                               th:text="${a.nomeArquivo}">arquivo</a>
+                            <span class="text-muted small ms-2"
+                                  th:text="${#temporals.format(a.dataUpload,'dd/MM/yyyy HH:mm')}"></span>
                         </div>
                     </div>
 

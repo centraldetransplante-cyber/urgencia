@@ -6373,3 +6373,131 @@ segunda em `main` limpo (`git stash`), com a mesma falha.
 **Nenhuma escrita foi feita em produção** — o diagnóstico usou apenas
 `SELECT`.
 
+
+## Encaminhar a informação complementar ao avaliador que a pediu (2026-08-11)
+
+**Feature nova aprovada explicitamente pelo dono do produto**, fechando a
+lacuna diagnosticada logo depois do fix de múltiplos pedidos simultâneos: o
+avaliador que votou `SOLICITA_INFORMACAO` **nunca conseguia ler a resposta
+que o solicitante enviou**. O material do solicitante entra como
+`TipoAnexo.INFO_COMPLEMENTAR`, que é visível só ao OPERADOR (pode citar o
+nome do paciente e a equipe), e o Portal do Avaliador nunca exibiu esse
+tipo — o médico voltava a votar às cegas, sem saber o que tinha sido
+respondido ao próprio pedido dele.
+
+### 1. O solicitante pode responder com TEXTO, não só com arquivo
+
+`SolicitacaoOnlineService.enviarInformacaoComplementar(s, texto, arquivos)`
+(assinatura nova, 3 argumentos) exige **texto não-branco OU pelo menos um
+arquivo** — nunca os dois. Antes exigia arquivo, o que obrigava o
+solicitante a produzir um documento só para responder algo de duas linhas
+("o paciente foi transplantado em 05/08"). O texto vira um `.txt` UTF-8 pelo
+**mesmo pipeline de anexo** (`AnexoStorageService.salvarTexto`, novo, que
+delega a `salvarBytes` — `.txt` não está nem deve estar na allowlist de
+*upload*, que existe para barrar arquivo vindo de fora; aqui o conteúdo é
+uma string gerada pelo próprio sistema). **Nenhum schema novo**, e o
+operador continua vendo tudo no mesmo lugar do card de Respostas.
+`solicitante/detalhe.html` ganhou o `<textarea>` ao lado do campo de arquivo,
+com `data-lock-submit` (já existia) e agora também o guard
+`aviso-sair-sem-salvar` (`solicitante-info-complementar.js`, novo) — o campo
+pode carregar várias linhas escritas à mão, mesma classe de perda silenciosa
+que motivou o guard em `/solicitante/nova`.
+
+**`TipoAnexo.INFO_COMPLEMENTAR` não mudou de significado** — continua sendo
+o staging/bruto, visível só ao operador.
+
+### 2. `TipoAnexo.INFO_COMPLEMENTAR_AVALIADOR` (valor novo)
+
+Conteúdo **já revisado/redigido pelo operador**, liberado aos avaliadores
+que pediram a informação. Adicionar valor a esse enum é seguro em produção
+(a coluna `anexo.tipo` **não tem CHECK constraint** hoje — reconfirmado por
+SQL em 2026-08-03, ver a seção de CHECK constraints acima). Os dois
+`switch` exaustivos sobre `TipoAnexo` (`NomePadraoAnexo.rotuloTipo`,
+`PdfRelatorioBuilder.descricaoTipoAnexo`) ganharam o case novo — o
+compilador obriga, não há como esquecer.
+
+### 3. A promoção NUNCA é automática (o ponto central do desenho)
+
+`POST /processos/{id}/info-complementar/encaminhar-avaliadores`
+(`ProcessoDetalheController` → `InfoComplementarAvaliadorService.encaminhar`):
+o operador **redige** o texto que vai ao avaliador, parafraseando o conteúdo
+bruto, e é **esse** texto que passa por `VerificadorNomePaciente` (a MESMA
+classe do chat operador↔avaliador, reaproveitada sem duplicar lógica).
+Promover o texto bruto direto tornaria a checagem um teatro: ela existe
+sobre o texto que será de fato enviado. Mesmo espírito da trava de
+anonimização de `DOCUMENTO_PORTAL_NAO_ANONIMIZADO` — material do solicitante
+só atravessa a barreira de imparcialidade com revisão humana registrada.
+Bloqueio é em **qualquer nível diferente de LIVRE** (inclusive `ALERTA`, mais
+rígido que o chat: este material vai para a tela de voto), recusa antes de
+qualquer escrita e **não cita os termos encontrados** (mesma calibragem de
+2026-08-10 — citar ensina qual palavra trocar para burlar). O operador pode
+anexar junto um arquivo já anonimizado (mesma responsabilidade humana do
+upload de documento clínico). Endpoint bloqueado por processo encerrado
+(`bloqueadoPorEncerrado`) e auditado.
+
+**Cuidado real, achado pelo teste de integração:** `LogAuditoria.acao` é
+`@Column(length = 40)` e `AuditoriaService.registrar` **engole a exceção**
+(auditoria nunca derruba a ação principal) — a ação
+`INFO_COMPLEMENTAR_ENCAMINHADA_AVALIADORES` (41 caracteres) sumia **em
+silêncio**, sem nenhum registro. Encurtada para
+`INFO_COMPLEMENTAR_ENCAMINHADA`. **Toda ação de auditoria nova precisa
+caber em 40 caracteres** — nenhum teste com mock pegaria isso.
+
+### 4. Quem vê o material (imparcialidade)
+
+Predicado único `InfoComplementarAvaliadorService.membroPodeVerMaterial`,
+usado **tanto pela tela quanto pelo download** (nunca duplicado): vê quem
+pediu a informação neste processo, pelos **dois** registros possíveis —
+`HistoricoParecer` (o operador já retomou a análise e o `Parecer` vivo foi
+resetado) **ou** `Parecer` vivo com `SOLICITA_INFORMACAO` (o pedido segue de
+pé). **Desvio deliberado do desenho original**, que falava só em
+`HistoricoParecer`: na ordem natural de trabalho o operador encaminha o que
+recebeu e **só depois** retoma a análise — nesse instante não existe
+histórico nenhum, e o material seria gravado sem nunca chegar a ninguém.
+Um avaliador que **nunca pediu** informação não vê nada, mesmo sendo
+avaliador do mesmo processo (teste negativo explícito), e o download
+devolve 403 para ele.
+
+`AvaliadorController.votar` expõe o material num record projetado
+(`InfoComplementarView`), com o `.txt` renderizado **inline** na tela (mais
+legível que obrigar o médico a baixar um arquivo de duas linhas) e download
+para os demais tipos. `baixarPdf` passou a ter **whitelist explícita de dois
+tipos** (`SOLICITACAO_AVALIADOR` + `INFO_COMPLEMENTAR_AVALIADOR`), com dupla
+checagem de posse (é avaliador do processo **e**, para o segundo tipo,
+pediu a informação) e content type derivado do anexo.
+
+### 5. Aviso automático por e-mail (best-effort)
+
+`EmailTemplateService.emailInfoComplementarDisponivel` (só iniciais do
+paciente, link do Portal, **nenhum trecho do material** — o conteúdo mora
+atrás da autenticação). Disparado por
+`InfoComplementarAvaliadorService.avisarAvaliadores` **depois do commit** e
+nunca dentro dele (mesmo contrato do convite automático ao registrar o
+envio): falha de SMTP ou avaliador sem e-mail vira flash `aviso`, jamais
+desfaz o encaminhamento já gravado. Só vai para quem pediu a informação
+**e** ainda vai votar. Auditoria:
+`INFO_COMPLEMENTAR_AVISO_ENVIADO`/`_NAO_ENVIADO`/`_FALHA`.
+
+### O que NÃO foi tocado
+
+`ProcessoValidator` (contagens, maioria simples, exceção do coordenador,
+`validarPausaDecisao`), `ProcessoService.decidir`/`tentarDecisaoAutomatica`/
+`retomarAposInformacao` (só LEITURA de `HistoricoParecer`, nenhuma escrita
+nova), o significado de `TipoAnexo.INFO_COMPLEMENTAR`, e a obrigatoriedade
+de resposta do solicitante (virou "arquivo OU texto", não sumiu).
+
+### Testes
+
+`InfoComplementarAvaliadorIntegrationTest` (`@SpringBootTest` + H2 real, sem
+mock de service — só o SMTP é mockado): 13 casos cobrindo texto sozinho,
+arquivo sozinho, nada (recusado sem gravar), encaminhamento com sucesso +
+auditoria sem nome de paciente nem o texto, bloqueio por nome do paciente,
+bloqueio por equipe solicitante, texto em branco, N=1 e N=2 (o cenário real
+do 12/2026 — um encaminhamento atende todos que pediram), o negativo de
+imparcialidade (quem não pediu não vê), visibilidade preservada **depois**
+da retomada (quando só resta o `HistoricoParecer`), 403 no download para
+quem não pediu, falha de SMTP não desfazendo o encaminhamento, e processo
+encerrado bloqueando o endpoint.
+
+**Validação:** suíte completa **1050 testes, 0 falhas** (JDK 21) — sem
+nenhuma flakiness nesta rodada.

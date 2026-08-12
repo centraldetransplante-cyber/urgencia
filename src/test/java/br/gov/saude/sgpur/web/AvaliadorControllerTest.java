@@ -56,6 +56,7 @@ class AvaliadorControllerTest {
     @MockitoBean private AuditoriaService auditoria;
     @MockitoBean private TempoRespostaService tempoRespostaService;
     @MockitoBean private MensagemAvaliadorService mensagemAvaliadorService;
+    @MockitoBean private br.gov.saude.sgpur.service.InfoComplementarAvaliadorService infoComplementarService;
     // O POST de voto usa um TransactionTemplate proprio (transacoes curtas e
     // independentes - ver AvaliadorController.registrarVoto). Aqui basta o
     // gerenciador mockado: o TransactionTemplate executa o callback normalmente

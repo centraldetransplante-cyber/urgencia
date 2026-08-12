@@ -435,7 +435,7 @@ class SolicitacaoOnlineServiceTest {
             new org.springframework.mock.web.MockMultipartFile("arquivos", "resposta.pdf",
                 "application/pdf", "conteudo".getBytes());
 
-        service.enviarInformacaoComplementar(s, java.util.List.of(arquivo));
+        service.enviarInformacaoComplementar(s, null, java.util.List.of(arquivo));
 
         org.mockito.Mockito.verify(anexoStorageProcesso).salvar(
             org.mockito.ArgumentMatchers.eq(processo),
@@ -445,13 +445,13 @@ class SolicitacaoOnlineServiceTest {
     }
 
     @Test
-    void enviarInformacaoComplementarSemArquivoLancaExcecao() {
+    void enviarInformacaoComplementarSemTextoNemArquivoLancaExcecao() {
         SolicitacaoOnline s = comStatus(25L, StatusSolicitacaoOnline.CONVERTIDA);
         s.setProcessoGerado(processoComStatus(StatusProcesso.SOLICITA_INFORMACAO));
 
-        assertThatThrownBy(() -> service.enviarInformacaoComplementar(s, java.util.List.of()))
+        assertThatThrownBy(() -> service.enviarInformacaoComplementar(s, null, java.util.List.of()))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("Anexe pelo menos um arquivo");
+            .hasMessageContaining("anexe pelo menos um arquivo");
     }
 
     @Test
@@ -462,7 +462,7 @@ class SolicitacaoOnlineServiceTest {
             new org.springframework.mock.web.MockMultipartFile("arquivos", "resposta.pdf",
                 "application/pdf", "conteudo".getBytes());
 
-        assertThatThrownBy(() -> service.enviarInformacaoComplementar(s, java.util.List.of(arquivo)))
+        assertThatThrownBy(() -> service.enviarInformacaoComplementar(s, null, java.util.List.of(arquivo)))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("nao esta aguardando informacao complementar");
     }
@@ -487,7 +487,7 @@ class SolicitacaoOnlineServiceTest {
                 org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.eq(arquivo)))
             .thenThrow(new java.io.IOException("Disco cheio"));
 
-        assertThatThrownBy(() -> service.enviarInformacaoComplementar(s, java.util.List.of(arquivo)))
+        assertThatThrownBy(() -> service.enviarInformacaoComplementar(s, null, java.util.List.of(arquivo)))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("Falha ao salvar arquivo enviado")
             .hasCauseInstanceOf(java.io.IOException.class);
