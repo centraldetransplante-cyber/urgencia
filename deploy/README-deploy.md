@@ -266,7 +266,7 @@ isto é feito no console:
 2. **Resources → Attached VNICs** → clicar na VNIC principal.
 3. **IPv4 Addresses** → no IP público, **Edit** → tipo **Reserved**
    (*"Reserve this public IP"*) → confirmar.
-4. Conferir que o endereço continua `163.176.163.213`. Se mudar, atualize o
+4. Conferir que o endereço continua `163.176.30.222`. Se mudar, atualize o
    DuckDNS e rode `sudo certbot renew --force-renewal`.
 
 Um IP reservado continua dentro do Always Free.

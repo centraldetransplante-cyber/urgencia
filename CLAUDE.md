@@ -51,11 +51,11 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   `.\e2e.ps1 -Headless`. Screenshot automático em `target/e2e-screenshots/`
   se o teste falhar. (Equivalente cru, sem o script: `mvn verify -Pe2e`, mas
   exige JDK 21 e Maven já no PATH da sessão — prefira `.\e2e.ps1`.)
-- **Deploy em produção:** VM Oracle Cloud (`ubuntu@163.176.163.213`, domínio
+- **Deploy em produção:** VM Oracle Cloud (`ubuntu@163.176.30.222`, domínio
   `urgenciarenal.duckdns.org`), systemd `sgpur.service`, jar em
   `/opt/sgpur/sgpur.jar` (usuário `sgpur`). Chave SSH local:
   `~/.ssh/saur_oracle`. Deploy manual: `scp target/saur-0.0.1-SNAPSHOT.jar
-  ubuntu@163.176.163.213:/tmp/sgpur-novo.jar`, depois na VM `sudo cp
+  ubuntu@163.176.30.222:/tmp/sgpur-novo.jar`, depois na VM `sudo cp
   /opt/sgpur/sgpur.jar /opt/sgpur/sgpur.jar.bak-<timestamp>` (backup), `sudo mv
   /tmp/sgpur-novo.jar /opt/sgpur/sgpur.jar && sudo chown sgpur:sgpur
   /opt/sgpur/sgpur.jar && sudo systemctl restart sgpur`. Validar com
@@ -866,7 +866,7 @@ Deploys que rodaram desde a migração (31/07, 12:35/16:09/17:47 UTC) falharam
 todos na etapa de entrega, com:
 ```
 Load key "/home/runner/.ssh/deploy_key": error in libcrypto
-ubuntu@163.176.163.213: Permission denied (publickey)
+ubuntu@163.176.30.222: Permission denied (publickey)
 ```
 O CI (build/testes) passa normalmente — só a entrega (`scp`/`ssh` para a VM)
 quebra. **Correção:** recadastrar o secret `SAUR_ORACLE_SSH_KEY` nas
@@ -1314,7 +1314,7 @@ Passo a passo completo em `deploy/README-deploy.md`.
 
 ## Vistoria de 2026-08-03 (inspeção SSH real na VM de produção)
 
-Levantamento feito diretamente na VM (`ubuntu@163.176.163.213`) via SSH, não
+Levantamento feito diretamente na VM (`ubuntu@163.176.30.222`) via SSH, não
 por suposição — todos os itens abaixo foram checados no servidor.
 
 1. **Deploy automático quebrado** — ver seção "Deploy" acima (pendência
@@ -6253,7 +6253,7 @@ pronto para decidir.
 
 ### Estado real de produção (conferido por SELECT, não inferido)
 
-Consulta somente-leitura ao Postgres da VM (`ubuntu@163.176.163.213`, nenhuma
+Consulta somente-leitura ao Postgres da VM (`ubuntu@163.176.30.222`, nenhuma
 escrita), processo `id=17` / `12/2026`, `SolicitacaoOnline id=17`:
 
 | Parecer | Membro | Resultado | `data_hora_voto` |
