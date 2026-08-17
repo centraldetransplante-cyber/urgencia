@@ -75,11 +75,13 @@
                 <span th:text="${totalAvaliadores}">3</span>
             </h2>
             <p class="small text-muted">Selecione exatamente <span th:text="${totalAvaliadores}">3</span> médicos.</p>
-            <div class="row g-2" id="listaMedicos" th:attr="data-max-avaliadores=${totalAvaliadores}">
+            <div class="row g-2" id="listaMedicos"
+                 th:attr="data-max-avaliadores=${totalAvaliadores},data-conflito-equipe-url=@{/processos/conflito-equipe}">
                 <div class="col-md-6" th:each="m : ${medicos}">
                     <div class="form-check border rounded p-2 ps-4">
                         <input class="form-check-input medico-check" type="checkbox" name="medicoIds"
-                               th:value="${m.id}" th:id="'med' + ${m.id}">
+                               th:value="${m.id}" th:id="'med' + ${m.id}"
+                               th:checked="${medicoIdsSelecionados != null and medicoIdsSelecionados.contains(m.id)}">
                         <label class="form-check-label" th:for="'med' + ${m.id}" th:text="${m.rotulo}">Médico</label>
                     </div>
                 </div>
@@ -100,8 +102,11 @@
     </form>
 </main>
 
+<div th:replace="~{layout :: confirmModal}"></div>
+
 <script th:replace="~{layout :: scripts}"></script>
 <script th:replace="~{layout :: lockSubmitScript}"></script>
+<script th:replace="~{layout :: confirmarAcaoScript}"></script>
 <script th:src="@{/js/processo-form.js}"></script>
 <div th:replace="~{layout :: footer}"></div>
 </body>

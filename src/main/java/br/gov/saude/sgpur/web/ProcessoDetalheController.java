@@ -246,6 +246,7 @@ public class ProcessoDetalheController {
         model.addAttribute("numeracaoAutomatica", automatica);
         model.addAttribute("medicos", membroService.listarAtivos());
         model.addAttribute("totalAvaliadores", ProcessoService.AVALIADORES_POR_PROCESSO);
+        model.addAttribute("medicoIdsSelecionados", java.util.Set.of());
         return "processos/form";
     }
 
@@ -336,6 +337,12 @@ public class ProcessoDetalheController {
             model.addAttribute("medicos", membroService.listarAtivos());
             model.addAttribute("totalAvaliadores", ProcessoService.AVALIADORES_POR_PROCESSO);
             model.addAttribute("origemSolicitacaoOnlineId", origemSolicitacaoOnlineId);
+            // Preserva a selecao de medicos no re-render (bug corrigido junto com o
+            // endpoint de conflito de equipe, ver docs/RELATORIO-CONFIRMACAO-CONFLITO-
+            // EQUIPE-2026-08.md secao 2.1): antes os checkboxes nao tinham th:checked
+            // e a selecao se perdia a cada erro de validacao (numero duplicado etc.).
+            model.addAttribute("medicoIdsSelecionados",
+                medicoIds != null ? new java.util.HashSet<>(medicoIds) : java.util.Set.of());
             return "processos/form";
         }
         Processo salvo = processoService.cadastrar(processo, medicoIds);
