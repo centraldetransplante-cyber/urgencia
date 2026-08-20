@@ -88,6 +88,9 @@ class ProcessoDetalheSessaoOrfaIntegrationTest {
         p.setSequencial(1);
         p.setPacienteNome("Paciente Sessao Orfa");
         p.setPacienteRgct("111111111");
+        p.setPacienteDataNascimento(java.time.LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(br.gov.saude.sgpur.domain.Sexo.MASCULINO);
         p.setSolicitanteEquipe("HCPA");
         p.setSolicitanteEmail("equipe@hcpa.example.com");
         p.setDataSituacaoEspecial(java.time.LocalDate.of(2026, 1, 1));

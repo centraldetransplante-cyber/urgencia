@@ -14,6 +14,7 @@ import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.TipoAnexo;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.AnexoRepository;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.MensagemSolicitacaoRepository;
@@ -136,6 +137,9 @@ class ProcessoDetalheSemTransacaoIntegrationTest {
         p.setSequencial(77);
         p.setPacienteNome("Paciente Teste Detalhe");
         p.setPacienteRgct("999999999");
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("HCPA");
         p.setSolicitanteEmail("equipe@hcpa.example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 6, 1));
@@ -211,6 +215,9 @@ class ProcessoDetalheSemTransacaoIntegrationTest {
         origem.setUsuarioSolicitante(solicitante);
         origem.setPacienteNome(p.getPacienteNome());
         origem.setPacienteRgct(p.getPacienteRgct());
+        origem.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        origem.setPacienteCpf("11144477735");
+        origem.setPacienteSexo(Sexo.MASCULINO);
         origem.setSolicitanteEquipe(p.getSolicitanteEquipe());
         origem.setSolicitanteEmail(p.getSolicitanteEmail());
         origem.setDataSituacaoEspecial(p.getDataSituacaoEspecial());
@@ -253,6 +260,9 @@ class ProcessoDetalheSemTransacaoIntegrationTest {
         deferido.setSequencial(78);
         deferido.setPacienteNome("Paciente Ja Deferido");
         deferido.setPacienteRgct("888888888");
+        deferido.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        deferido.setPacienteCpf("11144477735");
+        deferido.setPacienteSexo(Sexo.MASCULINO);
         deferido.setSolicitanteEquipe("HCPA");
         deferido.setSolicitanteEmail("equipe@hcpa.example.com");
         deferido.setDataSituacaoEspecial(LocalDate.of(2026, 3, 1));

@@ -2,6 +2,7 @@ package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.StatusProcesso;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
 import br.gov.saude.sgpur.support.CamposDeFormulario;
 import org.junit.jupiter.api.BeforeEach;
@@ -74,6 +75,9 @@ class ProcessoAtualizacaoIntegrationTest {
         p.setStatus(StatusProcesso.ENVIADO);
         p.setPacienteNome("Paciente Original");
         p.setPacienteRgct("RGCT-ORIG");
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("Equipe Original");
         p.setSolicitanteEmail("original@example.com");
         p.setDataSituacaoEspecial(LocalDate.now().minusDays(10));
@@ -91,6 +95,9 @@ class ProcessoAtualizacaoIntegrationTest {
         Processo form = new Processo();
         form.setPacienteNome("Paciente Editado");
         form.setPacienteRgct("RGCT-NOVO");
+        form.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        form.setPacienteCpf("11144477735");
+        form.setPacienteSexo(Sexo.MASCULINO);
         form.setSolicitanteEquipe("Equipe Nova");
         form.setSolicitanteEmail("editado@example.com");
         form.setDataSituacaoEspecial(LocalDate.now().plusDays(5));
@@ -148,6 +155,9 @@ class ProcessoAtualizacaoIntegrationTest {
         Processo p = new Processo();
         p.setPacienteNome(origem.getPacienteNome());
         p.setPacienteRgct(origem.getPacienteRgct());
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe(origem.getSolicitanteEquipe());
         p.setSolicitanteEmail(origem.getSolicitanteEmail());
         p.setDataSituacaoEspecial(origem.getDataSituacaoEspecial());

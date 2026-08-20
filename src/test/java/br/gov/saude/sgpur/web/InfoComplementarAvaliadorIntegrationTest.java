@@ -12,6 +12,7 @@ import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.TipoAnexo;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.AnexoRepository;
 import br.gov.saude.sgpur.repository.HistoricoParecerRepository;
 import br.gov.saude.sgpur.repository.LogAuditoriaRepository;
@@ -126,6 +127,9 @@ class InfoComplementarAvaliadorIntegrationTest {
         p.setSequencial(12);
         p.setPacienteNome("Joao das Neves");
         p.setPacienteRgct("999999999");
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("HCPA");
         p.setSolicitanteEmail("equipe@hcpa.example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 3, 1));
@@ -145,6 +149,9 @@ class InfoComplementarAvaliadorIntegrationTest {
         s.setUsuarioSolicitante(dono);
         s.setPacienteNome("Joao das Neves");
         s.setPacienteRgct("999999999");
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setSolicitanteEquipe("HCPA");
         s.setSolicitanteEmail("solicitante-ica@example.com");
         s.setDataSituacaoEspecial(LocalDate.of(2026, 3, 1));

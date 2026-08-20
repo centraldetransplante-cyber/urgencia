@@ -7,6 +7,7 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.LogAuditoriaRepository;
 import br.gov.saude.sgpur.repository.MensagemSolicitacaoRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
@@ -109,6 +110,9 @@ class MensagemSolicitacaoChatIntegrationTest {
         s.setUsuarioSolicitante(solicitante);
         s.setPacienteNome("Paciente Chat Teste");
         s.setPacienteRgct("777777777");
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setSolicitanteEquipe("HCPA");
         s.setSolicitanteEmail("solicitante.chat@example.com");
         s.setDataSituacaoEspecial(LocalDate.of(2026, 6, 1));

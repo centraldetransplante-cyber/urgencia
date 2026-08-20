@@ -8,6 +8,7 @@ import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
@@ -119,6 +120,9 @@ class SolicitanteCancelamentoTransacaoIntegrationTest {
         p.setSequencial(88);
         p.setPacienteNome("Paciente Cancelamento TX");
         p.setPacienteRgct("321321321");
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("HCPA");
         p.setSolicitanteEmail("cancel-tx-it@example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));
@@ -140,6 +144,9 @@ class SolicitanteCancelamentoTransacaoIntegrationTest {
         s.setUsuarioSolicitante(dono);
         s.setPacienteNome(p.getPacienteNome());
         s.setPacienteRgct(p.getPacienteRgct());
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setSolicitanteEquipe("HCPA");
         s.setSolicitanteEmail("cancel-tx-it@example.com");
         s.setDataSituacaoEspecial(p.getDataSituacaoEspecial());

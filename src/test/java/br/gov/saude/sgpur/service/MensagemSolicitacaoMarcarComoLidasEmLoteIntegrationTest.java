@@ -6,6 +6,7 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.MensagemSolicitacaoRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -87,6 +88,9 @@ class MensagemSolicitacaoMarcarComoLidasEmLoteIntegrationTest {
         s.setUsuarioSolicitante(solicitante);
         s.setPacienteNome("Paciente Marcar Lidas Lote");
         s.setPacienteRgct("222222222");
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setSolicitanteEquipe("HCPA");
         s.setSolicitanteEmail("solicitante.lote@example.com");
         s.setDataSituacaoEspecial(LocalDate.of(2026, 6, 1));
@@ -99,6 +103,9 @@ class MensagemSolicitacaoMarcarComoLidasEmLoteIntegrationTest {
         outra.setUsuarioSolicitante(outroSolicitante);
         outra.setPacienteNome("Outro Paciente Lote");
         outra.setPacienteRgct("111111111");
+        outra.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        outra.setPacienteCpf("11144477735");
+        outra.setPacienteSexo(Sexo.MASCULINO);
         outra.setSolicitanteEquipe("ISCMPA");
         outra.setSolicitanteEmail("outro.solicitante.lote@example.com");
         outra.setDataSituacaoEspecial(LocalDate.of(2026, 6, 1));

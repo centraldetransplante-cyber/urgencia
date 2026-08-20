@@ -6,6 +6,7 @@ import br.gov.saude.sgpur.domain.MensagemAvaliador.RemetenteMensagemAvaliador;
 import br.gov.saude.sgpur.domain.Parecer;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.StatusProcesso;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.MensagemAvaliadorRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
@@ -77,6 +78,9 @@ class MensagemAvaliadorMarcarComoLidasEmLoteIntegrationTest {
         p.setSequencial(61);
         p.setPacienteNome("Paciente Marcar Lidas Lote");
         p.setPacienteRgct("444444444");
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("HCPA");
         p.setSolicitanteEmail("equipe@hcpa.example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));
@@ -90,6 +94,9 @@ class MensagemAvaliadorMarcarComoLidasEmLoteIntegrationTest {
         outroProcesso.setSequencial(62);
         outroProcesso.setPacienteNome("Outro Paciente Lote");
         outroProcesso.setPacienteRgct("333333333");
+        outroProcesso.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        outroProcesso.setPacienteCpf("11144477735");
+        outroProcesso.setPacienteSexo(Sexo.MASCULINO);
         outroProcesso.setSolicitanteEquipe("ISCMPA");
         outroProcesso.setSolicitanteEmail("equipe2@iscmpa.example.com");
         outroProcesso.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));

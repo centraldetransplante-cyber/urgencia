@@ -1,6 +1,7 @@
 package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.*;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
 import br.gov.saude.sgpur.service.dto.EmailTemplate;
@@ -68,6 +69,9 @@ class SolicitacaoOnlineServiceTest {
         SolicitacaoOnline s = new SolicitacaoOnline();
         s.setPacienteNome("Fulano de Tal");
         s.setPacienteRgct("123456789-12345");
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setDataSituacaoEspecial(LocalDate.now());
         s.setJustificativaClinica("Quadro grave, necessita avaliacao urgente.");
         return s;
@@ -166,6 +170,9 @@ class SolicitacaoOnlineServiceTest {
 
     private SolicitacaoOnline convertidaCom(StatusProcesso statusProcesso) {
         Processo p = new Processo();
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setId(500L);
         p.setNumero("07/2026");
         p.setPacienteNome("Fulano de Tal");
@@ -223,6 +230,9 @@ class SolicitacaoOnlineServiceTest {
     @Test
     void notificaAvaliadoresPendentesDoCancelamento() {
         Processo p = new Processo();
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setId(500L);
         p.setNumero("07/2026");
         p.setPacienteNome("Fulano de Tal");
@@ -246,6 +256,9 @@ class SolicitacaoOnlineServiceTest {
     @Test
     void avaliadorSemEmailVoltaComoNaoAvisadoSemLancar() {
         Processo p = new Processo();
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setId(500L);
         p.setNumero("07/2026");
         p.setPacienteNome("Fulano de Tal");
@@ -289,6 +302,9 @@ class SolicitacaoOnlineServiceTest {
         s.setStatus(StatusSolicitacaoOnline.ENVIADA);
         when(repository.findById(15L)).thenReturn(java.util.Optional.of(s));
         Processo processo = new Processo();
+        processo.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        processo.setPacienteCpf("11144477735");
+        processo.setPacienteSexo(Sexo.MASCULINO);
         processo.setId(99L);
         processo.setNumero("01/2026");
 
@@ -321,6 +337,9 @@ class SolicitacaoOnlineServiceTest {
         java.nio.file.Files.write(arquivo, "conteudo com nome do paciente".getBytes());
         when(anexoStorage.resolverArquivo(anexo)).thenReturn(arquivo);
         Processo processo = new Processo();
+        processo.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        processo.setPacienteCpf("11144477735");
+        processo.setPacienteSexo(Sexo.MASCULINO);
         processo.setId(99L);
         processo.setNumero("01/2026");
 
@@ -389,6 +408,9 @@ class SolicitacaoOnlineServiceTest {
 
     private Processo processoComStatus(StatusProcesso status) {
         Processo p = new Processo();
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setId(100L);
         p.setNumero("01/2026");
         p.setStatus(status);

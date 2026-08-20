@@ -108,7 +108,8 @@ class RascunhoSolicitacaoOnlineServiceTest {
     @Test
     void apagarRemoveORascunhoDoUsuario() {
         Usuario u = criarSolicitante("rascunho-apagar");
-        service.salvar(u.getId(), "Nome", "RGCT", LocalDate.now(), "Justificativa");
+        service.salvar(u.getId(), "Nome", "RGCT", LocalDate.of(1985, 3, 15), "11144477735",
+            Sexo.MASCULINO, null, LocalDate.now(), "Justificativa");
         assertThat(service.buscarPorUsuario(u.getId())).isPresent();
 
         service.apagar(u.getId());
@@ -137,6 +138,7 @@ class RascunhoSolicitacaoOnlineServiceTest {
         Usuario u = criarSolicitante("rascunho-nao-vaza-triagem");
 
         service.salvar(u.getId(), "Paciente Rascunho", "999999999-99999",
+            LocalDate.of(1985, 3, 15), "11144477735", Sexo.MASCULINO, null,
             LocalDate.now(), "Justificativa clinica completa do rascunho.");
 
         assertThat(solicitacaoOnlineRepository.findAllByOrderByDataEnvioDesc()).isEmpty();

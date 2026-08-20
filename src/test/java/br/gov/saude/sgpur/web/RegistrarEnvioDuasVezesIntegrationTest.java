@@ -3,6 +3,7 @@ package br.gov.saude.sgpur.web;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.TipoAnexo;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.AnexoRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
 import br.gov.saude.sgpur.service.AnexoStorageService;
@@ -105,6 +106,9 @@ class RegistrarEnvioDuasVezesIntegrationTest {
                 p.setSequencial(55);
                 p.setPacienteNome("Paciente Teste Reenvio");
                 p.setPacienteRgct("456456456");
+                p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+                p.setPacienteCpf("11144477735");
+                p.setPacienteSexo(Sexo.MASCULINO);
                 p.setSolicitanteEquipe("HCPA");
                 p.setSolicitanteEmail("equipe@hcpa.example.com");
                 p.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));
@@ -189,6 +193,9 @@ class RegistrarEnvioDuasVezesIntegrationTest {
                 deferido.setSequencial(56);
                 deferido.setPacienteNome("Paciente Teste SNT");
                 deferido.setPacienteRgct("789789789");
+                deferido.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+                deferido.setPacienteCpf("11144477735");
+                deferido.setPacienteSexo(Sexo.MASCULINO);
                 deferido.setSolicitanteEquipe("HCPA");
                 deferido.setSolicitanteEmail("equipe@hcpa.example.com");
                 deferido.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));
@@ -234,6 +241,9 @@ class RegistrarEnvioDuasVezesIntegrationTest {
                 deferido.setSequencial(57);
                 deferido.setPacienteNome("Paciente Teste SNT Falha");
                 deferido.setPacienteRgct("321321321");
+                deferido.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+                deferido.setPacienteCpf("11144477735");
+                deferido.setPacienteSexo(Sexo.MASCULINO);
                 deferido.setSolicitanteEquipe("HCPA");
                 deferido.setSolicitanteEmail("equipe@hcpa.example.com");
                 deferido.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));

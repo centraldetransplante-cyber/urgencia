@@ -3,6 +3,7 @@ package br.gov.saude.sgpur.repository;
 import br.gov.saude.sgpur.domain.ControleUrgencia;
 import br.gov.saude.sgpur.domain.MembroUrgenciaRenal;
 import br.gov.saude.sgpur.domain.Perfil;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.domain.SituacaoUrgencia;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
@@ -184,6 +185,9 @@ class BuscaListasIntegrationTest {
         s.setUsuarioSolicitante(solicitante);
         s.setPacienteNome(paciente);
         s.setPacienteRgct(rgct);
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setSolicitanteEquipe(equipe);
         s.setSolicitanteEmail(solicitante.getEmail());
         s.setDataSituacaoEspecial(LocalDate.now().minusDays(2));

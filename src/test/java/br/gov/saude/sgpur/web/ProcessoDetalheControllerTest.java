@@ -1,6 +1,7 @@
 package br.gov.saude.sgpur.web;
 
 import br.gov.saude.sgpur.domain.*;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.service.MembroUrgenciaRenalService;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -140,6 +141,9 @@ class ProcessoDetalheControllerTest {
         s.setId(id);
         s.setPacienteNome("Maria Silva");
         s.setPacienteRgct("RGCT123");
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setSolicitanteEquipe("Equipe A");
         s.setSolicitanteEmail("equipe@ex.com");
         s.setDataSituacaoEspecial(LocalDate.of(2026, 7, 1));
@@ -227,6 +231,9 @@ class ProcessoDetalheControllerTest {
         return post("/processos")
             .param("pacienteNome", "Maria Silva")
             .param("pacienteRgct", "RGCT123")
+            .param("pacienteDataNascimento", "1985-03-15")
+            .param("pacienteCpf", "11144477735")
+            .param("pacienteSexo", "MASCULINO")
             .param("solicitanteEquipe", "Equipe A")
             .param("solicitanteEmail", "equipe@ex.com")
             .param("dataSituacaoEspecial", "2026-07-01")
@@ -342,6 +349,9 @@ class ProcessoDetalheControllerTest {
         when(solicitacaoOnlineService.buscar(5L)).thenReturn(solicitacaoValida(5L));
         when(processoService.isNumeracaoAutomatica(2026)).thenReturn(true);
         Processo salvo = new Processo();
+        salvo.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        salvo.setPacienteCpf("11144477735");
+        salvo.setPacienteSexo(Sexo.MASCULINO);
         salvo.setId(9L);
         salvo.setNumero("09/2026");
         salvo.setPacienteNome("Maria Silva");
@@ -868,6 +878,9 @@ class ProcessoDetalheControllerTest {
                 .param("numero", "01/2026")
                 .param("pacienteNome", "Maria Silva")
                 .param("pacienteRgct", "RGCT123")
+                .param("pacienteDataNascimento", "1985-03-15")
+                .param("pacienteCpf", "11144477735")
+                .param("pacienteSexo", "MASCULINO")
                 .param("solicitanteEquipe", "Equipe A")
                 .param("solicitanteEmail", "equipe@ex.com")
                 .param("dataSituacaoEspecial", "2026-07-01")
@@ -888,6 +901,9 @@ class ProcessoDetalheControllerTest {
                 .param("numero", "01/2026")
                 .param("pacienteNome", "Maria Silva Atualizada")
                 .param("pacienteRgct", "RGCT123")
+                .param("pacienteDataNascimento", "1985-03-15")
+                .param("pacienteCpf", "11144477735")
+                .param("pacienteSexo", "MASCULINO")
                 .param("solicitanteEquipe", "Equipe A")
                 .param("solicitanteEmail", "equipe@ex.com")
                 .param("dataSituacaoEspecial", "2026-07-01")

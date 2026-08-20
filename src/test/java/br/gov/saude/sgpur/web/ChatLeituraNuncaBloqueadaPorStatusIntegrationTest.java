@@ -11,6 +11,7 @@ import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.MensagemAvaliadorRepository;
 import br.gov.saude.sgpur.repository.MensagemSolicitacaoRepository;
@@ -140,6 +141,9 @@ class ChatLeituraNuncaBloqueadaPorStatusIntegrationTest {
         p.setSequencial(71);
         p.setPacienteNome("Paciente Guarda Chat");
         p.setPacienteRgct("555444333");
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("HCPA");
         p.setSolicitanteEmail("solic-guarda@example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 6, 1));
@@ -182,6 +186,9 @@ class ChatLeituraNuncaBloqueadaPorStatusIntegrationTest {
         s.setUsuarioSolicitante(dono);
         s.setPacienteNome(paciente);
         s.setPacienteRgct(rgct);
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setSolicitanteEquipe("HCPA");
         s.setSolicitanteEmail("solic-guarda@example.com");
         s.setDataSituacaoEspecial(LocalDate.of(2026, 6, 1));

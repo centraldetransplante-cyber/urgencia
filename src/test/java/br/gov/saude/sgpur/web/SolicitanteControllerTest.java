@@ -5,6 +5,7 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.AnexoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -397,6 +398,9 @@ class SolicitanteControllerTest {
         s.setUsuarioSolicitante(dono);
         s.setPacienteNome(paciente);
         s.setPacienteRgct(rgct);
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setDataSituacaoEspecial(LocalDate.now());
         s.setJustificativaClinica("Quadro grave.");
         s.setStatus(StatusSolicitacaoOnline.CONVERTIDA);
@@ -425,6 +429,9 @@ class SolicitanteControllerTest {
         salva.setId(60L);
         salva.setPacienteNome("Ciclano da Silva");
         salva.setPacienteRgct("987654321-12345");
+        salva.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        salva.setPacienteCpf("11144477735");
+        salva.setPacienteSexo(Sexo.MASCULINO);
         when(solicitacaoService.criar(any(SolicitacaoOnline.class), eq(dono), any()))
             .thenReturn(salva);
 
@@ -495,6 +502,9 @@ class SolicitanteControllerTest {
         when(solicitacaoService.buscar(50L)).thenReturn(solicitacaoDoDono);
 
         SolicitacaoOnline outraSolicitacao = new SolicitacaoOnline();
+        outraSolicitacao.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        outraSolicitacao.setPacienteCpf("11144477735");
+        outraSolicitacao.setPacienteSexo(Sexo.MASCULINO);
         outraSolicitacao.setId(51L);
         AnexoSolicitacaoOnline anexoDeOutraSolicitacao = new AnexoSolicitacaoOnline();
         anexoDeOutraSolicitacao.setId(999L);
@@ -652,7 +662,8 @@ class SolicitanteControllerTest {
         salvo.setId(11L);
         java.time.LocalDateTime agora = java.time.LocalDateTime.of(2026, 8, 4, 15, 0);
         salvo.setAtualizadoEm(agora);
-        when(rascunhoService.salvar(eq(1L), eq("So o nome"), isNull(), isNull(), isNull()))
+        when(rascunhoService.salvar(eq(1L), eq("So o nome"), isNull(), isNull(), isNull(),
+            isNull(), isNull(), isNull(), isNull()))
             .thenReturn(salvo);
 
         mvc.perform(post("/solicitante/nova/rascunho")
@@ -662,7 +673,7 @@ class SolicitanteControllerTest {
             .andExpect(jsonPath("$.ok").value(true))
             .andExpect(jsonPath("$.salvoEm").value(agora.toString()));
 
-        verify(rascunhoService).salvar(1L, "So o nome", null, null, null);
+        verify(rascunhoService).salvar(1L, "So o nome", null, null, null, null, null, null, null);
     }
 
     @Test
@@ -689,6 +700,9 @@ class SolicitanteControllerTest {
     void criarAPartirDeUmRascunhoApagaORascunhoAposEnvioComSucesso() throws Exception {
         when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
         SolicitacaoOnline salva = new SolicitacaoOnline();
+        salva.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        salva.setPacienteCpf("11144477735");
+        salva.setPacienteSexo(Sexo.MASCULINO);
         salva.setId(61L);
         salva.setPacienteNome("Rascunho Fulano");
         when(solicitacaoService.criar(any(SolicitacaoOnline.class), eq(dono), any()))

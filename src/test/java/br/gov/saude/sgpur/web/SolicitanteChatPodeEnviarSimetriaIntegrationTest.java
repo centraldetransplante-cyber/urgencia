@@ -5,6 +5,7 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.MensagemSolicitacaoRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -86,6 +87,9 @@ class SolicitanteChatPodeEnviarSimetriaIntegrationTest {
         cancelada.setUsuarioSolicitante(dono);
         cancelada.setPacienteNome("Paciente Cancelado F5");
         cancelada.setPacienteRgct("111111111");
+        cancelada.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        cancelada.setPacienteCpf("11144477735");
+        cancelada.setPacienteSexo(Sexo.MASCULINO);
         cancelada.setSolicitanteEquipe("HCPA");
         cancelada.setSolicitanteEmail("solicitantef5-it@example.com");
         cancelada.setDataSituacaoEspecial(LocalDate.of(2026, 6, 1));
@@ -98,6 +102,9 @@ class SolicitanteChatPodeEnviarSimetriaIntegrationTest {
         processoExcluido.setUsuarioSolicitante(dono);
         processoExcluido.setPacienteNome("Paciente Processo Excluido F5");
         processoExcluido.setPacienteRgct("222222222");
+        processoExcluido.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        processoExcluido.setPacienteCpf("11144477735");
+        processoExcluido.setPacienteSexo(Sexo.MASCULINO);
         processoExcluido.setSolicitanteEquipe("HCPA");
         processoExcluido.setSolicitanteEmail("solicitantef5-it@example.com");
         processoExcluido.setDataSituacaoEspecial(LocalDate.of(2026, 6, 1));
