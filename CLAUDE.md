@@ -6549,3 +6549,91 @@ conflito, 1 e 2 médicos em conflito, equipe ausente/em branco (não chama o
 matcher), sem `medicoIds`, acesso por ADMIN e OPERADOR. Suíte completa:
 **1057 testes**, 0 falhas atribuíveis (JDK 21) — a única falha vista numa
 rodada é a flakiness de timestamp do H2 já documentada, pré-existente.
+
+## Dados adicionais de identificação do paciente: data de nascimento, CPF, sexo, nome da mãe (2026-08-20)
+
+Retomada de uma sessão anterior que ficou pela metade (código de produção
+compilando, suíte de testes quebrada — commit `3e25804`). O trabalho
+concluído nesta sessão foi inteiramente de fechamento: corrigir os
+fixtures/helpers de teste e o E2E para os 3 campos novos obrigatórios
+(`pacienteDataNascimento`, `pacienteCpf`, `pacienteSexo` — `pacienteNomeMae`
+é opcional em todo lugar) que a sessão anterior já tinha adicionado a
+`Processo`/`SolicitacaoOnline`/`RascunhoSolicitacaoOnline`, sem tocar em
+nenhuma regra de negócio nova. Detalhe completo (motivação, onde cada campo
+foi adicionado, decisão de manter a coluna nullable mesmo com Bean
+Validation obrigatória, a regra de imparcialidade — nunca chega ao
+avaliador — e a validação de CPF por módulo-11) em
+`docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md`.
+
+**O que estava quebrado:** 51 classes de teste (a maioria `@SpringBootTest`
+com H2 real) construíam `SolicitacaoOnline`/`Processo` via `new
+SolicitacaoOnline()`/`new Processo()` (direto ou por helper privado tipo
+`criarSolicitacao(...)`) sem preencher os 3 campos agora obrigatórios —
+`repository.save(...)` estourava `ConstraintViolationException` no flush do
+Hibernate (Bean Validation automática via `spring-boot-starter-validation`,
+já presente no projeto). Suíte inicial: **1074 testes, 3 failures, 229
+errors**. `mvn compile`/`mvn test-compile` já passavam limpos — o problema
+era inteiramente de dado de fixture, nunca de compilação.
+
+**Correção:** a maioria dos 51 arquivos tinha exatamente o mesmo padrão (um
+helper privado que constrói o objeto e retorna) — corrigido com um script
+Python que localiza cada `new Processo()`/`new SolicitacaoOnline()`, acha o
+ponto de inserção (logo após `.setPacienteRgct(...)`, quando existe) e
+insere as 3 linhas novas com o mesmo fixture em todo lugar
+(`LocalDate.of(1985, 3, 15)`, `"11144477735"` — CPF válido por módulo-11,
+reaproveitado de `CpfUtilTest` — e `Sexo.MASCULINO`), adicionando os imports
+que faltassem. Um arquivo (`SolicitacaoOnlineServiceTest`, com 7 ocorrências
+espalhadas) tinha ficado de fora da primeira lista e foi corrigido no mesmo
+padrão numa segunda passada. Os poucos casos que o script não cobria
+(assinatura de método alterada, não construção de objeto) foram corrigidos
+à mão:
+
+- `RascunhoSolicitacaoOnlineService.salvar(...)` ganhou 3 parâmetros novos
+  na posição correta (não é overload) — 3 chamadas antigas (com a
+  assinatura de 5 argumentos) em `ExclusaoSolicitanteIntegrationTest` e
+  `RascunhoSolicitacaoOnlineServiceTest` e um stub Mockito em
+  `SolicitanteControllerTest` precisaram ser atualizados para os 9
+  argumentos atuais.
+- `ProcessoDetalheControllerTest`: 3 testes que faziam POST direto para
+  `/processos`/`/processos/{id}/editar` com `MockMvc` (sem passar pelo
+  `@Valid` de verdade só porque o service estava mockado) esperavam
+  redirect (302) mas recebiam 200 (form re-renderizado por erro de
+  validação) — os 3 `param(...)` de POST ganharam os 3 campos novos.
+
+**Nenhuma regra de negócio, endpoint ou entidade foi alterada nesta
+sessão** — só fixtures de teste e 2 chamadas de assinatura já existente.
+`nullable = false` **não** foi adicionado a nenhuma das colunas novas
+(deliberado, ver o relatório).
+
+**E2E:** `PortalSolicitantePage.preencher(...)` passou a preencher também
+`input[name=pacienteDataNascimento]`, `input[name=pacienteCpf]` e
+`select[name=pacienteSexo]` (mesmo fixture usado nos testes de unidade) —
+sem isso, o clique em "Enviar solicitação" nunca navegava (os 3 campos são
+`required` no HTML, e o navegador bloqueia o submit). A assinatura pública
+do método não mudou (nenhum dos 4 call-sites em
+`FluxoCompletoProcessoIT`/`ChatVisualVerificacaoIT`/
+`RedesignVisualSolicitanteIT`/`PortaisVisualCompletoIT` precisou de ajuste).
+`NovoProcessoPage` (form `/processos/novo`) **não precisou de mudança**: o
+`GET /processos/novo?origemSolicitacaoOnlineId=...` já pré-preenche os 4
+campos novos a partir da `SolicitacaoOnline` de origem
+(`ProcessoDetalheController.novo`), então o formulário nunca chega vazio
+nesses campos quando o operador clica em "Cadastrar" — confirmado lendo o
+controller, não presumido. O E2E não foi executado nesta sessão (lento e
+com uma falha pré-existente de SMTP local documentada acima, sem relação
+com esta mudança) — só validado que compila (`mvn test-compile`) e que os
+seletores batem com o HTML atual dos templates.
+
+**Verificação de cobertura (item 5 do pedido):** confirmado por grep que os
+4 campos aparecem em todo lugar onde faz sentido do lado
+operador/solicitante (`processos/detalhe.html`,
+`processos/solicitacoes-online-detalhe.html`, `solicitante/detalhe.html`,
+dossiê exportado, Relatório Final) e em **nenhum** lugar do lado avaliador
+(`avaliador/lista.html`, `avaliador/votar.html`, `SolicitacaoAvaliadorService`,
+`PdfCabecalhoStamper` — zero ocorrências). Ofício de Indeferimento e
+e-mails prontos (`EmailTemplateService`) continuam identificando o paciente
+só pelo nome completo, sem CPF/data de nascimento — mesmo padrão que já
+valia para o RGCT antes desta mudança; não estendido por não ser uma
+correção decorrente desta feature, e sim uma decisão de produto à parte.
+
+**Validação final:** suíte completa, **1074 testes, 0 falhas, 0 erros**
+(JDK 21, `mvn test`, duas rodadas independentes).
