@@ -4,6 +4,7 @@ import br.gov.saude.sgpur.domain.*;
 import br.gov.saude.sgpur.service.AnexoStorageService;
 import br.gov.saude.sgpur.service.AuditoriaService;
 import br.gov.saude.sgpur.service.ConflitoEquipeMatcher;
+import br.gov.saude.sgpur.service.CpfUtil;
 import br.gov.saude.sgpur.service.EmailTemplateService;
 import br.gov.saude.sgpur.service.ExportacaoProcessoService;
 import br.gov.saude.sgpur.service.FluxoProcessoService;
@@ -232,6 +233,10 @@ public class ProcessoDetalheController {
         }
         p.setPacienteNome(s.getPacienteNome());
         p.setPacienteRgct(s.getPacienteRgct());
+        p.setPacienteDataNascimento(s.getPacienteDataNascimento());
+        p.setPacienteCpf(s.getPacienteCpf());
+        p.setPacienteSexo(s.getPacienteSexo());
+        p.setPacienteNomeMae(s.getPacienteNomeMae());
         p.setSolicitanteEquipe(s.getSolicitanteEquipe());
         p.setSolicitanteEmail(s.getSolicitanteEmail());
         p.setDataSituacaoEspecial(s.getDataSituacaoEspecial());
@@ -247,6 +252,7 @@ public class ProcessoDetalheController {
         model.addAttribute("medicos", membroService.listarAtivos());
         model.addAttribute("totalAvaliadores", ProcessoService.AVALIADORES_POR_PROCESSO);
         model.addAttribute("medicoIdsSelecionados", java.util.Set.of());
+        model.addAttribute("opcoesSexo", Sexo.values());
         return "processos/form";
     }
 
@@ -332,11 +338,22 @@ public class ProcessoDetalheController {
             result.reject("medicos", "Selecione exatamente "
                 + ProcessoService.AVALIADORES_POR_PROCESSO + " medicos avaliadores.");
         }
+        // Digito verificador de CPF (as anotacoes @NotBlank/@Size ja cobrem
+        // ausencia/tamanho errado - so a validacao de modulo-11 fica aqui).
+        if (processo.getPacienteCpf() != null && !processo.getPacienteCpf().isBlank()) {
+            String cpfDigits = CpfUtil.normalizar(processo.getPacienteCpf());
+            if (!CpfUtil.valido(cpfDigits)) {
+                result.rejectValue("pacienteCpf", "invalido", "CPF inválido.");
+            } else {
+                processo.setPacienteCpf(cpfDigits);
+            }
+        }
         if (result.hasErrors()) {
             model.addAttribute("numeracaoAutomatica", automatica);
             model.addAttribute("medicos", membroService.listarAtivos());
             model.addAttribute("totalAvaliadores", ProcessoService.AVALIADORES_POR_PROCESSO);
             model.addAttribute("origemSolicitacaoOnlineId", origemSolicitacaoOnlineId);
+            model.addAttribute("opcoesSexo", Sexo.values());
             // Preserva a selecao de medicos no re-render (bug corrigido junto com o
             // endpoint de conflito de equipe, ver docs/RELATORIO-CONFIRMACAO-CONFLITO-
             // EQUIPE-2026-08.md secao 2.1): antes os checkboxes nao tinham th:checked
@@ -404,6 +421,7 @@ public class ProcessoDetalheController {
         // size() delega ao bag e dispara o SELECT de verdade.
         p.getAnexos().size();
         model.addAttribute("processo", p);
+        model.addAttribute("pacienteCpfFormatado", CpfUtil.formatar(p.getPacienteCpf()));
         // Evita notificacao duplicada: esta tela ja tem seu proprio poll de chat
         // (chat-solicitacao.js), entao o poll GLOBAL da navbar (layout.html) fica
         // desligado aqui.
@@ -742,6 +760,7 @@ public class ProcessoDetalheController {
             return "redirect:/processos/" + id;
         }
         model.addAttribute("processo", p);
+        model.addAttribute("opcoesSexo", Sexo.values());
         return "processos/editar";
     }
 
@@ -750,8 +769,19 @@ public class ProcessoDetalheController {
     @PostMapping("/{id}/editar")
     public String atualizar(@PathVariable Long id,
                             @Valid @ModelAttribute("processo") Processo form,
-                            BindingResult result, RedirectAttributes ra) {
+                            BindingResult result, Model model, RedirectAttributes ra) {
+        // Digito verificador de CPF (as anotacoes @NotBlank/@Size ja cobrem
+        // ausencia/tamanho errado - so a validacao de modulo-11 fica aqui).
+        if (form.getPacienteCpf() != null && !form.getPacienteCpf().isBlank()) {
+            String cpfDigits = CpfUtil.normalizar(form.getPacienteCpf());
+            if (!CpfUtil.valido(cpfDigits)) {
+                result.rejectValue("pacienteCpf", "invalido", "CPF inválido.");
+            } else {
+                form.setPacienteCpf(cpfDigits);
+            }
+        }
         if (result.hasErrors()) {
+            model.addAttribute("opcoesSexo", Sexo.values());
             return "processos/editar";
         }
         if (bloqueadoPorEncerrado(processoService.buscar(id), ra)) {

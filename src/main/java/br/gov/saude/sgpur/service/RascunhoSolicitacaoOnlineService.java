@@ -1,6 +1,7 @@
 package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.RascunhoSolicitacaoOnline;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.domain.Usuario;
 import br.gov.saude.sgpur.repository.RascunhoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -45,7 +46,9 @@ public class RascunhoSolicitacaoOnlineService {
      */
     @Transactional
     public RascunhoSolicitacaoOnline salvar(Long usuarioId, String pacienteNome, String pacienteRgct,
-                                            LocalDate dataSituacaoEspecial, String justificativaClinica) {
+                                            LocalDate pacienteDataNascimento, String pacienteCpf, Sexo pacienteSexo,
+                                            String pacienteNomeMae, LocalDate dataSituacaoEspecial,
+                                            String justificativaClinica) {
         RascunhoSolicitacaoOnline r = repository.findByUsuarioSolicitanteId(usuarioId)
             .orElseGet(RascunhoSolicitacaoOnline::new);
         if (r.getId() == null) {
@@ -55,6 +58,10 @@ public class RascunhoSolicitacaoOnlineService {
         }
         r.setPacienteNome(pacienteNome);
         r.setPacienteRgct(pacienteRgct);
+        r.setPacienteDataNascimento(pacienteDataNascimento);
+        r.setPacienteCpf(pacienteCpf);
+        r.setPacienteSexo(pacienteSexo);
+        r.setPacienteNomeMae(pacienteNomeMae);
         r.setDataSituacaoEspecial(dataSituacaoEspecial);
         r.setJustificativaClinica(justificativaClinica);
         r.setAtualizadoEm(LocalDateTime.now());

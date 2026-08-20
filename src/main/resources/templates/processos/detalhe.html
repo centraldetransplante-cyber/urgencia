@@ -287,6 +287,16 @@
                         <dd class="col-sm-8" th:text="${processo.pacienteNome}"></dd>
                         <dt class="col-sm-4">RGCT / SNT</dt>
                         <dd class="col-sm-8" th:text="${processo.pacienteRgct} ?: '-'"></dd>
+                        <dt class="col-sm-4">Data de nascimento</dt>
+                        <dd class="col-sm-8"
+                            th:text="${processo.pacienteDataNascimento != null ? #temporals.format(processo.pacienteDataNascimento, 'dd/MM/yyyy') : '-'}"></dd>
+                        <dt class="col-sm-4">CPF</dt>
+                        <dd class="col-sm-8" th:text="${pacienteCpfFormatado ?: '-'}"></dd>
+                        <dt class="col-sm-4">Sexo</dt>
+                        <dd class="col-sm-8" th:text="${processo.pacienteSexo != null ? processo.pacienteSexo.descricao : '-'}"></dd>
+                        <dt class="col-sm-4" th:if="${processo.pacienteNomeMae != null and !processo.pacienteNomeMae.isBlank()}">Nome da mãe</dt>
+                        <dd class="col-sm-8" th:if="${processo.pacienteNomeMae != null and !processo.pacienteNomeMae.isBlank()}"
+                            th:text="${processo.pacienteNomeMae}"></dd>
                         <dt class="col-sm-4">Equipe solicitante</dt>
                         <dd class="col-sm-8" th:text="${processo.solicitanteEquipe}"></dd>
                         <dt class="col-sm-4">E-mail solicitante</dt>

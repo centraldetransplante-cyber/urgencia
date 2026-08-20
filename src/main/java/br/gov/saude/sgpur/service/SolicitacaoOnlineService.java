@@ -13,6 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -433,6 +434,23 @@ public class SolicitacaoOnlineService {
             throw new IllegalStateException(
                 "Usuario solicitante sem equipe vinculada. Contate o administrador.");
         }
+        if (solicitacao.getPacienteDataNascimento() == null) {
+            throw new IllegalArgumentException("Informe a data de nascimento do paciente.");
+        }
+        if (solicitacao.getPacienteDataNascimento().isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("A data de nascimento do paciente nao pode ser no futuro.");
+        }
+        if (solicitacao.getPacienteSexo() == null) {
+            throw new IllegalArgumentException("Informe o sexo do paciente.");
+        }
+        String cpfDigits = CpfUtil.normalizar(solicitacao.getPacienteCpf());
+        if (cpfDigits.isBlank()) {
+            throw new IllegalArgumentException("Informe o CPF do paciente.");
+        }
+        if (!CpfUtil.valido(cpfDigits)) {
+            throw new IllegalArgumentException("CPF do paciente invalido. Confira os digitos informados.");
+        }
+        solicitacao.setPacienteCpf(cpfDigits);
         solicitacao.setId(null);
         solicitacao.setUsuarioSolicitante(usuarioLogado);
         solicitacao.setSolicitanteEquipe(usuarioLogado.getEquipeSolicitante());

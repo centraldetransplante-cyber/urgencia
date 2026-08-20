@@ -226,6 +226,10 @@ public class ExportacaoProcessoService {
         campo(sb, "Situacao atual", p.getStatus() != null ? p.getStatus().getDescricao() : null);
         campo(sb, "Paciente (receptor)", p.getPacienteNome());
         campo(sb, "Registro RGCT / SNT", p.getPacienteRgct());
+        campo(sb, "Data de nascimento", data(p.getPacienteDataNascimento()));
+        campo(sb, "CPF", p.getPacienteCpf() != null ? CpfUtil.formatar(p.getPacienteCpf()) : null);
+        campo(sb, "Sexo", p.getPacienteSexo() != null ? p.getPacienteSexo().getDescricao() : null);
+        campo(sb, "Nome da mae", p.getPacienteNomeMae());
         sb.append('\n');
 
         linhaTitulo(sb, "2. SOLICITANTE");

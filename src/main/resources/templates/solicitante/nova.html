@@ -144,6 +144,32 @@
                     </div>
                 </div>
             </div>
+            <!-- Identificacao do paciente (2026-08-20): data de nascimento, CPF e
+                 sexo obrigatorios; nome da mae opcional. Ver
+                 docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md. -->
+            <div class="row g-3 mt-0">
+                <div class="col-md-3">
+                    <label class="form-label" th:for="pacienteDataNascimento">Data de nascimento *</label>
+                    <input type="date" th:field="*{pacienteDataNascimento}" class="form-control" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" th:for="pacienteCpf">CPF *</label>
+                    <input type="text" th:field="*{pacienteCpf}" class="form-control" maxlength="14"
+                           inputmode="numeric" placeholder="000.000.000-00" required>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" th:for="pacienteSexo">Sexo *</label>
+                    <select th:field="*{pacienteSexo}" class="form-select" required>
+                        <option value="">Selecione</option>
+                        <option th:each="opcao : ${opcoesSexo}" th:value="${opcao.name()}"
+                                th:text="${opcao.descricao}"></option>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" th:for="pacienteNomeMae">Nome da mãe (opcional)</label>
+                    <input type="text" th:field="*{pacienteNomeMae}" class="form-control" maxlength="200">
+                </div>
+            </div>
         </div>
 
         <div class="secao-rotulo">Por que a urgência se aplica</div>

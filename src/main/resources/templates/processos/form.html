@@ -52,6 +52,31 @@
                     <div class="invalid-feedback d-block" id="pacienteRgctErro" role="alert" th:errors="*{pacienteRgct}"></div>
                 </div>
             </div>
+            <div class="row g-3 mt-0">
+                <div class="col-md-3">
+                    <label class="form-label" th:for="pacienteDataNascimento">Data de nascimento *</label>
+                    <input type="date" th:field="*{pacienteDataNascimento}" class="form-control" required th:classappend="${#fields.hasErrors('pacienteDataNascimento')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteDataNascimento')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteDataNascimento')} ? 'pacienteDataNascimentoErro' : null">
+                    <div class="invalid-feedback d-block" id="pacienteDataNascimentoErro" role="alert" th:errors="*{pacienteDataNascimento}"></div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" th:for="pacienteCpf">CPF *</label>
+                    <input type="text" th:field="*{pacienteCpf}" class="form-control" maxlength="14" inputmode="numeric" placeholder="000.000.000-00" required th:classappend="${#fields.hasErrors('pacienteCpf')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteCpf')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteCpf')} ? 'pacienteCpfErro' : null">
+                    <div class="invalid-feedback d-block" id="pacienteCpfErro" role="alert" th:errors="*{pacienteCpf}"></div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" th:for="pacienteSexo">Sexo *</label>
+                    <select th:field="*{pacienteSexo}" class="form-select" required th:classappend="${#fields.hasErrors('pacienteSexo')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteSexo')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteSexo')} ? 'pacienteSexoErro' : null">
+                        <option value="">Selecione</option>
+                        <option th:each="opcao : ${opcoesSexo}" th:value="${opcao.name()}" th:text="${opcao.descricao}"></option>
+                    </select>
+                    <div class="invalid-feedback d-block" id="pacienteSexoErro" role="alert" th:errors="*{pacienteSexo}"></div>
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" th:for="pacienteNomeMae">Nome da mãe (opcional)</label>
+                    <input type="text" th:field="*{pacienteNomeMae}" class="form-control" maxlength="200" th:classappend="${#fields.hasErrors('pacienteNomeMae')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteNomeMae')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteNomeMae')} ? 'pacienteNomeMaeErro' : null">
+                    <div class="invalid-feedback d-block" id="pacienteNomeMaeErro" role="alert" th:errors="*{pacienteNomeMae}"></div>
+                </div>
+            </div>
 
             <hr>
             <h2 class="h6 text-muted">Equipe solicitante</h2>

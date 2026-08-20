@@ -366,6 +366,10 @@ public class ProcessoService {
         }
         p.setPacienteNome(form.getPacienteNome());
         p.setPacienteRgct(form.getPacienteRgct());
+        p.setPacienteDataNascimento(form.getPacienteDataNascimento());
+        p.setPacienteCpf(form.getPacienteCpf());
+        p.setPacienteSexo(form.getPacienteSexo());
+        p.setPacienteNomeMae(form.getPacienteNomeMae());
         p.setSolicitanteEquipe(form.getSolicitanteEquipe());
         p.setSolicitanteEmail(form.getSolicitanteEmail());
         p.setDataSituacaoEspecial(form.getDataSituacaoEspecial());

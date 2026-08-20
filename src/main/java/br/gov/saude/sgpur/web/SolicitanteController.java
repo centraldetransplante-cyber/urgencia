@@ -6,6 +6,7 @@ import br.gov.saude.sgpur.domain.MensagemSolicitacao;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.ResultadoParecer;
 import br.gov.saude.sgpur.domain.RascunhoSolicitacaoOnline;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.TipoAnexo;
@@ -15,6 +16,7 @@ import br.gov.saude.sgpur.repository.UsuarioRepository;
 import br.gov.saude.sgpur.service.AnexoSolicitacaoOnlineStorageService;
 import br.gov.saude.sgpur.service.AnexoStorageService;
 import br.gov.saude.sgpur.service.AuditoriaService;
+import br.gov.saude.sgpur.service.CpfUtil;
 import br.gov.saude.sgpur.service.Iniciais;
 import br.gov.saude.sgpur.service.MensagemSolicitacaoService;
 import br.gov.saude.sgpur.service.RascunhoSolicitacaoOnlineService;
@@ -138,7 +140,8 @@ public class SolicitanteController {
     @InitBinder("solicitacao")
     public void initBinderSolicitacao(WebDataBinder binder) {
         binder.setAllowedFields(
-            "pacienteNome", "pacienteRgct", "dataSituacaoEspecial", "justificativaClinica");
+            "pacienteNome", "pacienteRgct", "pacienteDataNascimento", "pacienteCpf", "pacienteSexo",
+            "pacienteNomeMae", "dataSituacaoEspecial", "justificativaClinica");
     }
 
     @GetMapping
@@ -195,6 +198,10 @@ public class SolicitanteController {
             RascunhoSolicitacaoOnline r = rascunho.get();
             s.setPacienteNome(r.getPacienteNome());
             s.setPacienteRgct(r.getPacienteRgct());
+            s.setPacienteDataNascimento(r.getPacienteDataNascimento());
+            s.setPacienteCpf(r.getPacienteCpf());
+            s.setPacienteSexo(r.getPacienteSexo());
+            s.setPacienteNomeMae(r.getPacienteNomeMae());
             s.setDataSituacaoEspecial(
                 r.getDataSituacaoEspecial() != null ? r.getDataSituacaoEspecial() : LocalDate.now());
             s.setJustificativaClinica(r.getJustificativaClinica());
@@ -205,6 +212,7 @@ public class SolicitanteController {
         model.addAttribute("solicitacao", s);
         model.addAttribute("equipe", usuario.getEquipeSolicitante());
         model.addAttribute("email", usuario.getEmail());
+        model.addAttribute("opcoesSexo", Sexo.values());
         return "solicitante/nova";
     }
 
@@ -222,13 +230,19 @@ public class SolicitanteController {
     public Map<String, Object> salvarRascunho(
             @RequestParam(value = "pacienteNome", required = false) String pacienteNome,
             @RequestParam(value = "pacienteRgct", required = false) String pacienteRgct,
+            @RequestParam(value = "pacienteDataNascimento", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate pacienteDataNascimento,
+            @RequestParam(value = "pacienteCpf", required = false) String pacienteCpf,
+            @RequestParam(value = "pacienteSexo", required = false) Sexo pacienteSexo,
+            @RequestParam(value = "pacienteNomeMae", required = false) String pacienteNomeMae,
             @RequestParam(value = "dataSituacaoEspecial", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataSituacaoEspecial,
             @RequestParam(value = "justificativaClinica", required = false) String justificativaClinica,
             Principal principal) {
         Usuario usuario = resolverUsuario(principal);
         RascunhoSolicitacaoOnline r = rascunhoService.salvar(
-            usuario.getId(), pacienteNome, pacienteRgct, dataSituacaoEspecial, justificativaClinica);
+            usuario.getId(), pacienteNome, pacienteRgct, pacienteDataNascimento, pacienteCpf, pacienteSexo,
+            pacienteNomeMae, dataSituacaoEspecial, justificativaClinica);
         return Map.of("ok", true, "salvoEm", r.getAtualizadoEm().toString());
     }
 
@@ -288,6 +302,7 @@ public class SolicitanteController {
         Usuario usuario = resolverUsuario(principal);
         SolicitacaoOnline s = conferirPosse(solicitacaoService.buscarParaDetalhe(id), usuario);
         model.addAttribute("solicitacao", s);
+        model.addAttribute("pacienteCpfFormatado", CpfUtil.formatar(s.getPacienteCpf()));
         // Fonte unica da regra: o botao aparece exatamente quando cancelar()
         // aceitaria (ver SolicitacaoOnlineService.podeCancelar).
         model.addAttribute("podeCancelar", solicitacaoService.podeCancelar(s));

@@ -229,6 +229,13 @@ public class RelatorioService {
         pdfBuilder.linha(t1, "Número do processo", p.getNumero());
         pdfBuilder.linha(t1, "Paciente (receptor)", p.getPacienteNome());
         pdfBuilder.linha(t1, "RGCT / SNT", PdfRelatorioBuilder.nvl(p.getPacienteRgct()));
+        pdfBuilder.linha(t1, "Data de nascimento",
+            p.getPacienteDataNascimento() != null ? p.getPacienteDataNascimento().format(DATA) : "-");
+        pdfBuilder.linha(t1, "CPF",
+            p.getPacienteCpf() != null ? CpfUtil.formatar(p.getPacienteCpf()) : "-");
+        pdfBuilder.linha(t1, "Sexo",
+            p.getPacienteSexo() != null ? p.getPacienteSexo().getDescricao() : "-");
+        pdfBuilder.linha(t1, "Nome da mãe", PdfRelatorioBuilder.nvl(p.getPacienteNomeMae()));
         pdfBuilder.linha(t1, "Equipe solicitante", p.getSolicitanteEquipe());
         pdfBuilder.linha(t1, "E-mail do solicitante", PdfRelatorioBuilder.nvl(p.getSolicitanteEmail()));
         pdfBuilder.linha(t1, "Data de solicitação da urgência renal",
