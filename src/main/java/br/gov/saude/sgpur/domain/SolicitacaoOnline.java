@@ -58,6 +58,7 @@ public class SolicitacaoOnline {
      * ao avaliador (so ate o Relatorio Final/dossie, do lado do operador).
      */
     @NotNull
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     @Column(name = "paciente_data_nascimento")
     private LocalDate pacienteDataNascimento;
 

@@ -225,6 +225,31 @@ class ProcessoDetalheControllerTest {
         verify(processoService).proximoNumero(ano);
     }
 
+    /**
+     * Bug real de producao (2026-08-21, relatado pelo dono do produto):
+     * {@code Processo.pacienteDataNascimento} nao tinha {@code @DateTimeFormat
+     * (iso = DateTimeFormat.ISO.DATE)} (ao contrario de {@code
+     * dataSituacaoEspecial}, logo abaixo dela na mesma entidade) - o Thymeleaf
+     * renderizava o valor pre-preenchido no formato padrao da JVM (ex.
+     * "11/2/80"), nao ISO ("1980-11-02"). Um {@code <input type="date">} do
+     * navegador IGNORA silenciosamente um {@code value} em formato que nao
+     * reconhece e mostra o campo VAZIO, sem erro nenhum - exatamente o
+     * sintoma relatado ("data de nascimento nao migrou quando o operador
+     * converteu em processo"). Nenhum teste pegaria isso olhando so status/
+     * model attributes; e preciso inspecionar o atributo {@code value} do
+     * HTML renderizado de fato.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void novoRenderizaDataDeNascimentoNoFormatoIsoQueOInputDateReconhece() throws Exception {
+        when(solicitacaoOnlineService.buscar(5L)).thenReturn(solicitacaoValida(5L));
+
+        mvc.perform(get("/processos/novo").param("origemSolicitacaoOnlineId", "5"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "id=\"pacienteDataNascimento\" name=\"pacienteDataNascimento\" value=\"1985-03-15\"")));
+    }
+
     // ----- salvar -----
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder formValido() {

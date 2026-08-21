@@ -6738,3 +6738,57 @@ enviando de fato em cópia), `ProcessoControllerEmailTest` (o caminho manual
 
 **Validação:** suíte completa, **1082 testes, 0 falhas, 0 erros** (JDK 21,
 `mvn clean test`, build limpo sem edição concorrente).
+
+## Bug real corrigido: data de nascimento "sumia" ao converter solicitação em processo (2026-08-21)
+
+**Relatado pelo dono do produto em produção**, com URL exata
+(`/processos/novo?origemSolicitacaoOnlineId=19`): a data de nascimento do
+paciente não migrava da `SolicitacaoOnline` para o `Processo` ao converter.
+
+**Causa raiz confirmada por reprodução real** (não presumida — consulta
+somente-leitura ao Postgres de produção mostrou a `SolicitacaoOnline` #19
+com `paciente_data_nascimento = 1980-11-02` corretamente gravada, e uma
+reprodução completa contra o app local com H2 confirmou o defeito):
+`Processo.pacienteDataNascimento` e `SolicitacaoOnline.pacienteDataNascimento`
+(campos adicionados em 2026-08-20, ver seção "Dados adicionais de
+identificação do paciente" acima) **não tinham** `@DateTimeFormat(iso =
+DateTimeFormat.ISO.DATE)` — diferente de `dataSituacaoEspecial`, poucas
+linhas abaixo na mesma entidade, que sempre teve a anotação. Sem ela, o
+Thymeleaf (`th:field`) renderiza o `LocalDate` no formato **padrão da
+JVM/locale** (`"11/2/80"`) em vez de ISO (`"1980-11-02"`) no atributo
+`value` do `<input type="date">`. Um `<input type="date">` do navegador
+**ignora silenciosamente** um `value` em formato que não reconhece e
+mostra o campo **vazio**, sem nenhum erro — exatamente o sintoma relatado.
+O dado no banco estava íntegro o tempo todo; o problema era só de
+apresentação no formulário de conversão (`/processos/novo`, também afetava
+`/processos/editar`).
+
+**Correção:** `@DateTimeFormat(iso = DateTimeFormat.ISO.DATE)` adicionado
+ao campo em `Processo.java` e `SolicitacaoOnline.java` (mesmo padrão já
+usado em `dataSituacaoEspecial`). `RascunhoSolicitacaoOnline
+.pacienteDataNascimento` **não precisou da mesma correção** — essa
+entidade nunca é alvo direto de `th:field` (o `GET /solicitante/nova` copia
+os valores do rascunho para um objeto `SolicitacaoOnline` antes de
+renderizar o formulário), então a ausência da anotação ali nunca teve
+efeito de renderização.
+
+**Varredura preventiva feita**: todos os outros campos `LocalDate` do
+projeto (`ControleUrgencia.dataVencimento` já tinha a anotação;
+`dataUltimaRenovacao`, `Processo.dataEmissaoOficio`/`dataEnvioOficio`/
+`dataEnvioSnt`, `Parecer.dataEnvio`/`dataResposta`,
+`HistoricoParecer.dataEnvio`/`dataResposta` — nenhum é `th:field`-bound em
+template nenhum, todos calculados/gravados só pelo servidor) confirmados
+sem o mesmo risco.
+
+**Validado ponta a ponta contra o app real** (não só leitura de código):
+criado um solicitante, enviada uma solicitação com data de nascimento,
+confirmado por HTML bruto que o `value` do input virava `"11/2/80"` (bug
+reproduzido), aplicada a correção, confirmado `value="1980-11-02"`, e o
+fluxo completo de conversão (`POST /processos`) executado até o fim,
+relendo o `Processo` resultante com a data correta.
+
+**Teste de regressão:** `ProcessoDetalheControllerTest
+.novoRenderizaDataDeNascimentoNoFormatoIsoQueOInputDateReconhece` — confere
+o atributo `value` do HTML renderizado de fato (nenhum teste de status/model
+attribute pegaria essa classe de bug). Suíte completa: **1083 testes, 0
+falhas** (JDK 21, `mvn clean test`).
