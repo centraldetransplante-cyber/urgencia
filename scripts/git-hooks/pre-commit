@@ -1,0 +1,27 @@
+#!/bin/sh
+# Pre-commit: compila o projeto (mvn compile) antes de permitir o commit.
+# So roda se houver .java staged (commits so-doc/so-CSS ficam instantaneos,
+# sem pular o hook nem esperar o Maven a toa).
+#
+# Escopo deliberado: SO compilacao, nao a suite completa de testes (mvn
+# test) - a suite ja passou de 1000 testes e leva minutos, pesado demais
+# pra rodar em todo commit; o gate real de regressao continua sendo o CI
+# (GitHub Actions) depois do push. Decisao do usuario, 2026-08-21.
+#
+# Instalar (nao roda sozinho - .git/hooks/ nao e versionado pelo git):
+#   cp scripts/git-hooks/pre-commit .git/hooks/pre-commit
+#   chmod +x .git/hooks/pre-commit
+#
+# Pular pontualmente (ex.: commit so de docs que o grep abaixo nao pegou):
+#   git commit --no-verify
+
+if git diff --cached --name-only --diff-filter=ACM | grep -q '\.java$'; then
+    echo "pre-commit: compilando (mvn -o compile)..."
+    if ! mvn -q -o compile; then
+        echo ""
+        echo "pre-commit: FALHOU a compilacao. Commit bloqueado."
+        echo "Corrija o erro acima, ou use 'git commit --no-verify' se for intencional."
+        exit 1
+    fi
+fi
+exit 0

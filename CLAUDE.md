@@ -13,7 +13,10 @@ Excel da equipe de Urgência Renal da Secretaria de Saúde.
 > vez de anexar uma seção nova "## <coisa> (2026-MM-DD)" no fim do arquivo —
 > é assim que ele volta a inchar. Detalhe pontual de uma investigação/bug
 > específico vai pro histórico ou pra um `docs/RELATORIO-*.md` próprio, não
-> aqui.
+> aqui. **Precisa do "porquê" de uma decisão antiga, não só o "o quê"?**
+> Consulte `docs/INDEX.md` (catálogo de todo `docs/*.md` com resumo de 1
+> linha) e `grep` o arquivo/relatório certo — não precisa carregar tudo de
+> novo pra achar contexto histórico.
 
 ## Stack
 Java 21 · Spring Boot 3.5.16 (web, data-jpa, thymeleaf, security, validation) ·

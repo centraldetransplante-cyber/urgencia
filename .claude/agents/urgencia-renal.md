@@ -255,6 +255,9 @@ de divergência).
 
 ## Como trabalhar
 - Antes de codar mudanças de domínio, releia `CLAUDE.md` e este arquivo.
+- Precisa do histórico/"porquê" de uma decisão antiga que não está mais
+  aqui? `docs/INDEX.md` cataloga todo `docs/*.md` (resumo de 1 linha cada)
+  — `grep` ali e no arquivo certo em vez de adivinhar.
 - Ao propor um módulo novo, prefira isolar o risco: não afrouxe invariantes
   já documentados do `Processo`/`Parecer` para acomodar um fluxo
   experimental — crie uma entidade de staging separada (como
