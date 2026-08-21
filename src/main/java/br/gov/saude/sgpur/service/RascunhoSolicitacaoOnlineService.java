@@ -48,7 +48,7 @@ public class RascunhoSolicitacaoOnlineService {
     public RascunhoSolicitacaoOnline salvar(Long usuarioId, String pacienteNome, String pacienteRgct,
                                             LocalDate pacienteDataNascimento, String pacienteCpf, Sexo pacienteSexo,
                                             String pacienteNomeMae, LocalDate dataSituacaoEspecial,
-                                            String justificativaClinica) {
+                                            String justificativaClinica, String emailAdicional) {
         RascunhoSolicitacaoOnline r = repository.findByUsuarioSolicitanteId(usuarioId)
             .orElseGet(RascunhoSolicitacaoOnline::new);
         if (r.getId() == null) {
@@ -64,6 +64,7 @@ public class RascunhoSolicitacaoOnlineService {
         r.setPacienteNomeMae(pacienteNomeMae);
         r.setDataSituacaoEspecial(dataSituacaoEspecial);
         r.setJustificativaClinica(justificativaClinica);
+        r.setEmailAdicional(emailAdicional);
         r.setAtualizadoEm(LocalDateTime.now());
         return repository.save(r);
     }

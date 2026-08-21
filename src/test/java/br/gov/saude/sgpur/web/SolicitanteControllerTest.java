@@ -552,7 +552,59 @@ class SolicitanteControllerTest {
                 .with(csrf()))
             .andExpect(status().isOk())
             .andExpect(view().name("solicitante/nova"))
-            .andExpect(model().attributeExists("erro"));
+            .andExpect(model().attributeExists("erro"))
+            // "sem equipe vinculada" nao pertence a nenhum campo especifico do
+            // formulario - campoComErro fica null e o template cai no alerta
+            // generico do topo (ver SolicitanteController.campoDoErro).
+            .andExpect(model().attribute("campoComErro", org.hamcrest.Matchers.nullValue()))
+            // Regressao (2026-08): sem isso o <select> de Sexo reexibido ficava
+            // so com a opcao "Selecione", sem NENHUM valor disponivel - o GET
+            // populava opcoesSexo, mas o catch do POST nao.
+            .andExpect(model().attributeExists("opcoesSexo"));
+    }
+
+    /**
+     * Mensagem de validacao MAPEADA a um campo (SolicitanteController
+     * .campoDoErro) - o formulario reexibido destaca o campo certo
+     * (is-invalid + invalid-feedback), em vez de so um alerta generico
+     * longe do campo problematico.
+     */
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void criarComCpfInvalidoDestacaOCampoPacienteCpfNoFormulario() throws Exception {
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.criar(any(SolicitacaoOnline.class), eq(dono), any()))
+            .thenThrow(new IllegalArgumentException("CPF do paciente invalido. Confira os digitos informados."));
+
+        mvc.perform(multipart("/solicitante/nova")
+                .param("pacienteNome", "Ciclano da Silva")
+                .param("pacienteCpf", "000.000.000-00")
+                .param("dataSituacaoEspecial", LocalDate.now().toString())
+                .param("justificativaClinica", "Quadro clinico grave.")
+                .with(csrf()))
+            .andExpect(status().isOk())
+            .andExpect(view().name("solicitante/nova"))
+            .andExpect(model().attribute("campoComErro", "pacienteCpf"))
+            .andExpect(model().attributeExists("opcoesSexo"));
+    }
+
+    /** Mesmo mapeamento, para o campo novo de e-mail adicional. */
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void criarComEmailAdicionalInvalidoDestacaOCampoEmailAdicionalNoFormulario() throws Exception {
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.criar(any(SolicitacaoOnline.class), eq(dono), any()))
+            .thenThrow(new IllegalArgumentException("E-mail adicional invalido. Confira o endereco informado."));
+
+        mvc.perform(multipart("/solicitante/nova")
+                .param("pacienteNome", "Ciclano da Silva")
+                .param("emailAdicional", "nao-e-um-email")
+                .param("dataSituacaoEspecial", LocalDate.now().toString())
+                .param("justificativaClinica", "Quadro clinico grave.")
+                .with(csrf()))
+            .andExpect(status().isOk())
+            .andExpect(view().name("solicitante/nova"))
+            .andExpect(model().attribute("campoComErro", "emailAdicional"));
     }
 
     @Test
@@ -663,7 +715,7 @@ class SolicitanteControllerTest {
         java.time.LocalDateTime agora = java.time.LocalDateTime.of(2026, 8, 4, 15, 0);
         salvo.setAtualizadoEm(agora);
         when(rascunhoService.salvar(eq(1L), eq("So o nome"), isNull(), isNull(), isNull(),
-            isNull(), isNull(), isNull(), isNull()))
+            isNull(), isNull(), isNull(), isNull(), isNull()))
             .thenReturn(salvo);
 
         mvc.perform(post("/solicitante/nova/rascunho")
@@ -673,7 +725,7 @@ class SolicitanteControllerTest {
             .andExpect(jsonPath("$.ok").value(true))
             .andExpect(jsonPath("$.salvoEm").value(agora.toString()));
 
-        verify(rascunhoService).salvar(1L, "So o nome", null, null, null, null, null, null, null);
+        verify(rascunhoService).salvar(1L, "So o nome", null, null, null, null, null, null, null, null);
     }
 
     @Test

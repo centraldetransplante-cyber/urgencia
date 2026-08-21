@@ -122,6 +122,63 @@ class SolicitacaoOnlineServiceTest {
             .hasMessageContaining("sem equipe vinculada");
     }
 
+    /**
+     * E-mail adicional (2026-08-21): campo opcional, so para este pedido -
+     * ver javadoc de SolicitacaoOnline.emailAdicional. Preenchido e valido,
+     * e salvo (trim aplicado); nunca substitui solicitanteEmail (que continua
+     * vindo do usuario logado, ja coberto pelo teste acima).
+     */
+    @Test
+    void criarComEmailAdicionalValidoSalvaOValorAparado() {
+        when(repository.save(any(SolicitacaoOnline.class))).thenAnswer(inv -> inv.getArgument(0));
+        Usuario usuario = usuarioSolicitante(1L);
+        SolicitacaoOnline pedido = solicitacaoPedido();
+        pedido.setEmailAdicional("  outro-contato@equipe.com.br  ");
+
+        SolicitacaoOnline salva = service.criar(pedido, usuario, null);
+
+        assertThat(salva.getEmailAdicional()).isEqualTo("outro-contato@equipe.com.br");
+        assertThat(salva.getSolicitanteEmail()).isEqualTo("hcpa@example.com");
+    }
+
+    /**
+     * Campo vazio no formulario ("" submetido pelo navegador) vira null no
+     * banco, nunca uma string em branco - o resto do sistema (CC nos
+     * e-mails, exibicao condicional nos templates) testa null/isBlank.
+     */
+    @Test
+    void criarComEmailAdicionalEmBrancoNormalizaParaNull() {
+        when(repository.save(any(SolicitacaoOnline.class))).thenAnswer(inv -> inv.getArgument(0));
+        Usuario usuario = usuarioSolicitante(1L);
+        SolicitacaoOnline pedido = solicitacaoPedido();
+        pedido.setEmailAdicional("   ");
+
+        SolicitacaoOnline salva = service.criar(pedido, usuario, null);
+
+        assertThat(salva.getEmailAdicional()).isNull();
+    }
+
+    /**
+     * Sem @Valid neste @ModelAttribute (ver SolicitanteController), a
+     * validacao de formato precisa acontecer explicitamente em criar() -
+     * senao um valor invalido so seria pego pela validacao automatica do
+     * Hibernate no save(), que lanca ConstraintViolationException sem
+     * @ExceptionHandler dedicado (500 cru), em vez do redirect gracioso que
+     * o catch (IllegalArgumentException) do controller ja devolve.
+     */
+    @Test
+    void criarComEmailAdicionalInvalidoLancaExcecaoAntesDeSalvar() {
+        Usuario usuario = usuarioSolicitante(1L);
+        SolicitacaoOnline pedido = solicitacaoPedido();
+        pedido.setEmailAdicional("nao-e-um-email");
+
+        assertThatThrownBy(() -> service.criar(pedido, usuario, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("E-mail adicional invalido");
+
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(any());
+    }
+
     @Test
     void cancelarPorOutroUsuarioLancaExcecao() {
         SolicitacaoOnline s = solicitacaoPedido();

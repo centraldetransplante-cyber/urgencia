@@ -86,6 +86,33 @@ public class SolicitacaoOnline {
     @Column(name = "solicitante_email", length = 150)
     private String solicitanteEmail;
 
+    /**
+     * E-mail ADICIONAL e OPCIONAL (2026-08-21), informado pelo proprio
+     * solicitante no formulario de nova solicitacao, so para ESTE pedido -
+     * nao substitui {@link #solicitanteEmail} (que vem sempre do
+     * {@code Usuario} logado, nunca do formulario - ver
+     * {@code SolicitacaoOnlineService.criar}) nem o e-mail de login da conta.
+     * Um segundo destinatario (colega, chefia, e-mail pessoal) que passa a
+     * receber COPIA (CC) dos avisos automaticos sobre este processo/pedido
+     * especifico - ver {@code EmailTemplateService}/{@code ProcessoService
+     * .finalizarResposta} e o levantamento completo em
+     * docs/RELATORIO-EMAIL-ADICIONAL-SOLICITANTE-2026-08.md sobre quais
+     * pontos de envio usam esse CC e quais foram deliberadamente deixados de
+     * fora (avisos ao TIME interno - avaliador/operador - nunca usam este
+     * campo).
+     *
+     * <p>Sem {@code @NotBlank}/{@code @NotNull} de proposito (campo
+     * opcional de verdade - {@code @Email} sozinho e null-safe, so valida
+     * formato quando preenchido) e {@code nullable} na coluna - nao precisa
+     * de backfill manual em producao (mesmo padrao ja documentado no
+     * CLAUDE.md para outras colunas nullable adicionadas recentemente, ex.
+     * {@code Processo.ultimoLembreteSntEm}).</p>
+     */
+    @Email
+    @Size(max = 150, message = "E-mail adicional muito longo (maximo 150 caracteres).")
+    @Column(name = "email_adicional", length = 150)
+    private String emailAdicional;
+
     @NotNull
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     @Column(name = "data_situacao_especial", nullable = false)
@@ -221,6 +248,14 @@ public class SolicitacaoOnline {
 
     public void setSolicitanteEmail(String solicitanteEmail) {
         this.solicitanteEmail = solicitanteEmail;
+    }
+
+    public String getEmailAdicional() {
+        return emailAdicional;
+    }
+
+    public void setEmailAdicional(String emailAdicional) {
+        this.emailAdicional = emailAdicional;
     }
 
     public LocalDate getDataSituacaoEspecial() {

@@ -217,6 +217,9 @@
                 <dt class="col-sm-4">Enviada em</dt>
                 <dd class="col-sm-8"
                     th:text="${#temporals.format(solicitacao.dataEnvio, 'dd/MM/yyyy HH:mm')}"></dd>
+                <dt class="col-sm-4" th:if="${solicitacao.emailAdicional != null and !solicitacao.emailAdicional.isBlank()}">E-mail adicional (cópia)</dt>
+                <dd class="col-sm-8" th:if="${solicitacao.emailAdicional != null and !solicitacao.emailAdicional.isBlank()}"
+                    th:text="${solicitacao.emailAdicional}"></dd>
                 <dt class="col-sm-4">Justificativa clínica</dt>
                 <dd class="col-sm-8 text-pre-wrap" th:text="${solicitacao.justificativaClinica}"></dd>
             </dl>

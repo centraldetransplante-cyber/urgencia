@@ -73,6 +73,17 @@ public class RascunhoSolicitacaoOnline {
     @Column(name = "data_situacao_especial")
     private LocalDate dataSituacaoEspecial;
 
+    /**
+     * Espelha {@link SolicitacaoOnline#getEmailAdicional()} (2026-08-21) - o
+     * rascunho tambem guarda o e-mail adicional opcional que o solicitante ja
+     * tiver digitado, mesmo tratamento dos demais campos desta classe (sem
+     * {@code @NotBlank}, so {@code @Size} por seguranca de tamanho de
+     * coluna).
+     */
+    @Size(max = 150, message = "E-mail adicional muito longo (maximo 150 caracteres).")
+    @Column(name = "email_adicional", length = 150)
+    private String emailAdicional;
+
     // Nota: a entidade "de verdade" (SolicitacaoOnline.justificativaClinica)
     // tambem nao tem @Size hoje - so @NotBlank, sem limite de tamanho. Sem um
     // valor real para espelhar, usa-se aqui um teto generoso (4000
@@ -163,6 +174,14 @@ public class RascunhoSolicitacaoOnline {
 
     public void setDataSituacaoEspecial(LocalDate dataSituacaoEspecial) {
         this.dataSituacaoEspecial = dataSituacaoEspecial;
+    }
+
+    public String getEmailAdicional() {
+        return emailAdicional;
+    }
+
+    public void setEmailAdicional(String emailAdicional) {
+        this.emailAdicional = emailAdicional;
     }
 
     public String getJustificativaClinica() {

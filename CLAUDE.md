@@ -6657,3 +6657,84 @@ correção decorrente desta feature, e sim uma decisão de produto à parte.
 
 **Validação final:** suíte completa, **1074 testes, 0 falhas, 0 erros**
 (JDK 21, `mvn test`, duas rodadas independentes).
+
+## E-mail adicional (CC) do solicitante por processo — 2026-08-21
+
+Retomada de uma sessão anterior que tinha ficado pela metade: código de
+produção pronto e compilando, mas os testes existentes quebrados (a
+assinatura de `RascunhoSolicitacaoOnlineService.salvar` ganhou um parâmetro
+novo e 4 arquivos de teste ainda chamavam com a assinatura antiga; dois
+mocks de `EmailSenderService.enviarComAnexo` em `ProcessoServiceTest`
+estavam presos na assinatura sem CC) — e sem nenhuma cobertura de teste
+própria da feature. Detalhe completo em
+`docs/RELATORIO-EMAIL-ADICIONAL-SOLICITANTE-2026-08.md`.
+
+**A feature em si:** `SolicitacaoOnline.emailAdicional`/
+`Processo.emailAdicional`/`RascunhoSolicitacaoOnline.emailAdicional` (todos
+`nullable`, sem backfill) — um segundo e-mail opcional, informado pelo
+solicitante no envio (ou editável depois pelo operador em
+`processos/form.html`/`editar.html`), que recebe **cópia (CC)**, nunca
+substituição, dos avisos automáticos sobre aquele processo específico:
+resposta final Deferido/Indeferido (`ProcessoService.finalizarResposta`) e o
+e-mail pronto equivalente disparado manualmente pelo operador
+(`ProcessoDecisaoController.prepararEmailPronto`, templates
+`"deferido"`/`"indeferido"`/`"solicita-info"`). **Nunca** usado nos e-mails
+dirigidos ao time interno (convite/lembrete a avaliador, cancelamento,
+aviso de informação complementar disponível no Portal) — esses não vão ao
+solicitante. Fonte única do cálculo do CC: `ProcessoService.ccEmailAdicional
+(Processo)` (`null` quando vazio, array de 1 posição quando preenchido).
+Validação de formato feita explicitamente em `SolicitacaoOnlineService.criar`
+(regex permissivo, `IllegalArgumentException`) **antes** de qualquer
+`save()` — sem isso, sem `@Valid` no `@ModelAttribute` do controller, um
+valor inválido só seria pego pela validação automática do Hibernate no
+save (`ConstraintViolationException`, sem `@ExceptionHandler` dedicado, 500
+cru) em vez do redirect gracioso que os demais erros de `criar()` já dão.
+
+**Dois bugs reais corrigidos de graça, achados ao revisar o caminho de erro
+de `SolicitanteController.criar`:**
+1. O alerta de erro em `solicitante/nova.html` tinha `th:if="${erro}"` mas
+   o **texto era fixo** ("Reanexe os documentos clínicos"), nunca
+   `th:text="${erro}"` — o solicitante nunca via a mensagem real da
+   validação (ex. "CPF do paciente inválido"). Corrigido com dois alertas
+   distintos (o erro real, quando não mapeado a um campo específico do
+   formulário; o aviso de reanexar documentos, sempre que há erro) e
+   `SolicitanteController.campoDoErro(mensagem)` — mapa fixo que destaca
+   visualmente (`is-invalid`/`invalid-feedback`) o campo certo
+   (`pacienteDataNascimento`/`pacienteSexo`/`pacienteCpf`/`emailAdicional`/
+   `documentos`), com scroll automático até ele
+   (`solicitante-nova.js`).
+2. O `catch` de `criar()` não repassava `opcoesSexo` ao model ao reexibir o
+   formulário com erro — o `<select>` de Sexo ficava só com "Selecione",
+   sem nenhuma opção disponível (só o `GET` populava esse atributo).
+
+**Achado de metodologia nesta sessão (não é bug do código, é um risco de
+processo):** `mvn -q -o test-compile`, sem `clean`, **não recompilou** um
+arquivo de teste cuja única mudança de dependência foi a assinatura de um
+método em OUTRA classe (a própria classe de teste não tinha sido tocada) —
+o compilador incremental do Maven só compara timestamp do `.java` contra o
+`.class` já existente, sem análise de dependência transitiva confiável
+nesse cenário. Isso mascarou 7 erros de compilação reais como testes
+passando (bytecode desatualizado, `NoSuchMethodError` só apareceria em
+runtime). **Lição:** depois de mudar a assinatura de um método usado por
+testes, rodar `mvn clean test-compile` (ou `clean test`) pelo menos uma vez
+antes de confiar num `test-compile` "limpo" — não é a primeira vez que este
+projeto documenta uma armadilha de build incremental (ver também "erro de
+metodologia" da Fase 5 da sessão de 2026-08-03/04, sobre exit code mascarado
+por `echo` no fim de uma cadeia `;`). Também confirmado (e evitado) nesta
+sessão: editar arquivos de teste enquanto um `mvn test` está rodando em
+segundo plano corrompe `target/test-classes` e produz uma cascata de falhas
+de `ApplicationContext` em testes completamente não relacionados — mesmo
+pitfall já documentado na seção "Sessão de consolidação de 2026-08-08"
+acima; a correção foi sempre esperar o build terminar antes de editar de
+novo, nunca em paralelo.
+
+**Testes novos** (a feature não tinha nenhum antes desta sessão):
+`SolicitacaoOnlineServiceTest` (e-mail válido salvo com `trim`, em branco
+normaliza para `null`, inválido lança antes de qualquer `save`),
+`ProcessoServiceTest` (`ccEmailAdicional` unitário + `finalizarResposta`
+enviando de fato em cópia), `ProcessoControllerEmailTest` (o caminho manual
+"Enviar agora" também aplica o CC), `SolicitanteControllerTest`
+(`campoComErro` mapeado certo + `opcoesSexo` presente no reenvio com erro).
+
+**Validação:** suíte completa, **1082 testes, 0 falhas, 0 erros** (JDK 21,
+`mvn clean test`, build limpo sem edição concorrente).

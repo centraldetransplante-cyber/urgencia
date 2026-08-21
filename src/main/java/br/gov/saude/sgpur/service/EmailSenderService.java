@@ -137,6 +137,20 @@ public class EmailSenderService {
      */
     public boolean enviarComAnexo(String to, String subject, String body,
                                   File anexo, String nomeAnexo) {
+        return enviarComAnexo(to, null, subject, body, anexo, nomeAnexo);
+    }
+
+    /**
+     * Mesmo comportamento de {@link #enviarComAnexo(String, String, String, File, String)},
+     * com copia (CC) opcional - usado desde 2026-08-21 para o e-mail
+     * adicional que o solicitante pode informar por processo (ver
+     * {@code Processo.emailAdicional}), sem duplicar toda a logica de
+     * resolucao de anexo/modo teste que ja existia na versao sem CC.
+     *
+     * @param cc destinatarios em copia, ou {@code null}/vazio para nenhum
+     */
+    public boolean enviarComAnexo(String to, String[] cc, String subject, String body,
+                                  File anexo, String nomeAnexo) {
         if (from == null || from.isBlank()) {
             log.warn("EmailSender: remetente (from) nao configurado.");
             return false;
@@ -146,12 +160,15 @@ public class EmailSenderService {
                 anexo.getAbsolutePath());
             return false;
         }
-        DestinoResolvido destino = resolverDestino(new String[]{to}, null, subject);
+        DestinoResolvido destino = resolverDestino(new String[]{to}, cc, subject);
         try {
             MimeMessage msg = mailSender.createMimeMessage();
             MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
             helper.setFrom(from);
             helper.setTo(destino.to());
+            if (destino.cc() != null && destino.cc().length > 0) {
+                helper.setCc(destino.cc());
+            }
             helper.setSubject(destino.subject());
             helper.setText(body, false);
             if (anexo != null) {

@@ -76,6 +76,11 @@
                     <input type="email" th:field="*{solicitanteEmail}" class="form-control" required th:classappend="${#fields.hasErrors('solicitanteEmail')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('solicitanteEmail')} ? 'true' : null,aria-describedby=${#fields.hasErrors('solicitanteEmail')} ? 'solicitanteEmailErro' : null">
                     <div class="invalid-feedback d-block" id="solicitanteEmailErro" role="alert" th:errors="*{solicitanteEmail}"></div>
                 </div>
+                <div class="col-md-12">
+                    <label class="form-label" th:for="emailAdicional">E-mail adicional para receber atualizações (opcional)</label>
+                    <input type="email" th:field="*{emailAdicional}" class="form-control" maxlength="150" th:classappend="${#fields.hasErrors('emailAdicional')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('emailAdicional')} ? 'true' : null,aria-describedby=${#fields.hasErrors('emailAdicional')} ? 'emailAdicionalErro' : null">
+                    <div class="invalid-feedback d-block" id="emailAdicionalErro" role="alert" th:errors="*{emailAdicional}"></div>
+                </div>
             </div>
 
             <hr>

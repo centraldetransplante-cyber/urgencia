@@ -20,11 +20,29 @@
 
     <div class="container my-4 container-narrow">
 
-    <!--/* Retorno com erro de validacao: o texto digitado volta preenchido (o
-           @ModelAttribute preserva), mas os ARQUIVOS nao - nenhum navegador
-           repopula <input type="file">, por seguranca. Sem este aviso o
-           solicitante reenviava achando que os documentos clinicos continuavam
-           anexados, e a solicitacao chegava sem eles. */-->
+    <!--/* Bloco de erro (2026-08-21, bug real corrigido - a mensagem de erro
+           verdadeira era DESCARTADA: este alerta tinha th:if="${erro}" mas o
+           TEXTO era fixo, sempre "Reanexe os documentos clinicos", nunca
+           th:text="${erro}" - o solicitante nunca sabia POR QUE o envio
+           falhou (ex.: "CPF do paciente invalido", "Informe o sexo do
+           paciente"). Agora sao DOIS avisos distintos, cada um com seu papel:
+
+           1) O alerta de erro REAL (alert-danger, proeminente) - so aparece
+              quando a mensagem NAO foi mapeada a um campo especifico
+              (campoComErro nulo, ver SolicitanteController.campoDoErro).
+              Quando E mapeada, o erro aparece junto ao proprio campo (is-
+              invalid + invalid-feedback, mais abaixo) e a pagina rola ate
+              ele ao carregar (solicitante-nova.js) - mais visivel do que um
+              alerta generico no topo de um formulario com 4 secoes, que era
+              a queixa original ("as vezes ficam muito longe").
+           2) O aviso sobre reanexar documentos (alert-warning, informativo,
+              sempre real e continua valendo) - mantido como estava, so
+              separado do erro em si. */-->
+    <div th:if="${erro != null and campoComErro == null}" class="alert alert-danger d-flex align-items-start gap-2 py-2"
+         role="alert" id="alertaErroGeral">
+        <i class="bi bi-exclamation-octagon-fill mt-1"></i>
+        <div th:text="${erro}">Mensagem de erro.</div>
+    </div>
     <div th:if="${erro}" class="alert alert-warning d-flex align-items-start gap-2 py-2" role="alert">
         <i class="bi bi-paperclip mt-1"></i>
         <div>
@@ -114,6 +132,25 @@
                 <i class="bi bi-lock-fill" aria-hidden="true"></i>
                 Preenchidos automaticamente a partir do seu cadastro (não editáveis aqui).
             </p>
+            <!-- E-mail adicional OPCIONAL (2026-08-21), so para este pedido -
+                 nao substitui o e-mail da conta acima (esse continua sendo o
+                 principal/obrigatorio). Quando preenchido, recebe copia (CC)
+                 dos avisos automaticos sobre ESTE processo (resposta final
+                 Deferido/Indeferido, pedido de informacao complementar) - ver
+                 docs/RELATORIO-EMAIL-ADICIONAL-SOLICITANTE-2026-08.md. -->
+            <div class="mt-3 pt-2 border-top">
+                <label class="form-label mb-1" th:for="emailAdicional">
+                    E-mail adicional para receber atualizações (opcional)
+                </label>
+                <input type="email" th:field="*{emailAdicional}" class="form-control" maxlength="150"
+                       placeholder="ex.: outro-contato@equipe.com.br"
+                       th:classappend="${campoComErro == 'emailAdicional'} ? 'is-invalid' : ''">
+                <div class="invalid-feedback" th:if="${campoComErro == 'emailAdicional'}" th:text="${erro}">Erro.</div>
+                <div class="form-text text-muted text-detail-xs">
+                    Além do e-mail da sua conta acima, um segundo endereço (opcional) que também
+                    receberá cópia dos avisos sobre este pedido específico — como a decisão final.
+                </div>
+            </div>
         </div>
 
         <!-- Grade RECONSTRUÍDA (2026-08-21, bug real relatado em producao):
@@ -157,20 +194,26 @@
                      docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md. -->
                 <div class="col-md-3">
                     <label class="form-label" th:for="pacienteDataNascimento">Data de nascimento *</label>
-                    <input type="date" th:field="*{pacienteDataNascimento}" class="form-control" required>
+                    <input type="date" th:field="*{pacienteDataNascimento}" class="form-control" required
+                           th:classappend="${campoComErro == 'pacienteDataNascimento'} ? 'is-invalid' : ''">
+                    <div class="invalid-feedback" th:if="${campoComErro == 'pacienteDataNascimento'}" th:text="${erro}">Erro.</div>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label" th:for="pacienteCpf">CPF *</label>
                     <input type="text" th:field="*{pacienteCpf}" class="form-control" maxlength="14"
-                           inputmode="numeric" placeholder="000.000.000-00" required>
+                           inputmode="numeric" placeholder="000.000.000-00" required
+                           th:classappend="${campoComErro == 'pacienteCpf'} ? 'is-invalid' : ''">
+                    <div class="invalid-feedback" th:if="${campoComErro == 'pacienteCpf'}" th:text="${erro}">Erro.</div>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label" th:for="pacienteSexo">Sexo *</label>
-                    <select th:field="*{pacienteSexo}" class="form-select" required>
+                    <select th:field="*{pacienteSexo}" class="form-select" required
+                            th:classappend="${campoComErro == 'pacienteSexo'} ? 'is-invalid' : ''">
                         <option value="">Selecione</option>
                         <option th:each="opcao : ${opcoesSexo}" th:value="${opcao.name()}"
                                 th:text="${opcao.descricao}"></option>
                     </select>
+                    <div class="invalid-feedback" th:if="${campoComErro == 'pacienteSexo'}" th:text="${erro}">Erro.</div>
                 </div>
             </div>
             <div class="row g-3 mt-0">
@@ -227,7 +270,9 @@
                 <i class="bi bi-cloud-arrow-up-fill zona-upload-icone" aria-hidden="true"></i>
                 <label class="form-label fw-semibold" th:for="documentos">Documentos clínicos</label>
                 <input type="file" id="documentos" name="documentos" class="form-control" multiple
-                       accept=".pdf,.png,.jpg,.jpeg,.eml,.msg">
+                       accept=".pdf,.png,.jpg,.jpeg,.eml,.msg"
+                       th:classappend="${campoComErro == 'documentos'} ? 'is-invalid' : ''">
+                <div class="invalid-feedback" th:if="${campoComErro == 'documentos'}" th:text="${erro}">Erro.</div>
                 <div class="form-text text-muted">
                     PDF, imagem (PNG/JPG) ou cópia do e-mail (EML/MSG). Pode selecionar vários arquivos
                     (até 25 MB cada).

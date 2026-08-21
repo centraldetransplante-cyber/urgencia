@@ -239,6 +239,7 @@ public class ProcessoDetalheController {
         p.setPacienteNomeMae(s.getPacienteNomeMae());
         p.setSolicitanteEquipe(s.getSolicitanteEquipe());
         p.setSolicitanteEmail(s.getSolicitanteEmail());
+        p.setEmailAdicional(s.getEmailAdicional());
         p.setDataSituacaoEspecial(s.getDataSituacaoEspecial());
         p.setObservacoes(s.getJustificativaClinica());
         model.addAttribute("origemSolicitacaoOnlineId", origemSolicitacaoOnlineId);

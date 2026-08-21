@@ -91,6 +91,15 @@
                     <input type="email" th:field="*{solicitanteEmail}" class="form-control" required maxlength="150" th:classappend="${#fields.hasErrors('solicitanteEmail')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('solicitanteEmail')} ? 'true' : null,aria-describedby=${#fields.hasErrors('solicitanteEmail')} ? 'solicitanteEmailErro' : null">
                     <div class="invalid-feedback d-block" id="solicitanteEmailErro" role="alert" th:errors="*{solicitanteEmail}"></div>
                 </div>
+                <!-- Opcional, informado pelo proprio solicitante no Portal (2026-08-21) -
+                     pre-preenchido na conversao (ProcessoDetalheController.novo), o
+                     operador so confere/ajusta aqui. Recebe CC dos e-mails de
+                     atualizacao deste processo quando preenchido. -->
+                <div class="col-md-12">
+                    <label class="form-label" th:for="emailAdicional">E-mail adicional para receber atualizações (opcional)</label>
+                    <input type="email" th:field="*{emailAdicional}" class="form-control" maxlength="150" th:classappend="${#fields.hasErrors('emailAdicional')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('emailAdicional')} ? 'true' : null,aria-describedby=${#fields.hasErrors('emailAdicional')} ? 'emailAdicionalErro' : null">
+                    <div class="invalid-feedback d-block" id="emailAdicionalErro" role="alert" th:errors="*{emailAdicional}"></div>
+                </div>
             </div>
 
             <hr>

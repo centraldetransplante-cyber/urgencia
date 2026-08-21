@@ -102,6 +102,26 @@ public class Processo {
     @Column(name = "solicitante_email", length = 150)
     private String solicitanteEmail;
 
+    /**
+     * E-mail ADICIONAL e OPCIONAL do solicitante, so para ESTE processo
+     * (2026-08-21) - espelha {@link SolicitacaoOnline#getEmailAdicional()}
+     * na conversao ({@code ProcessoDetalheController.novo}/{@code salvar}),
+     * mesmo padrao ja usado para {@code pacienteCpf}/{@code pacienteSexo}
+     * etc. Quando preenchido, os avisos automaticos por e-mail SOBRE ESTE
+     * PROCESSO (resposta final Deferido/Indeferido, pedido de informacao
+     * complementar) enviam uma COPIA (CC) para este endereco, alem do
+     * {@link #solicitanteEmail} principal - nunca em substituicao a ele. Ver
+     * o levantamento completo de quais envios usam esse CC em
+     * docs/RELATORIO-EMAIL-ADICIONAL-SOLICITANTE-2026-08.md.
+     *
+     * <p>Nullable de proposito (campo opcional de verdade), sem backfill
+     * necessario em producao - mesmo padrao ja documentado no CLAUDE.md.</p>
+     */
+    @Email
+    @Size(max = 150, message = "E-mail adicional muito longo (maximo 150 caracteres).")
+    @Column(name = "email_adicional", length = 150)
+    private String emailAdicional;
+
     @NotNull
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     @Column(name = "data_situacao_especial", nullable = false)
@@ -365,6 +385,14 @@ public class Processo {
 
     public void setSolicitanteEmail(String solicitanteEmail) {
         this.solicitanteEmail = solicitanteEmail;
+    }
+
+    public String getEmailAdicional() {
+        return emailAdicional;
+    }
+
+    public void setEmailAdicional(String emailAdicional) {
+        this.emailAdicional = emailAdicional;
     }
 
     public LocalDate getDataSituacaoEspecial() {
