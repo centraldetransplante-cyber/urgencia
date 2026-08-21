@@ -34,6 +34,31 @@ spring:
   # explicitamente (fetch join / Hibernate.initialize), o que e o correto.
   jpa:
     open-in-view: false
+    properties:
+      hibernate:
+        # Por padrao (apply_to_ddl=true), o Hibernate infere NOT NULL na
+        # coluna gerada a partir SOZINHO de @NotNull/@NotBlank (Bean
+        # Validation) - MESMO quando o @Column da entidade nao tem
+        # nullable=false explicito. Isso e uma armadilha real da mesma
+        # familia ja documentada em "ddl-auto: update nao faz backfill em
+        # coluna nova": incidente de 2026-08-21, ao adicionar
+        # pacienteCpf/pacienteDataNascimento/pacienteSexo (obrigatorios no
+        # FORMULARIO, mas deliberadamente sem nullable=false na coluna para
+        # nao quebrar linhas ja existentes) - o Hibernate gerou
+        # "ALTER TABLE ... ADD COLUMN ... NOT NULL" mesmo assim, o Postgres
+        # recusou contra linhas ja populadas, e a coluna simplesmente NUNCA
+        # foi criada em producao (nao um caso de coluna criada com dado
+        # ruim - a coluna nem existia). Desligado aqui: a obrigatoriedade
+        # do FORMULARIO continua vindo do @NotNull/@NotBlank normalmente
+        # (validado em Java, no service/controller); só a inferencia
+        # AUTOMATICA de NOT NULL na DDL fica desligada. Toda coluna que
+        # este projeto quer mesmo NOT NULL no banco (ex.: pacienteNome, já
+        # existente) já declara isso explicitamente via
+        # @Column(nullable = false) - essas continuam intactas, esta
+        # propriedade so afeta a inferencia IMPLICITA a partir da anotacao
+        # de validacao.
+        validator:
+          apply_to_ddl: false
   web:
     resources:
       # Cache longo so e seguro porque a chain abaixo poe o hash do conteudo no
