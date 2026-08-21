@@ -266,10 +266,16 @@ isto é feito no console:
 2. **Resources → Attached VNICs** → clicar na VNIC principal.
 3. **IPv4 Addresses** → no IP público, **Edit** → tipo **Reserved**
    (*"Reserve this public IP"*) → confirmar.
-4. Conferir que o endereço continua `163.176.163.213`. Se mudar, atualize o
-   DuckDNS e rode `sudo certbot renew --force-renewal`.
+4. Conferir que o endereço continua `163.176.30.222` (mudou de
+   `163.176.163.213` — ver incidente "IP público efêmero mudou" no
+   CLAUDE.md, corrigido em 2026-08-21). Se mudar de novo, atualize o
+   DuckDNS, `sudo certbot renew --force-renewal` e as 3 ocorrências do IP em
+   `.github/workflows/deploy.yml`.
 
-Um IP reservado continua dentro do Always Free.
+Um IP reservado continua dentro do Always Free. **Esta pendência é a causa
+raiz confirmada do incidente de 2026-08-21** — sem reservar o IP, o mesmo
+problema volta a acontecer na próxima vez que a instância for
+parada/reiniciada pelo console Oracle.
 
 > **Pendência conhecida (prazo: durante 2026):** o `rclone` desta VM usa o
 > `client_id` compartilhado do projeto rclone, que **será desativado**. O

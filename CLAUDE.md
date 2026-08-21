@@ -51,11 +51,13 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   `.\e2e.ps1 -Headless`. Screenshot automático em `target/e2e-screenshots/`
   se o teste falhar. (Equivalente cru, sem o script: `mvn verify -Pe2e`, mas
   exige JDK 21 e Maven já no PATH da sessão — prefira `.\e2e.ps1`.)
-- **Deploy em produção:** VM Oracle Cloud (`ubuntu@163.176.163.213`, domínio
+- **Deploy em produção:** VM Oracle Cloud (`ubuntu@163.176.30.222` — IP
+  **mudou** em 2026-08, ver incidente "IP público efêmero mudou" na seção
+  Deploy abaixo; não é mais `163.176.163.213`, domínio
   `urgenciarenal.duckdns.org`), systemd `sgpur.service`, jar em
   `/opt/sgpur/sgpur.jar` (usuário `sgpur`). Chave SSH local:
   `~/.ssh/saur_oracle`. Deploy manual: `scp target/saur-0.0.1-SNAPSHOT.jar
-  ubuntu@163.176.163.213:/tmp/sgpur-novo.jar`, depois na VM `sudo cp
+  ubuntu@163.176.30.222:/tmp/sgpur-novo.jar`, depois na VM `sudo cp
   /opt/sgpur/sgpur.jar /opt/sgpur/sgpur.jar.bak-<timestamp>` (backup), `sudo mv
   /tmp/sgpur-novo.jar /opt/sgpur/sgpur.jar && sudo chown sgpur:sgpur
   /opt/sgpur/sgpur.jar && sudo systemctl restart sgpur`. Validar com
@@ -846,6 +848,24 @@ Artefatos em `deploy/` (systemd, nginx, env de exemplo, guia). Host alvo:
 **Oracle Always Free (São Paulo)** — ver `deploy/README-deploy.md`.
 A **Vercel não hospeda o app Java** (histórico: só servia como front pro
 Neon, que nem é mais o banco de produção — ver status abaixo).
+
+**RESOLVIDO em 2026-08-21: IP público efêmero mudou, deploy automático
+quebrado desde antes de 2026-08-17.** A pendência "Reservar o IP público"
+(mais abaixo neste arquivo) nunca foi resolvida pelo usuário, e o IP mudou
+de fato: `163.176.163.213` → **`163.176.30.222`**. Sintoma: `Deploy`
+falhava em segundos, sempre na etapa `ssh-keyscan -H 163.176.163.213`
+(timeout — nada respondendo naquele endereço), enquanto a aplicação em si
+continuava **saudável** (`https://urgenciarenal.duckdns.org/login` sempre
+200) — o DuckDNS já apontava pro IP novo (atualizado por algum mecanismo na
+própria VM, não investigado), só o workflow e a documentação é que
+continuavam com o endereço antigo hardcoded. Confirmado por SSH direto no
+IP novo: VM de pé (`uptime` 29 dias, sem reboot), `sgpur.service active`,
+app respondendo 200 em `localhost:3000`. **Correção:** as 3 ocorrências em
+`.github/workflows/deploy.yml` (`ssh-keyscan`, `scp`, `ssh`) e as menções
+operacionais em `CLAUDE.md`/`deploy/README-deploy.md` foram atualizadas
+para `163.176.30.222`. **A pendência "Reservar o IP público" continua
+valendo** — sem reservar, o mesmo incidente se repete na próxima vez que a
+instância for parada/reiniciada pelo console Oracle.
 
 **RESOLVIDO em 2026-08-03 (mesmo dia).** O secret foi recadastrado e o
 pipeline voltou a funcionar: run `30844431318` concluiu `✓ deploy in 2m8s`
