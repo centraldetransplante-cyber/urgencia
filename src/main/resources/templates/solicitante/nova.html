@@ -116,19 +116,35 @@
             </p>
         </div>
 
-        <!-- 2) Nome/RGCT/Data numa única linha em telas ≥768px (era Nome+RGCT
-             numa linha e Data sozinha na linha de baixo, desperdiçando 8/12
-             da largura) - economiza uma linha inteira de altura sem tirar
-             nenhum campo do lugar. Em telas menores os 3 continuam
-             empilhando normalmente (comportamento inalterado). -->
+        <!-- Grade RECONSTRUÍDA (2026-08-21, bug real relatado em producao):
+             a leva de campos de identificacao (2026-08-20 -
+             pacienteDataNascimento/pacienteCpf/pacienteSexo/pacienteNomeMae)
+             foi enfiada numa SEGUNDA <div class="row"> de 4 colunas iguais
+             (col-md-3 x4) logo abaixo de uma PRIMEIRA row com colunas
+             desiguais (col-md-6 + col-md-3 + col-md-3) - as bordas das
+             colunas de uma row nunca alinhavam com as da outra, dando a
+             aparencia "torta"/desalinhada relatada pelo usuario ao abrir a
+             tela em producao. Reconstruido com uma grade coerente:
+               1) Nome do paciente sozinho, largura total (e o campo mais
+                  longo, nao faz sentido dividir linha com mais nada);
+               2) os 4 campos de IDENTIFICACAO (RGCT, Data de nascimento,
+                  CPF, Sexo) juntos numa unica row de 4 colunas iguais -
+                  cabem exatamente, sem sobra, e agrupam visualmente o que e
+                  semanticamente do mesmo tipo (documento/identidade);
+               3) Data da urgencia (dado CLINICO, nao de identidade) e Nome
+                  da mae (opcional) numa terceira row, deliberadamente
+                  separada da anterior.
+             Nenhum name/id/required de campo mudou - so a disposicao. -->
         <div class="secao-rotulo">Dados do paciente</div>
         <h2 class="secao-titulo">Paciente</h2>
         <div class="superficie-apoio p-3 mb-3">
             <div class="row g-3">
-                <div class="col-md-6">
+                <div class="col-12">
                     <label class="form-label" th:for="pacienteNome">Nome do paciente *</label>
                     <input type="text" th:field="*{pacienteNome}" class="form-control" maxlength="200" required>
                 </div>
+            </div>
+            <div class="row g-3 mt-0">
                 <div class="col-md-3">
                     <label class="form-label" th:for="pacienteRgct">RGCT / SNT *</label>
                     <input type="text" th:field="*{pacienteRgct}" class="form-control" placeholder="123456789-12345" required maxlength="60">
@@ -136,18 +152,9 @@
                         Registro no Sistema Nacional de Transplantes (SNT).
                     </div>
                 </div>
-                <div class="col-md-3">
-                    <label class="form-label" th:for="dataSituacaoEspecial">Data da urgência *</label>
-                    <input type="date" th:field="*{dataSituacaoEspecial}" class="form-control" required>
-                    <div class="form-text text-muted text-detail-xs">
-                        Quando a equipe constatou a urgência (não pode ser futura).
-                    </div>
-                </div>
-            </div>
-            <!-- Identificacao do paciente (2026-08-20): data de nascimento, CPF e
-                 sexo obrigatorios; nome da mae opcional. Ver
-                 docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md. -->
-            <div class="row g-3 mt-0">
+                <!-- Identificacao do paciente (2026-08-20): data de nascimento, CPF e
+                     sexo obrigatorios; nome da mae opcional. Ver
+                     docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md. -->
                 <div class="col-md-3">
                     <label class="form-label" th:for="pacienteDataNascimento">Data de nascimento *</label>
                     <input type="date" th:field="*{pacienteDataNascimento}" class="form-control" required>
@@ -165,7 +172,16 @@
                                 th:text="${opcao.descricao}"></option>
                     </select>
                 </div>
-                <div class="col-md-3">
+            </div>
+            <div class="row g-3 mt-0">
+                <div class="col-md-4">
+                    <label class="form-label" th:for="dataSituacaoEspecial">Data da urgência *</label>
+                    <input type="date" th:field="*{dataSituacaoEspecial}" class="form-control" required>
+                    <div class="form-text text-muted text-detail-xs">
+                        Quando a equipe constatou a urgência (não pode ser futura).
+                    </div>
+                </div>
+                <div class="col-md-8">
                     <label class="form-label" th:for="pacienteNomeMae">Nome da mãe (opcional)</label>
                     <input type="text" th:field="*{pacienteNomeMae}" class="form-control" maxlength="200">
                 </div>
