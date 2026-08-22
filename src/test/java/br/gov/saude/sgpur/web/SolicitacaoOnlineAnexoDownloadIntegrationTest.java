@@ -5,6 +5,7 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.AnexoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -96,6 +97,9 @@ class SolicitacaoOnlineAnexoDownloadIntegrationTest {
         s.setUsuarioSolicitante(dono);
         s.setPacienteNome("Paciente de Teste " + dono.getUsername());
         s.setPacienteRgct("123456789-12345");
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setDataSituacaoEspecial(LocalDate.now().minusDays(1));
         s.setJustificativaClinica("Justificativa clinica.");
         s.setSolicitanteEquipe(dono.getEquipeSolicitante());

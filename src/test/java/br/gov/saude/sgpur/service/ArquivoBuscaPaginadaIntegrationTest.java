@@ -2,6 +2,7 @@ package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.StatusProcesso;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -58,6 +59,9 @@ class ArquivoBuscaPaginadaIntegrationTest {
         p.setSequencial(seq);
         p.setPacienteNome(paciente);
         p.setPacienteRgct("2000" + seq);
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe(equipe);
         p.setSolicitanteEmail("equipe@example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 4, 1));

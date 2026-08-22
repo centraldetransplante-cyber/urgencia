@@ -9,6 +9,7 @@ import br.gov.saude.sgpur.domain.ResultadoParecer;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.TipoAnexo;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.AnexoRepository;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
@@ -112,6 +113,9 @@ class AvaliadorPortalSemTransacaoIntegrationTest {
         pendente.setSequencial(50);
         pendente.setPacienteNome("Fulano de Tal Pendente");
         pendente.setPacienteRgct("111111111");
+        pendente.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        pendente.setPacienteCpf("11144477735");
+        pendente.setPacienteSexo(Sexo.MASCULINO);
         pendente.setSolicitanteEquipe("HCPA");
         pendente.setSolicitanteEmail("equipe@hcpa.example.com");
         pendente.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));
@@ -142,6 +146,9 @@ class AvaliadorPortalSemTransacaoIntegrationTest {
         decidido.setSequencial(40);
         decidido.setPacienteNome("Ciclano da Silva Decidido");
         decidido.setPacienteRgct("222222222");
+        decidido.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        decidido.setPacienteCpf("11144477735");
+        decidido.setPacienteSexo(Sexo.MASCULINO);
         decidido.setSolicitanteEquipe("HCPA");
         decidido.setSolicitanteEmail("equipe@hcpa.example.com");
         decidido.setDataSituacaoEspecial(LocalDate.of(2026, 4, 1));

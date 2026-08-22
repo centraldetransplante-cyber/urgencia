@@ -5,6 +5,7 @@ import br.gov.saude.sgpur.domain.Parecer;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.ResultadoParecer;
 import br.gov.saude.sgpur.domain.StatusProcesso;
+import br.gov.saude.sgpur.domain.Sexo;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.BeforeEach;
@@ -98,6 +99,9 @@ class ArquivoLazyPareceresIntegrationTest {
             p.setAno(ano);
             p.setPacienteNome("Paciente Arquivo Deferido");
             p.setPacienteRgct("RGCT-ARQUIVO-" + sequencial);
+            p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+            p.setPacienteCpf("11144477735");
+            p.setPacienteSexo(Sexo.MASCULINO);
             p.setSolicitanteEquipe("Equipe Teste");
             p.setSolicitanteEmail("equipe@example.com");
             p.setDataSituacaoEspecial(LocalDate.now());

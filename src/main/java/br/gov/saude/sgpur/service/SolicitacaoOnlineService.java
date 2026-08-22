@@ -13,6 +13,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -29,6 +30,15 @@ import java.util.List;
 public class SolicitacaoOnlineService {
 
     private static final Logger log = LoggerFactory.getLogger(SolicitacaoOnlineService.class);
+
+    /**
+     * Formato permissivo de e-mail (mesmo espirito do {@code @Email} do
+     * Jakarta Validation, mas validado ANTES do save - ver o comentario em
+     * {@link #criar}). So confere a forma "algo@algo.algo", sem tentar cobrir
+     * toda a RFC 5322 - suficiente para pegar erro de digitacao obvio.
+     */
+    private static final java.util.regex.Pattern EMAIL_REGEX =
+        java.util.regex.Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$");
 
     private final SolicitacaoOnlineRepository repository;
     private final AnexoSolicitacaoOnlineStorageService anexoStorage;
@@ -432,6 +442,48 @@ public class SolicitacaoOnlineService {
         if (usuarioLogado.getEquipeSolicitante() == null || usuarioLogado.getEquipeSolicitante().isBlank()) {
             throw new IllegalStateException(
                 "Usuario solicitante sem equipe vinculada. Contate o administrador.");
+        }
+        if (solicitacao.getPacienteDataNascimento() == null) {
+            throw new IllegalArgumentException("Informe a data de nascimento do paciente.");
+        }
+        if (solicitacao.getPacienteDataNascimento().isAfter(LocalDate.now())) {
+            throw new IllegalArgumentException("A data de nascimento do paciente nao pode ser no futuro.");
+        }
+        if (solicitacao.getPacienteSexo() == null) {
+            throw new IllegalArgumentException("Informe o sexo do paciente.");
+        }
+        String cpfDigits = CpfUtil.normalizar(solicitacao.getPacienteCpf());
+        if (cpfDigits.isBlank()) {
+            throw new IllegalArgumentException("Informe o CPF do paciente.");
+        }
+        if (!CpfUtil.valido(cpfDigits)) {
+            throw new IllegalArgumentException("CPF do paciente invalido. Confira os digitos informados.");
+        }
+        solicitacao.setPacienteCpf(cpfDigits);
+        // Campo opcional (2026-08-21): "" (input vazio submetido pelo navegador) vira
+        // null, nunca uma string em branco gravada no banco - mesmo tratamento que
+        // qualquer outro campo opcional de texto do sistema (ex. pacienteNomeMae, que
+        // ja chega assim do @ModelAttribute sem normalizacao extra por ser TEXT puro;
+        // aqui normalizamos porque "" IS blank mas nao e null, e o restante do sistema
+        // (CC nos e-mails, exibicao condicional nos templates) testa null/isBlank).
+        //
+        // Validado EXPLICITAMENTE aqui (IllegalArgumentException, nao so pela anotacao
+        // @Email da entidade) de proposito: sem @Valid neste @ModelAttribute, um valor
+        // invalido so seria pego pela validacao automatica do Hibernate no momento do
+        // repository.save() (jakarta.persistence.validation.mode=AUTO), que lanca
+        // ConstraintViolationException - excecao SEM @ExceptionHandler dedicado neste
+        // projeto (cai no handler generico de 500), diferente do redirect gracioso com
+        // o campo destacado que o catch (IllegalArgumentException) do controller ja
+        // devolve para os demais campos. Checando aqui, o erro segue o MESMO caminho
+        // amigavel dos outros.
+        if (solicitacao.getEmailAdicional() != null && !solicitacao.getEmailAdicional().isBlank()) {
+            String emailAdicional = solicitacao.getEmailAdicional().trim();
+            if (!EMAIL_REGEX.matcher(emailAdicional).matches()) {
+                throw new IllegalArgumentException("E-mail adicional invalido. Confira o endereco informado.");
+            }
+            solicitacao.setEmailAdicional(emailAdicional);
+        } else {
+            solicitacao.setEmailAdicional(null);
         }
         solicitacao.setId(null);
         solicitacao.setUsuarioSolicitante(usuarioLogado);

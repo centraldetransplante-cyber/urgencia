@@ -1023,8 +1023,10 @@ class ProcessoServiceTest {
                 .thenReturn(comprovante);
         when(anexoStorageService.resolverArquivo(comprovante))
                 .thenReturn(java.nio.file.Paths.get("test.pdf"));
+        // cc = null porque o processo nao tem emailAdicional preenchido neste fixture
+        // (ProcessoService.ccEmailAdicional devolve null quando o campo esta vazio).
         when(emailSenderService.enviarComAnexo(
-                "solicitante@test.com", "Assunto: Processo DEFERIDO", "Corpo do email de deferimento",
+                "solicitante@test.com", null, "Assunto: Processo DEFERIDO", "Corpo do email de deferimento",
                 java.nio.file.Paths.get("test.pdf").toFile(), "comprovante.pdf"))
                 .thenReturn(true);
 
@@ -1032,6 +1034,72 @@ class ProcessoServiceTest {
 
         assertThat(resultado.isEmailEnviadoSolicitante()).isTrue();
         assertThat(resultado.getMensagemResposta()).isEqualTo("Corpo do email de deferimento");
+    }
+
+    /**
+     * E-mail adicional (2026-08-21): quando o processo tem
+     * Processo.emailAdicional preenchido, finalizarResposta manda esse
+     * endereco em COPIA (CC) - nunca em substituicao ao solicitanteEmail
+     * principal. Ver ProcessoService.ccEmailAdicional.
+     */
+    @Test
+    void finalizarRespostaComEmailAdicionalEnviaEmCopia() {
+        Processo p = comPareceres(ResultadoParecer.FAVORAVEL,
+                ResultadoParecer.FAVORAVEL, ResultadoParecer.NAO_FAVORAVEL);
+        p.setId(304L);
+        p.setStatus(StatusProcesso.DEFERIDO);
+        p.setSolicitanteEmail("solicitante@test.com");
+        p.setEmailAdicional("copia@equipe.com.br");
+
+        Anexo comprovante = new Anexo();
+        comprovante.setTipo(TipoAnexo.COMPROVANTE_SNT);
+        comprovante.setNomeArquivo("comprovante.pdf");
+        p.addAnexo(comprovante);
+
+        when(processoRepository.findById(304L)).thenReturn(java.util.Optional.of(p));
+        when(processoRepository.save(p)).thenReturn(p);
+
+        var template = new EmailTemplate(
+                "deferido", "titulo", "icon",
+                "Assunto: Processo DEFERIDO", "Corpo do email de deferimento");
+        when(emailTemplateService.emailDeferido(p)).thenReturn(template);
+
+        when(anexoStorageService.buscarUltimoPorTipo(304L, TipoAnexo.COMPROVANTE_SNT))
+                .thenReturn(comprovante);
+        when(anexoStorageService.resolverArquivo(comprovante))
+                .thenReturn(java.nio.file.Paths.get("test.pdf"));
+        when(emailSenderService.enviarComAnexo(
+                "solicitante@test.com", new String[]{"copia@equipe.com.br"},
+                "Assunto: Processo DEFERIDO", "Corpo do email de deferimento",
+                java.nio.file.Paths.get("test.pdf").toFile(), "comprovante.pdf"))
+                .thenReturn(true);
+
+        Processo resultado = service.finalizarResposta(304L);
+
+        assertThat(resultado.isEmailEnviadoSolicitante()).isTrue();
+        org.mockito.Mockito.verify(emailSenderService).enviarComAnexo(
+                "solicitante@test.com", new String[]{"copia@equipe.com.br"},
+                "Assunto: Processo DEFERIDO", "Corpo do email de deferimento",
+                java.nio.file.Paths.get("test.pdf").toFile(), "comprovante.pdf");
+    }
+
+    /**
+     * Unitario puro do helper estatico - null/branco viram "sem CC", valor
+     * preenchido vira um array de 1 posicao. Cobre os 3 casos direto, sem
+     * precisar montar um Processo inteiro para cada um.
+     */
+    @Test
+    void ccEmailAdicionalDevolveNullParaVazioEArrayDeUmParaValorPreenchido() {
+        Processo semEmail = new Processo();
+        assertThat(ProcessoService.ccEmailAdicional(semEmail)).isNull();
+
+        Processo comBranco = new Processo();
+        comBranco.setEmailAdicional("   ");
+        assertThat(ProcessoService.ccEmailAdicional(comBranco)).isNull();
+
+        Processo comEmail = new Processo();
+        comEmail.setEmailAdicional("copia@equipe.com.br");
+        assertThat(ProcessoService.ccEmailAdicional(comEmail)).containsExactly("copia@equipe.com.br");
     }
 
     @Test
@@ -1100,7 +1168,7 @@ class ProcessoServiceTest {
                 .thenReturn(java.nio.file.Paths.get("test.pdf"));
         // SMTP fora do ar: enviarComAnexo devolve false (nao lanca).
         when(emailSenderService.enviarComAnexo(
-                "solicitante@test.com", "Assunto: Processo DEFERIDO", "Corpo do email de deferimento",
+                "solicitante@test.com", null, "Assunto: Processo DEFERIDO", "Corpo do email de deferimento",
                 java.nio.file.Paths.get("test.pdf").toFile(), "comprovante.pdf"))
                 .thenReturn(false);
 

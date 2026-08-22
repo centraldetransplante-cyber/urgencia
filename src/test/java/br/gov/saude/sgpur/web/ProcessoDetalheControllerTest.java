@@ -1,6 +1,7 @@
 package br.gov.saude.sgpur.web;
 
 import br.gov.saude.sgpur.domain.*;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.service.MembroUrgenciaRenalService;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -140,6 +141,9 @@ class ProcessoDetalheControllerTest {
         s.setId(id);
         s.setPacienteNome("Maria Silva");
         s.setPacienteRgct("RGCT123");
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setSolicitanteEquipe("Equipe A");
         s.setSolicitanteEmail("equipe@ex.com");
         s.setDataSituacaoEspecial(LocalDate.of(2026, 7, 1));
@@ -221,12 +225,40 @@ class ProcessoDetalheControllerTest {
         verify(processoService).proximoNumero(ano);
     }
 
+    /**
+     * Bug real de producao (2026-08-21, relatado pelo dono do produto):
+     * {@code Processo.pacienteDataNascimento} nao tinha {@code @DateTimeFormat
+     * (iso = DateTimeFormat.ISO.DATE)} (ao contrario de {@code
+     * dataSituacaoEspecial}, logo abaixo dela na mesma entidade) - o Thymeleaf
+     * renderizava o valor pre-preenchido no formato padrao da JVM (ex.
+     * "11/2/80"), nao ISO ("1980-11-02"). Um {@code <input type="date">} do
+     * navegador IGNORA silenciosamente um {@code value} em formato que nao
+     * reconhece e mostra o campo VAZIO, sem erro nenhum - exatamente o
+     * sintoma relatado ("data de nascimento nao migrou quando o operador
+     * converteu em processo"). Nenhum teste pegaria isso olhando so status/
+     * model attributes; e preciso inspecionar o atributo {@code value} do
+     * HTML renderizado de fato.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void novoRenderizaDataDeNascimentoNoFormatoIsoQueOInputDateReconhece() throws Exception {
+        when(solicitacaoOnlineService.buscar(5L)).thenReturn(solicitacaoValida(5L));
+
+        mvc.perform(get("/processos/novo").param("origemSolicitacaoOnlineId", "5"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "id=\"pacienteDataNascimento\" name=\"pacienteDataNascimento\" value=\"1985-03-15\"")));
+    }
+
     // ----- salvar -----
 
     private org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder formValido() {
         return post("/processos")
             .param("pacienteNome", "Maria Silva")
             .param("pacienteRgct", "RGCT123")
+            .param("pacienteDataNascimento", "1985-03-15")
+            .param("pacienteCpf", "11144477735")
+            .param("pacienteSexo", "MASCULINO")
             .param("solicitanteEquipe", "Equipe A")
             .param("solicitanteEmail", "equipe@ex.com")
             .param("dataSituacaoEspecial", "2026-07-01")
@@ -342,6 +374,9 @@ class ProcessoDetalheControllerTest {
         when(solicitacaoOnlineService.buscar(5L)).thenReturn(solicitacaoValida(5L));
         when(processoService.isNumeracaoAutomatica(2026)).thenReturn(true);
         Processo salvo = new Processo();
+        salvo.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        salvo.setPacienteCpf("11144477735");
+        salvo.setPacienteSexo(Sexo.MASCULINO);
         salvo.setId(9L);
         salvo.setNumero("09/2026");
         salvo.setPacienteNome("Maria Silva");
@@ -868,6 +903,9 @@ class ProcessoDetalheControllerTest {
                 .param("numero", "01/2026")
                 .param("pacienteNome", "Maria Silva")
                 .param("pacienteRgct", "RGCT123")
+                .param("pacienteDataNascimento", "1985-03-15")
+                .param("pacienteCpf", "11144477735")
+                .param("pacienteSexo", "MASCULINO")
                 .param("solicitanteEquipe", "Equipe A")
                 .param("solicitanteEmail", "equipe@ex.com")
                 .param("dataSituacaoEspecial", "2026-07-01")
@@ -888,6 +926,9 @@ class ProcessoDetalheControllerTest {
                 .param("numero", "01/2026")
                 .param("pacienteNome", "Maria Silva Atualizada")
                 .param("pacienteRgct", "RGCT123")
+                .param("pacienteDataNascimento", "1985-03-15")
+                .param("pacienteCpf", "11144477735")
+                .param("pacienteSexo", "MASCULINO")
                 .param("solicitanteEquipe", "Equipe A")
                 .param("solicitanteEmail", "equipe@ex.com")
                 .param("dataSituacaoEspecial", "2026-07-01")

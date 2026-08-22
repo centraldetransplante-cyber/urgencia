@@ -5,6 +5,7 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.MensagemSolicitacaoRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -122,6 +123,9 @@ class SolicitanteControllerSemTransacaoIntegrationTest {
         s.setUsuarioSolicitante(dono);
         s.setPacienteNome("Paciente Ja Triado TX");
         s.setPacienteRgct("333333333");
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setSolicitanteEquipe("HCPA");
         s.setSolicitanteEmail("solicitantetx-it@example.com");
         s.setDataSituacaoEspecial(LocalDate.of(2026, 6, 1));

@@ -8,6 +8,7 @@ import br.gov.saude.sgpur.repository.AnexoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
 import br.gov.saude.sgpur.service.AnexoSolicitacaoOnlineStorageService;
 import br.gov.saude.sgpur.service.AuditoriaService;
+import br.gov.saude.sgpur.service.CpfUtil;
 import br.gov.saude.sgpur.service.Iniciais;
 import br.gov.saude.sgpur.service.MensagemSolicitacaoService;
 import br.gov.saude.sgpur.service.SolicitacaoOnlineService;
@@ -107,7 +108,9 @@ public class SolicitacaoOnlineTriagemController {
     @GetMapping("/{id}")
     @Transactional
     public String detalhe(@PathVariable Long id, Principal principal, Model model) {
-        model.addAttribute("solicitacao", service.buscarParaDetalhe(id));
+        var solicitacao = service.buscarParaDetalhe(id);
+        model.addAttribute("solicitacao", solicitacao);
+        model.addAttribute("pacienteCpfFormatado", CpfUtil.formatar(solicitacao.getPacienteCpf()));
         // Nome real de quem enviou, para o CABECALHO do card de chat (as
         // mensagens em si ja usavam o nome real desde o PR #61 - ver
         // MensagemSolicitacaoService.paraChat). Antes de 2026-08-08 o titulo

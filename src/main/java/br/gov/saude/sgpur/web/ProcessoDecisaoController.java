@@ -567,9 +567,9 @@ public class ProcessoDecisaoController {
         // ele existe (prepararEmailPronto ja localizou), em vez do e-mail
         // simples que deixaria o destinatario sem o documento prometido.
         boolean ok = prep.anexo() != null
-            ? emailSenderService.enviarComAnexo(prep.to()[0], prep.assunto(), prep.corpo(),
+            ? emailSenderService.enviarComAnexo(prep.to()[0], prep.cc(), prep.assunto(), prep.corpo(),
                 anexoStorage.resolverArquivo(prep.anexo()).toFile(), prep.anexo().getNomeArquivo())
-            : emailSenderService.enviar(prep.to(), null, prep.assunto(), prep.corpo());
+            : emailSenderService.enviar(prep.to(), prep.cc(), prep.assunto(), prep.corpo());
         if (ok) {
             auditoria.registrar("EMAIL_ENVIADO",
                 "Processo " + p.getNumero() + " - template " + chave + " -> " + prep.destinatarios());
@@ -712,7 +712,13 @@ public class ProcessoDecisaoController {
                     : "indeferido".equals(chave)
                         ? anexoStorage.buscarUltimoPorTipo(p.getId(), TipoAnexo.OFICIO_INDEFERIMENTO)
                         : null;
-                return EmailPreparado.ok(new String[]{email}, email, assunto, corpo, anexo);
+                // CC opcional (2026-08-21): mesmo e-mail adicional que
+                // finalizarResposta ja usa - este e o caminho MANUAL
+                // equivalente (o operador clicando "Enviar agora" no e-mail
+                // pronto, em vez do envio automatico da etapa 6).
+                String[] cc = ProcessoService.ccEmailAdicional(p);
+                String destinatariosExibicao = cc == null ? email : email + " (cc: " + String.join(", ", cc) + ")";
+                return EmailPreparado.ok(new String[]{email}, cc, destinatariosExibicao, assunto, corpo, anexo);
             }
             default -> {
                 return EmailPreparado.erro("Tipo de e-mail desconhecido: " + chave);
@@ -728,17 +734,23 @@ public class ProcessoDecisaoController {
      */
     private record Bloqueio(String mensagem, String ancora) {}
 
-    /** Resultado interno de {@link #prepararEmailPronto}: pronto para enviar ou erro. */
-    private record EmailPreparado(String[] to, String destinatarios, String assunto, String corpo,
+    /**
+     * Resultado interno de {@link #prepararEmailPronto}: pronto para enviar
+     * ou erro. {@code cc} (2026-08-21) so e preenchido nos templates
+     * dirigidos ao solicitante ("solicita-info"/"deferido"/"indeferido"), a
+     * partir de {@code Processo.emailAdicional} - {@code null} nos demais
+     * (convite ao avaliador nunca usa o e-mail adicional do solicitante).
+     */
+    private record EmailPreparado(String[] to, String[] cc, String destinatarios, String assunto, String corpo,
                                   Anexo anexo, String erro) {
         static EmailPreparado ok(String[] to, String destinatarios, String assunto, String corpo) {
-            return new EmailPreparado(to, destinatarios, assunto, corpo, null, null);
+            return new EmailPreparado(to, null, destinatarios, assunto, corpo, null, null);
         }
-        static EmailPreparado ok(String[] to, String destinatarios, String assunto, String corpo, Anexo anexo) {
-            return new EmailPreparado(to, destinatarios, assunto, corpo, anexo, null);
+        static EmailPreparado ok(String[] to, String[] cc, String destinatarios, String assunto, String corpo, Anexo anexo) {
+            return new EmailPreparado(to, cc, destinatarios, assunto, corpo, anexo, null);
         }
         static EmailPreparado erro(String erro) {
-            return new EmailPreparado(null, null, null, null, null, erro);
+            return new EmailPreparado(null, null, null, null, null, null, erro);
         }
         boolean ok() {
             return erro == null;

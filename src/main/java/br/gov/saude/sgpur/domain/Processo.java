@@ -62,6 +62,35 @@ public class Processo {
     @Column(name = "paciente_rgct", length = 60)
     private String pacienteRgct;
 
+    /**
+     * Data de nascimento, CPF (so digitos) e sexo do paciente.
+     * {@code @NotNull}/{@code @NotBlank} na Bean Validation, mas
+     * DELIBERADAMENTE sem {@code nullable = false} na coluna - mesma lacuna
+     * ja existente em {@code pacienteRgct}, agora por decisao consciente de
+     * compatibilidade com {@code Processo}/{@code SolicitacaoOnline} ja
+     * gravados em producao antes destes campos existirem (ver
+     * docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md). Nunca chegam
+     * ao avaliador (so ate o Relatorio Final/dossie, do lado do operador).
+     */
+    @NotNull
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    @Column(name = "paciente_data_nascimento")
+    private LocalDate pacienteDataNascimento;
+
+    @NotBlank
+    @Size(min = 11, max = 11, message = "CPF deve ter 11 digitos.")
+    @Column(name = "paciente_cpf", length = 11)
+    private String pacienteCpf;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "paciente_sexo", length = 20)
+    private Sexo pacienteSexo;
+
+    @Size(max = 200, message = "Nome da mae muito longo (maximo 200 caracteres).")
+    @Column(name = "paciente_nome_mae", length = 200)
+    private String pacienteNomeMae;
+
     // ----- Equipe solicitante -----
     @NotBlank
     @Size(max = 200, message = "Nome da equipe solicitante muito longo (maximo 200 caracteres).")
@@ -73,6 +102,26 @@ public class Processo {
     @Size(max = 150, message = "E-mail do solicitante muito longo (maximo 150 caracteres).")
     @Column(name = "solicitante_email", length = 150)
     private String solicitanteEmail;
+
+    /**
+     * E-mail ADICIONAL e OPCIONAL do solicitante, so para ESTE processo
+     * (2026-08-21) - espelha {@link SolicitacaoOnline#getEmailAdicional()}
+     * na conversao ({@code ProcessoDetalheController.novo}/{@code salvar}),
+     * mesmo padrao ja usado para {@code pacienteCpf}/{@code pacienteSexo}
+     * etc. Quando preenchido, os avisos automaticos por e-mail SOBRE ESTE
+     * PROCESSO (resposta final Deferido/Indeferido, pedido de informacao
+     * complementar) enviam uma COPIA (CC) para este endereco, alem do
+     * {@link #solicitanteEmail} principal - nunca em substituicao a ele. Ver
+     * o levantamento completo de quais envios usam esse CC em
+     * docs/RELATORIO-EMAIL-ADICIONAL-SOLICITANTE-2026-08.md.
+     *
+     * <p>Nullable de proposito (campo opcional de verdade), sem backfill
+     * necessario em producao - mesmo padrao ja documentado no CLAUDE.md.</p>
+     */
+    @Email
+    @Size(max = 150, message = "E-mail adicional muito longo (maximo 150 caracteres).")
+    @Column(name = "email_adicional", length = 150)
+    private String emailAdicional;
 
     @NotNull
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -291,6 +340,38 @@ public class Processo {
         this.pacienteRgct = pacienteRgct;
     }
 
+    public LocalDate getPacienteDataNascimento() {
+        return pacienteDataNascimento;
+    }
+
+    public void setPacienteDataNascimento(LocalDate pacienteDataNascimento) {
+        this.pacienteDataNascimento = pacienteDataNascimento;
+    }
+
+    public String getPacienteCpf() {
+        return pacienteCpf;
+    }
+
+    public void setPacienteCpf(String pacienteCpf) {
+        this.pacienteCpf = pacienteCpf;
+    }
+
+    public Sexo getPacienteSexo() {
+        return pacienteSexo;
+    }
+
+    public void setPacienteSexo(Sexo pacienteSexo) {
+        this.pacienteSexo = pacienteSexo;
+    }
+
+    public String getPacienteNomeMae() {
+        return pacienteNomeMae;
+    }
+
+    public void setPacienteNomeMae(String pacienteNomeMae) {
+        this.pacienteNomeMae = pacienteNomeMae;
+    }
+
     public String getSolicitanteEquipe() {
         return solicitanteEquipe;
     }
@@ -305,6 +386,14 @@ public class Processo {
 
     public void setSolicitanteEmail(String solicitanteEmail) {
         this.solicitanteEmail = solicitanteEmail;
+    }
+
+    public String getEmailAdicional() {
+        return emailAdicional;
+    }
+
+    public void setEmailAdicional(String emailAdicional) {
+        this.emailAdicional = emailAdicional;
     }
 
     public LocalDate getDataSituacaoEspecial() {

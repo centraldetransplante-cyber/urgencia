@@ -8,6 +8,7 @@ import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.ResultadoParecer;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
@@ -99,6 +100,9 @@ class AvaliadorVotoDuranteSolicitaInformacaoIntegrationTest {
         p.setSequencial(88);
         p.setPacienteNome("Paciente Teste Pausa");
         p.setPacienteRgct("321321321");
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("HCPA");
         p.setSolicitanteEmail("equipe@hcpa.example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));

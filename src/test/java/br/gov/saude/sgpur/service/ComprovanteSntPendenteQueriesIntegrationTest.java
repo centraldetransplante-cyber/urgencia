@@ -4,6 +4,7 @@ import br.gov.saude.sgpur.domain.Anexo;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.TipoAnexo;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.AnexoRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,6 +60,9 @@ class ComprovanteSntPendenteQueriesIntegrationTest {
         p.setSequencial(sequencial);
         p.setPacienteNome("Paciente " + sequencial);
         p.setPacienteRgct("1000" + sequencial);
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("HCPA");
         p.setSolicitanteEmail("equipe@hcpa.example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 4, 1));

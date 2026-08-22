@@ -9,6 +9,7 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.LogAuditoriaRepository;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.MensagemAvaliadorRepository;
@@ -93,6 +94,9 @@ class MensagemAvaliadorIntegrationTest {
         p.setSequencial(88);
         p.setPacienteNome("Mariana da Rosa Martins");
         p.setPacienteRgct("999888777");
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("Hospital de Clinicas de Porto Alegre");
         p.setSolicitanteEmail("equipe@hcpa.example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));
@@ -530,6 +534,9 @@ class MensagemAvaliadorIntegrationTest {
         outro.setSequencial(99);
         outro.setPacienteNome("Outro Paciente");
         outro.setPacienteRgct("111222333");
+        outro.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        outro.setPacienteCpf("11144477735");
+        outro.setPacienteSexo(Sexo.MASCULINO);
         outro.setSolicitanteEquipe("ISCMPA");
         outro.setSolicitanteEmail("equipe2@iscmpa.example.com");
         outro.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));

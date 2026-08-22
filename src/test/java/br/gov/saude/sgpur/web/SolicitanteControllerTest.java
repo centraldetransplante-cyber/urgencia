@@ -5,6 +5,7 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.AnexoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -397,6 +398,9 @@ class SolicitanteControllerTest {
         s.setUsuarioSolicitante(dono);
         s.setPacienteNome(paciente);
         s.setPacienteRgct(rgct);
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setDataSituacaoEspecial(LocalDate.now());
         s.setJustificativaClinica("Quadro grave.");
         s.setStatus(StatusSolicitacaoOnline.CONVERTIDA);
@@ -425,6 +429,9 @@ class SolicitanteControllerTest {
         salva.setId(60L);
         salva.setPacienteNome("Ciclano da Silva");
         salva.setPacienteRgct("987654321-12345");
+        salva.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        salva.setPacienteCpf("11144477735");
+        salva.setPacienteSexo(Sexo.MASCULINO);
         when(solicitacaoService.criar(any(SolicitacaoOnline.class), eq(dono), any()))
             .thenReturn(salva);
 
@@ -495,6 +502,9 @@ class SolicitanteControllerTest {
         when(solicitacaoService.buscar(50L)).thenReturn(solicitacaoDoDono);
 
         SolicitacaoOnline outraSolicitacao = new SolicitacaoOnline();
+        outraSolicitacao.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        outraSolicitacao.setPacienteCpf("11144477735");
+        outraSolicitacao.setPacienteSexo(Sexo.MASCULINO);
         outraSolicitacao.setId(51L);
         AnexoSolicitacaoOnline anexoDeOutraSolicitacao = new AnexoSolicitacaoOnline();
         anexoDeOutraSolicitacao.setId(999L);
@@ -542,7 +552,59 @@ class SolicitanteControllerTest {
                 .with(csrf()))
             .andExpect(status().isOk())
             .andExpect(view().name("solicitante/nova"))
-            .andExpect(model().attributeExists("erro"));
+            .andExpect(model().attributeExists("erro"))
+            // "sem equipe vinculada" nao pertence a nenhum campo especifico do
+            // formulario - campoComErro fica null e o template cai no alerta
+            // generico do topo (ver SolicitanteController.campoDoErro).
+            .andExpect(model().attribute("campoComErro", org.hamcrest.Matchers.nullValue()))
+            // Regressao (2026-08): sem isso o <select> de Sexo reexibido ficava
+            // so com a opcao "Selecione", sem NENHUM valor disponivel - o GET
+            // populava opcoesSexo, mas o catch do POST nao.
+            .andExpect(model().attributeExists("opcoesSexo"));
+    }
+
+    /**
+     * Mensagem de validacao MAPEADA a um campo (SolicitanteController
+     * .campoDoErro) - o formulario reexibido destaca o campo certo
+     * (is-invalid + invalid-feedback), em vez de so um alerta generico
+     * longe do campo problematico.
+     */
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void criarComCpfInvalidoDestacaOCampoPacienteCpfNoFormulario() throws Exception {
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.criar(any(SolicitacaoOnline.class), eq(dono), any()))
+            .thenThrow(new IllegalArgumentException("CPF do paciente invalido. Confira os digitos informados."));
+
+        mvc.perform(multipart("/solicitante/nova")
+                .param("pacienteNome", "Ciclano da Silva")
+                .param("pacienteCpf", "000.000.000-00")
+                .param("dataSituacaoEspecial", LocalDate.now().toString())
+                .param("justificativaClinica", "Quadro clinico grave.")
+                .with(csrf()))
+            .andExpect(status().isOk())
+            .andExpect(view().name("solicitante/nova"))
+            .andExpect(model().attribute("campoComErro", "pacienteCpf"))
+            .andExpect(model().attributeExists("opcoesSexo"));
+    }
+
+    /** Mesmo mapeamento, para o campo novo de e-mail adicional. */
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void criarComEmailAdicionalInvalidoDestacaOCampoEmailAdicionalNoFormulario() throws Exception {
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.criar(any(SolicitacaoOnline.class), eq(dono), any()))
+            .thenThrow(new IllegalArgumentException("E-mail adicional invalido. Confira o endereco informado."));
+
+        mvc.perform(multipart("/solicitante/nova")
+                .param("pacienteNome", "Ciclano da Silva")
+                .param("emailAdicional", "nao-e-um-email")
+                .param("dataSituacaoEspecial", LocalDate.now().toString())
+                .param("justificativaClinica", "Quadro clinico grave.")
+                .with(csrf()))
+            .andExpect(status().isOk())
+            .andExpect(view().name("solicitante/nova"))
+            .andExpect(model().attribute("campoComErro", "emailAdicional"));
     }
 
     @Test
@@ -652,7 +714,8 @@ class SolicitanteControllerTest {
         salvo.setId(11L);
         java.time.LocalDateTime agora = java.time.LocalDateTime.of(2026, 8, 4, 15, 0);
         salvo.setAtualizadoEm(agora);
-        when(rascunhoService.salvar(eq(1L), eq("So o nome"), isNull(), isNull(), isNull()))
+        when(rascunhoService.salvar(eq(1L), eq("So o nome"), isNull(), isNull(), isNull(),
+            isNull(), isNull(), isNull(), isNull(), isNull()))
             .thenReturn(salvo);
 
         mvc.perform(post("/solicitante/nova/rascunho")
@@ -662,7 +725,7 @@ class SolicitanteControllerTest {
             .andExpect(jsonPath("$.ok").value(true))
             .andExpect(jsonPath("$.salvoEm").value(agora.toString()));
 
-        verify(rascunhoService).salvar(1L, "So o nome", null, null, null);
+        verify(rascunhoService).salvar(1L, "So o nome", null, null, null, null, null, null, null, null);
     }
 
     @Test
@@ -689,6 +752,9 @@ class SolicitanteControllerTest {
     void criarAPartirDeUmRascunhoApagaORascunhoAposEnvioComSucesso() throws Exception {
         when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
         SolicitacaoOnline salva = new SolicitacaoOnline();
+        salva.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        salva.setPacienteCpf("11144477735");
+        salva.setPacienteSexo(Sexo.MASCULINO);
         salva.setId(61L);
         salva.setPacienteNome("Rascunho Fulano");
         when(solicitacaoService.criar(any(SolicitacaoOnline.class), eq(dono), any()))

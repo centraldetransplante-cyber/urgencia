@@ -4,6 +4,7 @@ import br.gov.saude.sgpur.domain.MembroUrgenciaRenal;
 import br.gov.saude.sgpur.domain.Parecer;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.StatusProcesso;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.LogAuditoriaRepository;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
@@ -91,6 +92,9 @@ class ConviteAvaliadorDuplicidadeIntegrationTest {
         p.setSequencial(5);
         p.setPacienteNome("Paciente Teste Convite Duplicado");
         p.setPacienteRgct("555555555");
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("HCPA");
         p.setSolicitanteEmail("equipe@hcpa.example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));

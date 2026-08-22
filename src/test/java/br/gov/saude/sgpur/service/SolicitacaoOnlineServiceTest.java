@@ -1,6 +1,7 @@
 package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.*;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
 import br.gov.saude.sgpur.service.dto.EmailTemplate;
@@ -68,6 +69,9 @@ class SolicitacaoOnlineServiceTest {
         SolicitacaoOnline s = new SolicitacaoOnline();
         s.setPacienteNome("Fulano de Tal");
         s.setPacienteRgct("123456789-12345");
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setDataSituacaoEspecial(LocalDate.now());
         s.setJustificativaClinica("Quadro grave, necessita avaliacao urgente.");
         return s;
@@ -118,6 +122,63 @@ class SolicitacaoOnlineServiceTest {
             .hasMessageContaining("sem equipe vinculada");
     }
 
+    /**
+     * E-mail adicional (2026-08-21): campo opcional, so para este pedido -
+     * ver javadoc de SolicitacaoOnline.emailAdicional. Preenchido e valido,
+     * e salvo (trim aplicado); nunca substitui solicitanteEmail (que continua
+     * vindo do usuario logado, ja coberto pelo teste acima).
+     */
+    @Test
+    void criarComEmailAdicionalValidoSalvaOValorAparado() {
+        when(repository.save(any(SolicitacaoOnline.class))).thenAnswer(inv -> inv.getArgument(0));
+        Usuario usuario = usuarioSolicitante(1L);
+        SolicitacaoOnline pedido = solicitacaoPedido();
+        pedido.setEmailAdicional("  outro-contato@equipe.com.br  ");
+
+        SolicitacaoOnline salva = service.criar(pedido, usuario, null);
+
+        assertThat(salva.getEmailAdicional()).isEqualTo("outro-contato@equipe.com.br");
+        assertThat(salva.getSolicitanteEmail()).isEqualTo("hcpa@example.com");
+    }
+
+    /**
+     * Campo vazio no formulario ("" submetido pelo navegador) vira null no
+     * banco, nunca uma string em branco - o resto do sistema (CC nos
+     * e-mails, exibicao condicional nos templates) testa null/isBlank.
+     */
+    @Test
+    void criarComEmailAdicionalEmBrancoNormalizaParaNull() {
+        when(repository.save(any(SolicitacaoOnline.class))).thenAnswer(inv -> inv.getArgument(0));
+        Usuario usuario = usuarioSolicitante(1L);
+        SolicitacaoOnline pedido = solicitacaoPedido();
+        pedido.setEmailAdicional("   ");
+
+        SolicitacaoOnline salva = service.criar(pedido, usuario, null);
+
+        assertThat(salva.getEmailAdicional()).isNull();
+    }
+
+    /**
+     * Sem @Valid neste @ModelAttribute (ver SolicitanteController), a
+     * validacao de formato precisa acontecer explicitamente em criar() -
+     * senao um valor invalido so seria pego pela validacao automatica do
+     * Hibernate no save(), que lanca ConstraintViolationException sem
+     * @ExceptionHandler dedicado (500 cru), em vez do redirect gracioso que
+     * o catch (IllegalArgumentException) do controller ja devolve.
+     */
+    @Test
+    void criarComEmailAdicionalInvalidoLancaExcecaoAntesDeSalvar() {
+        Usuario usuario = usuarioSolicitante(1L);
+        SolicitacaoOnline pedido = solicitacaoPedido();
+        pedido.setEmailAdicional("nao-e-um-email");
+
+        assertThatThrownBy(() -> service.criar(pedido, usuario, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("E-mail adicional invalido");
+
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(any());
+    }
+
     @Test
     void cancelarPorOutroUsuarioLancaExcecao() {
         SolicitacaoOnline s = solicitacaoPedido();
@@ -166,6 +227,9 @@ class SolicitacaoOnlineServiceTest {
 
     private SolicitacaoOnline convertidaCom(StatusProcesso statusProcesso) {
         Processo p = new Processo();
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setId(500L);
         p.setNumero("07/2026");
         p.setPacienteNome("Fulano de Tal");
@@ -223,6 +287,9 @@ class SolicitacaoOnlineServiceTest {
     @Test
     void notificaAvaliadoresPendentesDoCancelamento() {
         Processo p = new Processo();
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setId(500L);
         p.setNumero("07/2026");
         p.setPacienteNome("Fulano de Tal");
@@ -246,6 +313,9 @@ class SolicitacaoOnlineServiceTest {
     @Test
     void avaliadorSemEmailVoltaComoNaoAvisadoSemLancar() {
         Processo p = new Processo();
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setId(500L);
         p.setNumero("07/2026");
         p.setPacienteNome("Fulano de Tal");
@@ -289,6 +359,9 @@ class SolicitacaoOnlineServiceTest {
         s.setStatus(StatusSolicitacaoOnline.ENVIADA);
         when(repository.findById(15L)).thenReturn(java.util.Optional.of(s));
         Processo processo = new Processo();
+        processo.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        processo.setPacienteCpf("11144477735");
+        processo.setPacienteSexo(Sexo.MASCULINO);
         processo.setId(99L);
         processo.setNumero("01/2026");
 
@@ -321,6 +394,9 @@ class SolicitacaoOnlineServiceTest {
         java.nio.file.Files.write(arquivo, "conteudo com nome do paciente".getBytes());
         when(anexoStorage.resolverArquivo(anexo)).thenReturn(arquivo);
         Processo processo = new Processo();
+        processo.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        processo.setPacienteCpf("11144477735");
+        processo.setPacienteSexo(Sexo.MASCULINO);
         processo.setId(99L);
         processo.setNumero("01/2026");
 
@@ -389,6 +465,9 @@ class SolicitacaoOnlineServiceTest {
 
     private Processo processoComStatus(StatusProcesso status) {
         Processo p = new Processo();
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setId(100L);
         p.setNumero("01/2026");
         p.setStatus(status);

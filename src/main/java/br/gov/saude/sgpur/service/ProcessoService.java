@@ -366,8 +366,13 @@ public class ProcessoService {
         }
         p.setPacienteNome(form.getPacienteNome());
         p.setPacienteRgct(form.getPacienteRgct());
+        p.setPacienteDataNascimento(form.getPacienteDataNascimento());
+        p.setPacienteCpf(form.getPacienteCpf());
+        p.setPacienteSexo(form.getPacienteSexo());
+        p.setPacienteNomeMae(form.getPacienteNomeMae());
         p.setSolicitanteEquipe(form.getSolicitanteEquipe());
         p.setSolicitanteEmail(form.getSolicitanteEmail());
+        p.setEmailAdicional(form.getEmailAdicional());
         p.setDataSituacaoEspecial(form.getDataSituacaoEspecial());
         p.setObservacoes(form.getObservacoes());
         return processoRepository.save(p);
@@ -700,6 +705,27 @@ public class ProcessoService {
      * comentario no corpo do metodo — as duas ordens possiveis tem falhas
      * diferentes e a escolhida e a menos grave para este dominio.</p>
      */
+    /**
+     * Monta o array de CC (copia) a partir de {@link Processo#getEmailAdicional()},
+     * para reaproveitar nos poucos pontos do sistema que enviam e-mail de
+     * ATUALIZACAO ao solicitante sobre ESTE processo especifico (resposta
+     * final e o e-mail pronto de pedido de informacao complementar - ver
+     * {@code ProcessoDecisaoController.prepararEmailPronto}). {@code null}
+     * quando o campo esta vazio, para os metodos de {@code EmailSenderService}
+     * tratarem como "sem CC" sem checagem extra no chamador.
+     *
+     * <p>Deliberadamente NAO usado pelos e-mails dirigidos ao TIME interno
+     * (convite/lembrete a avaliador, aviso de cancelamento a avaliador,
+     * aviso de informacao complementar disponivel no Portal) - esses nunca
+     * vao ao solicitante, entao o e-mail adicional dele nao faz sentido ali.
+     * Ver docs/RELATORIO-EMAIL-ADICIONAL-SOLICITANTE-2026-08.md para o
+     * levantamento completo.</p>
+     */
+    public static String[] ccEmailAdicional(Processo p) {
+        String email = p.getEmailAdicional();
+        return (email == null || email.isBlank()) ? null : new String[]{email};
+    }
+
     @Transactional
     public Processo finalizarResposta(Long id) {
         Processo p = buscar(id);
@@ -751,8 +777,14 @@ public class ProcessoService {
         // se o SMTP falha, nada e gravado (rollback) e o operador tenta de
         // novo; o pior caso possivel e o solicitante ficar sabendo da decisao
         // duas vezes, nunca nenhuma.
+        // CC opcional (2026-08-21): quando o solicitante informou um e-mail
+        // adicional no proprio pedido, ele recebe copia da resposta final -
+        // ver Processo.emailAdicional (javadoc) e
+        // docs/RELATORIO-EMAIL-ADICIONAL-SOLICITANTE-2026-08.md.
+        String[] cc = ccEmailAdicional(p);
         boolean enviado = emailSenderService.enviarComAnexo(
             p.getSolicitanteEmail(),
+            cc,
             template.assunto(),
             template.corpo(),
             anexoStorage.resolverArquivo(anexo).toFile(),

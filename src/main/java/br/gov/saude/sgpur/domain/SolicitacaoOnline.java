@@ -47,6 +47,35 @@ public class SolicitacaoOnline {
     @Column(name = "paciente_rgct", length = 60)
     private String pacienteRgct;
 
+    /**
+     * Data de nascimento, CPF (so digitos) e sexo do paciente.
+     * {@code @NotNull}/{@code @NotBlank} na Bean Validation, mas
+     * DELIBERADAMENTE sem {@code nullable = false} na coluna - mesma lacuna
+     * ja existente em {@code pacienteRgct}, agora por decisao consciente de
+     * compatibilidade com solicitacoes ja gravadas em producao antes destes
+     * campos existirem (ver
+     * docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md). Nunca chegam
+     * ao avaliador (so ate o Relatorio Final/dossie, do lado do operador).
+     */
+    @NotNull
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
+    @Column(name = "paciente_data_nascimento")
+    private LocalDate pacienteDataNascimento;
+
+    @NotBlank
+    @Size(min = 11, max = 11, message = "CPF deve ter 11 digitos.")
+    @Column(name = "paciente_cpf", length = 11)
+    private String pacienteCpf;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "paciente_sexo", length = 20)
+    private Sexo pacienteSexo;
+
+    @Size(max = 200, message = "Nome da mae muito longo (maximo 200 caracteres).")
+    @Column(name = "paciente_nome_mae", length = 200)
+    private String pacienteNomeMae;
+
     @NotBlank
     @Size(max = 200, message = "Nome da equipe solicitante muito longo (maximo 200 caracteres).")
     @Column(name = "solicitante_equipe", nullable = false, length = 200)
@@ -57,6 +86,33 @@ public class SolicitacaoOnline {
     @Size(max = 150, message = "E-mail do solicitante muito longo (maximo 150 caracteres).")
     @Column(name = "solicitante_email", length = 150)
     private String solicitanteEmail;
+
+    /**
+     * E-mail ADICIONAL e OPCIONAL (2026-08-21), informado pelo proprio
+     * solicitante no formulario de nova solicitacao, so para ESTE pedido -
+     * nao substitui {@link #solicitanteEmail} (que vem sempre do
+     * {@code Usuario} logado, nunca do formulario - ver
+     * {@code SolicitacaoOnlineService.criar}) nem o e-mail de login da conta.
+     * Um segundo destinatario (colega, chefia, e-mail pessoal) que passa a
+     * receber COPIA (CC) dos avisos automaticos sobre este processo/pedido
+     * especifico - ver {@code EmailTemplateService}/{@code ProcessoService
+     * .finalizarResposta} e o levantamento completo em
+     * docs/RELATORIO-EMAIL-ADICIONAL-SOLICITANTE-2026-08.md sobre quais
+     * pontos de envio usam esse CC e quais foram deliberadamente deixados de
+     * fora (avisos ao TIME interno - avaliador/operador - nunca usam este
+     * campo).
+     *
+     * <p>Sem {@code @NotBlank}/{@code @NotNull} de proposito (campo
+     * opcional de verdade - {@code @Email} sozinho e null-safe, so valida
+     * formato quando preenchido) e {@code nullable} na coluna - nao precisa
+     * de backfill manual em producao (mesmo padrao ja documentado no
+     * CLAUDE.md para outras colunas nullable adicionadas recentemente, ex.
+     * {@code Processo.ultimoLembreteSntEm}).</p>
+     */
+    @Email
+    @Size(max = 150, message = "E-mail adicional muito longo (maximo 150 caracteres).")
+    @Column(name = "email_adicional", length = 150)
+    private String emailAdicional;
 
     @NotNull
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
@@ -147,6 +203,38 @@ public class SolicitacaoOnline {
         this.pacienteRgct = pacienteRgct;
     }
 
+    public LocalDate getPacienteDataNascimento() {
+        return pacienteDataNascimento;
+    }
+
+    public void setPacienteDataNascimento(LocalDate pacienteDataNascimento) {
+        this.pacienteDataNascimento = pacienteDataNascimento;
+    }
+
+    public String getPacienteCpf() {
+        return pacienteCpf;
+    }
+
+    public void setPacienteCpf(String pacienteCpf) {
+        this.pacienteCpf = pacienteCpf;
+    }
+
+    public Sexo getPacienteSexo() {
+        return pacienteSexo;
+    }
+
+    public void setPacienteSexo(Sexo pacienteSexo) {
+        this.pacienteSexo = pacienteSexo;
+    }
+
+    public String getPacienteNomeMae() {
+        return pacienteNomeMae;
+    }
+
+    public void setPacienteNomeMae(String pacienteNomeMae) {
+        this.pacienteNomeMae = pacienteNomeMae;
+    }
+
     public String getSolicitanteEquipe() {
         return solicitanteEquipe;
     }
@@ -161,6 +249,14 @@ public class SolicitacaoOnline {
 
     public void setSolicitanteEmail(String solicitanteEmail) {
         this.solicitanteEmail = solicitanteEmail;
+    }
+
+    public String getEmailAdicional() {
+        return emailAdicional;
+    }
+
+    public void setEmailAdicional(String emailAdicional) {
+        this.emailAdicional = emailAdicional;
     }
 
     public LocalDate getDataSituacaoEspecial() {

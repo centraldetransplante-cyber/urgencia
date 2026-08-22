@@ -37,6 +37,20 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     }
 
+    // Rola ate o erro de validacao do servidor ao reexibir o formulario
+    // (2026-08-21, corrige "as mensagens de erro ficam muito longe do campo
+    // e nao permitem visualizacao"). Prioridade: o campo destacado (.is-
+    // invalid, mais preciso - o solicitante ve o campo E a mensagem juntos)
+    // e, na falta de um campo mapeado, o alerta generico do topo (erro que
+    // nao pertence a nenhum campo especifico, ex. "sem equipe vinculada").
+    var alvoErro = document.querySelector('.is-invalid') || document.getElementById('alertaErroGeral');
+    if (alvoErro) {
+        alvoErro.scrollIntoView({behavior: 'smooth', block: 'center'});
+        if (typeof alvoErro.focus === 'function') {
+            alvoErro.focus({preventScroll: true});
+        }
+    }
+
     var LIMITE_ATENCAO = 80; // abaixo disso, sinal visual de "provavelmente incompleto"
 
     var textarea = document.getElementById('justificativaClinica');
@@ -70,12 +84,14 @@ document.addEventListener('DOMContentLoaded', function () {
             var campoRgct = document.getElementById('pacienteRgct');
             var campoData = document.getElementById('dataSituacaoEspecial');
             var campoJustificativa = document.getElementById('justificativaClinica');
+            var campoEmailAdicional = document.getElementById('emailAdicional');
 
             var params = new URLSearchParams();
             params.set('pacienteNome', (campoNome && campoNome.value) || '');
             params.set('pacienteRgct', (campoRgct && campoRgct.value) || '');
             params.set('dataSituacaoEspecial', (campoData && campoData.value) || '');
             params.set('justificativaClinica', (campoJustificativa && campoJustificativa.value) || '');
+            params.set('emailAdicional', (campoEmailAdicional && campoEmailAdicional.value) || '');
 
             var headers = {'Content-Type': 'application/x-www-form-urlencoded'};
             if (csrfHeader && csrfToken) {

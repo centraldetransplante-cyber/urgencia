@@ -246,6 +246,37 @@ class ProcessoControllerEmailTest {
         verify(auditoria).registrar(eq("EMAIL_ENVIADO"), anyString());
     }
 
+    /**
+     * E-mail adicional (2026-08-21): este e o caminho MANUAL (operador
+     * clicando "Enviar agora" no e-mail pronto) equivalente ao automatico ja
+     * coberto em ProcessoServiceTest.finalizarRespostaComEmailAdicionalEnviaEmCopia -
+     * quando Processo.emailAdicional esta preenchido, o CC tambem vai junto
+     * aqui.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void enviarEmailDeferidoComEmailAdicionalEnviaEmCopia() throws Exception {
+        processo.setStatus(StatusProcesso.DEFERIDO);
+        processo.setEmailAdicional("copia@equipe.com.br");
+        Anexo comprovante = new Anexo();
+        comprovante.setTipo(TipoAnexo.COMPROVANTE_SNT);
+        processo.addAnexo(comprovante);
+        when(emailSenderService.enviar(eq(new String[]{"solicitante@example.com"}),
+                eq(new String[]{"copia@equipe.com.br"}), anyString(), anyString()))
+            .thenReturn(true);
+
+        mvc.perform(post("/processos/1/email/enviar")
+                .param("chave", "deferido")
+                .param("assunto", "assunto")
+                .param("corpo", "corpo")
+                .with(csrf()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.ok").value(true));
+
+        verify(emailSenderService).enviar(eq(new String[]{"solicitante@example.com"}),
+                eq(new String[]{"copia@equipe.com.br"}), eq("assunto"), eq("corpo"));
+    }
+
     @Test
     @WithMockUser(roles = "OPERADOR")
     void enviarEmailConviteAvaliadorUsaEmailsDosAvaliadoresDoProcesso() throws Exception {

@@ -10,6 +10,7 @@ import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.TipoAnexo;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.AnexoRepository;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
@@ -122,6 +123,9 @@ class InformacaoComplementarMultiplosPedidosIntegrationTest {
         p.setSequencial(12);
         p.setPacienteNome("Ana Silva Paciente");
         p.setPacienteRgct("123123123");
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("HCPA");
         p.setSolicitanteEmail("equipe@hcpa.example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 8, 1));
@@ -145,6 +149,9 @@ class InformacaoComplementarMultiplosPedidosIntegrationTest {
         s.setUsuarioSolicitante(dono);
         s.setPacienteNome("Ana Silva Paciente");
         s.setPacienteRgct("123123123");
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setSolicitanteEquipe("HCPA");
         s.setSolicitanteEmail("solicitante-multi-it@example.com");
         s.setDataSituacaoEspecial(LocalDate.of(2026, 8, 1));

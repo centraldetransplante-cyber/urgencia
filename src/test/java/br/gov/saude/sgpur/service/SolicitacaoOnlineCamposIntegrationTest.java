@@ -4,6 +4,7 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -71,6 +72,9 @@ class SolicitacaoOnlineCamposIntegrationTest {
         // Campos do formulario solicitante/nova.html
         form.setPacienteNome("Paciente do Portal");
         form.setPacienteRgct("123456789-12345");
+        form.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        form.setPacienteCpf("11144477735");
+        form.setPacienteSexo(Sexo.MASCULINO);
         form.setDataSituacaoEspecial(LocalDate.now().minusDays(2));
         form.setJustificativaClinica("Justificativa clinica detalhada.");
         // Tentativa de mass assignment: nenhum destes pode vencer o servidor

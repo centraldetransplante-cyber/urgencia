@@ -6,6 +6,7 @@ import br.gov.saude.sgpur.domain.MensagemSolicitacao;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.ResultadoParecer;
 import br.gov.saude.sgpur.domain.RascunhoSolicitacaoOnline;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.TipoAnexo;
@@ -15,6 +16,7 @@ import br.gov.saude.sgpur.repository.UsuarioRepository;
 import br.gov.saude.sgpur.service.AnexoSolicitacaoOnlineStorageService;
 import br.gov.saude.sgpur.service.AnexoStorageService;
 import br.gov.saude.sgpur.service.AuditoriaService;
+import br.gov.saude.sgpur.service.CpfUtil;
 import br.gov.saude.sgpur.service.Iniciais;
 import br.gov.saude.sgpur.service.MensagemSolicitacaoService;
 import br.gov.saude.sgpur.service.RascunhoSolicitacaoOnlineService;
@@ -138,7 +140,8 @@ public class SolicitanteController {
     @InitBinder("solicitacao")
     public void initBinderSolicitacao(WebDataBinder binder) {
         binder.setAllowedFields(
-            "pacienteNome", "pacienteRgct", "dataSituacaoEspecial", "justificativaClinica");
+            "pacienteNome", "pacienteRgct", "pacienteDataNascimento", "pacienteCpf", "pacienteSexo",
+            "pacienteNomeMae", "dataSituacaoEspecial", "justificativaClinica", "emailAdicional");
     }
 
     @GetMapping
@@ -195,6 +198,11 @@ public class SolicitanteController {
             RascunhoSolicitacaoOnline r = rascunho.get();
             s.setPacienteNome(r.getPacienteNome());
             s.setPacienteRgct(r.getPacienteRgct());
+            s.setPacienteDataNascimento(r.getPacienteDataNascimento());
+            s.setPacienteCpf(r.getPacienteCpf());
+            s.setPacienteSexo(r.getPacienteSexo());
+            s.setPacienteNomeMae(r.getPacienteNomeMae());
+            s.setEmailAdicional(r.getEmailAdicional());
             s.setDataSituacaoEspecial(
                 r.getDataSituacaoEspecial() != null ? r.getDataSituacaoEspecial() : LocalDate.now());
             s.setJustificativaClinica(r.getJustificativaClinica());
@@ -205,6 +213,7 @@ public class SolicitanteController {
         model.addAttribute("solicitacao", s);
         model.addAttribute("equipe", usuario.getEquipeSolicitante());
         model.addAttribute("email", usuario.getEmail());
+        model.addAttribute("opcoesSexo", Sexo.values());
         return "solicitante/nova";
     }
 
@@ -222,13 +231,20 @@ public class SolicitanteController {
     public Map<String, Object> salvarRascunho(
             @RequestParam(value = "pacienteNome", required = false) String pacienteNome,
             @RequestParam(value = "pacienteRgct", required = false) String pacienteRgct,
+            @RequestParam(value = "pacienteDataNascimento", required = false)
+            @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate pacienteDataNascimento,
+            @RequestParam(value = "pacienteCpf", required = false) String pacienteCpf,
+            @RequestParam(value = "pacienteSexo", required = false) Sexo pacienteSexo,
+            @RequestParam(value = "pacienteNomeMae", required = false) String pacienteNomeMae,
             @RequestParam(value = "dataSituacaoEspecial", required = false)
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataSituacaoEspecial,
             @RequestParam(value = "justificativaClinica", required = false) String justificativaClinica,
+            @RequestParam(value = "emailAdicional", required = false) String emailAdicional,
             Principal principal) {
         Usuario usuario = resolverUsuario(principal);
         RascunhoSolicitacaoOnline r = rascunhoService.salvar(
-            usuario.getId(), pacienteNome, pacienteRgct, dataSituacaoEspecial, justificativaClinica);
+            usuario.getId(), pacienteNome, pacienteRgct, pacienteDataNascimento, pacienteCpf, pacienteSexo,
+            pacienteNomeMae, dataSituacaoEspecial, justificativaClinica, emailAdicional);
         return Map.of("ok", true, "salvoEm", r.getAtualizadoEm().toString());
     }
 
@@ -275,11 +291,56 @@ public class SolicitanteController {
                 "Solicitação enviada. Aguarde a triagem da equipe de Urgência Renal.");
             return "redirect:/solicitante";
         } catch (IllegalArgumentException | IllegalStateException e) {
+            // Mesmos model attributes que o GET nova() popula (equipe/email/
+            // opcoesSexo) - sem isso o formulario reexibido perde silenciosamente
+            // dado do usuario (bug real corrigido em 2026-08: o <select> de Sexo
+            // ficava so com a opcao "Selecione", sem NENHUM valor disponivel,
+            // porque so o GET adicionava opcoesSexo ao model).
             model.addAttribute("equipe", usuario.getEquipeSolicitante());
             model.addAttribute("email", usuario.getEmail());
+            model.addAttribute("opcoesSexo", Sexo.values());
             model.addAttribute("erro", e.getMessage());
+            // Mensagens de validacao conhecidas (SolicitacaoOnlineService.criar) sao
+            // mapeadas para o campo do formulario a que se referem, para o template
+            // destacar o campo (borda vermelha + mensagem logo abaixo dele) em vez de
+            // so um alerta generico no topo, longe do campo problematico. Mensagens
+            // nao mapeadas (ex.: "Usuario solicitante sem equipe vinculada", que nao e
+            // sobre nenhum campo do formulario) continuam so no alerta do topo.
+            model.addAttribute("campoComErro", campoDoErro(e.getMessage()));
             return "solicitante/nova";
         }
+    }
+
+    /**
+     * Mapa fixo de mensagem de validacao (vinda de
+     * {@link SolicitacaoOnlineService#criar}) para o {@code id}/{@code name}
+     * do campo do formulario {@code solicitante/nova.html} a que ela se
+     * refere - usado por {@link #criar} para destacar visualmente o campo
+     * certo em vez de deixar o erro real "longe" num alerta generico no topo
+     * de um formulario com varias secoes.
+     *
+     * <p>Comparacao por igualdade exata para as mensagens estaticas (nunca
+     * mudam de texto), e por prefixo para a unica mensagem dinamica ("Falha
+     * ao salvar documento anexado: " + detalhe da IOException). Mensagens sem
+     * campo correspondente (ex.: "Usuario solicitante sem equipe vinculada")
+     * devolvem {@code null} - o template cai no alerta generico do topo.</p>
+     */
+    private static String campoDoErro(String mensagem) {
+        if (mensagem == null) {
+            return null;
+        }
+        if (mensagem.startsWith("Falha ao salvar documento anexado")) {
+            return "documentos";
+        }
+        return switch (mensagem) {
+            case "Informe a data de nascimento do paciente.",
+                 "A data de nascimento do paciente nao pode ser no futuro." -> "pacienteDataNascimento";
+            case "Informe o sexo do paciente." -> "pacienteSexo";
+            case "Informe o CPF do paciente.",
+                 "CPF do paciente invalido. Confira os digitos informados." -> "pacienteCpf";
+            case "E-mail adicional invalido. Confira o endereco informado." -> "emailAdicional";
+            default -> null;
+        };
     }
 
     @GetMapping("/{id}")
@@ -288,6 +349,7 @@ public class SolicitanteController {
         Usuario usuario = resolverUsuario(principal);
         SolicitacaoOnline s = conferirPosse(solicitacaoService.buscarParaDetalhe(id), usuario);
         model.addAttribute("solicitacao", s);
+        model.addAttribute("pacienteCpfFormatado", CpfUtil.formatar(s.getPacienteCpf()));
         // Fonte unica da regra: o botao aparece exatamente quando cancelar()
         // aceitaria (ver SolicitacaoOnlineService.podeCancelar).
         model.addAttribute("podeCancelar", solicitacaoService.podeCancelar(s));

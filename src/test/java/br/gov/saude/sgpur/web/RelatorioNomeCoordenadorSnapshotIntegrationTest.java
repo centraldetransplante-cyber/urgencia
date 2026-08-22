@@ -8,6 +8,7 @@ import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.ResultadoParecer;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
@@ -345,6 +346,9 @@ class RelatorioNomeCoordenadorSnapshotIntegrationTest {
         p.setSequencial(sequencial);
         p.setPacienteNome("Paciente Relatorio Coordenador");
         p.setPacienteRgct("999888777");
+        p.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        p.setPacienteCpf("11144477735");
+        p.setPacienteSexo(Sexo.MASCULINO);
         p.setSolicitanteEquipe("HNSC");
         p.setSolicitanteEmail("equipe@hnsc.example.com");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 5, 1));
@@ -413,6 +417,9 @@ class RelatorioNomeCoordenadorSnapshotIntegrationTest {
     private Processo comPareceres(Long processoId) {
         Processo db = processoRepo.findById(processoId).orElseThrow();
         Processo copia = new Processo();
+        copia.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        copia.setPacienteCpf("11144477735");
+        copia.setPacienteSexo(Sexo.MASCULINO);
         copia.setStatus(db.getStatus());
         pareceresDoProcesso(processoId).forEach(copia::addParecer);
         return copia;

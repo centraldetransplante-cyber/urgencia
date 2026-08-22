@@ -3,6 +3,7 @@ package br.gov.saude.sgpur.web;
 import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -105,6 +106,9 @@ class SolicitacaoOnlineTriagemSessaoOrfaIntegrationTest {
         s.setUsuarioSolicitante(dono);
         s.setPacienteNome("Maria Souza da Silva");
         s.setPacienteRgct("123456");
+        s.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        s.setPacienteCpf("11144477735");
+        s.setPacienteSexo(Sexo.MASCULINO);
         s.setSolicitanteEquipe("HCPA");
         s.setSolicitanteEmail("solicitante-triagem-sessao-orfa-it@example.com");
         s.setDataSituacaoEspecial(LocalDate.now());

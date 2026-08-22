@@ -6,6 +6,7 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusSolicitacaoOnline;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.repository.MensagemSolicitacaoRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -110,6 +111,9 @@ class SolicitacaoOnlineTriagemSemTransacaoIntegrationTest {
         enviada.setUsuarioSolicitante(solicitante);
         enviada.setPacienteNome("Fulano de Tal");
         enviada.setPacienteRgct("111111111");
+        enviada.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        enviada.setPacienteCpf("11144477735");
+        enviada.setPacienteSexo(Sexo.MASCULINO);
         enviada.setSolicitanteEquipe("HCPA");
         enviada.setSolicitanteEmail(solicitante.getEmail());
         enviada.setDataSituacaoEspecial(LocalDate.now());
@@ -150,6 +154,9 @@ class SolicitacaoOnlineTriagemSemTransacaoIntegrationTest {
         convertida.setUsuarioSolicitante(solicitante);
         convertida.setPacienteNome("Ciclano da Silva");
         convertida.setPacienteRgct("222222222");
+        convertida.setPacienteDataNascimento(LocalDate.of(1985, 3, 15));
+        convertida.setPacienteCpf("11144477735");
+        convertida.setPacienteSexo(Sexo.MASCULINO);
         convertida.setSolicitanteEquipe("HCPA");
         convertida.setSolicitanteEmail(solicitante.getEmail());
         convertida.setDataSituacaoEspecial(LocalDate.now());

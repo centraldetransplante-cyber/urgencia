@@ -31,10 +31,23 @@
             <dl class="row mb-0">
                 <dt class="col-sm-4">RGCT / SNT</dt>
                 <dd class="col-sm-8" th:text="${solicitacao.pacienteRgct}"></dd>
+                <dt class="col-sm-4">Data de nascimento</dt>
+                <dd class="col-sm-8"
+                    th:text="${solicitacao.pacienteDataNascimento != null ? #temporals.format(solicitacao.pacienteDataNascimento, 'dd/MM/yyyy') : '-'}"></dd>
+                <dt class="col-sm-4">CPF</dt>
+                <dd class="col-sm-8" th:text="${pacienteCpfFormatado ?: '-'}"></dd>
+                <dt class="col-sm-4">Sexo</dt>
+                <dd class="col-sm-8" th:text="${solicitacao.pacienteSexo != null ? solicitacao.pacienteSexo.descricao : '-'}"></dd>
+                <dt class="col-sm-4" th:if="${solicitacao.pacienteNomeMae != null and !solicitacao.pacienteNomeMae.isBlank()}">Nome da mãe</dt>
+                <dd class="col-sm-8" th:if="${solicitacao.pacienteNomeMae != null and !solicitacao.pacienteNomeMae.isBlank()}"
+                    th:text="${solicitacao.pacienteNomeMae}"></dd>
                 <dt class="col-sm-4">Equipe solicitante</dt>
                 <dd class="col-sm-8" th:text="${solicitacao.solicitanteEquipe}"></dd>
                 <dt class="col-sm-4">E-mail do solicitante</dt>
                 <dd class="col-sm-8" th:text="${solicitacao.solicitanteEmail}"></dd>
+                <dt class="col-sm-4" th:if="${solicitacao.emailAdicional != null and !solicitacao.emailAdicional.isBlank()}">E-mail adicional (cópia)</dt>
+                <dd class="col-sm-8" th:if="${solicitacao.emailAdicional != null and !solicitacao.emailAdicional.isBlank()}"
+                    th:text="${solicitacao.emailAdicional}"></dd>
                 <dt class="col-sm-4">Data de solicitação da urgência renal</dt>
                 <dd class="col-sm-8"
                     th:text="${#temporals.format(solicitacao.dataSituacaoEspecial, 'dd/MM/yyyy')}"></dd>

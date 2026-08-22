@@ -2,6 +2,7 @@ package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.RascunhoSolicitacaoOnline;
+import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.domain.Usuario;
 import br.gov.saude.sgpur.repository.RascunhoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
@@ -57,14 +58,20 @@ class RascunhoSolicitacaoOnlineServiceTest {
     void salvarCriaRascunhoComCamposParciais() {
         Usuario u = criarSolicitante("rascunho-parcial");
 
-        RascunhoSolicitacaoOnline salvo = service.salvar(u.getId(), "Fulano de Tal", null, null, null);
+        RascunhoSolicitacaoOnline salvo = service.salvar(
+            u.getId(), "Fulano de Tal", null, null, null, null, null, null, null, null);
 
         RascunhoSolicitacaoOnline reler = repository.findById(salvo.getId()).orElseThrow();
         assertThat(reler.getUsuarioSolicitante().getId()).isEqualTo(u.getId());
         assertThat(reler.getPacienteNome()).isEqualTo("Fulano de Tal");
         assertThat(reler.getPacienteRgct()).isNull();
+        assertThat(reler.getPacienteDataNascimento()).isNull();
+        assertThat(reler.getPacienteCpf()).isNull();
+        assertThat(reler.getPacienteSexo()).isNull();
+        assertThat(reler.getPacienteNomeMae()).isNull();
         assertThat(reler.getDataSituacaoEspecial()).isNull();
         assertThat(reler.getJustificativaClinica()).isNull();
+        assertThat(reler.getEmailAdicional()).isNull();
         assertThat(reler.getAtualizadoEm()).isNotNull();
     }
 
@@ -72,16 +79,23 @@ class RascunhoSolicitacaoOnlineServiceTest {
     void salvarDuasVezesFazUpsertSemDuplicarRegistro() {
         Usuario u = criarSolicitante("rascunho-upsert");
 
-        service.salvar(u.getId(), "Nome 1", "RGCT-1", LocalDate.of(2026, 1, 1), "Justificativa 1");
+        service.salvar(u.getId(), "Nome 1", "RGCT-1", LocalDate.of(1980, 1, 1), "11144477735",
+            Sexo.MASCULINO, "Mae 1", LocalDate.of(2026, 1, 1), "Justificativa 1", "primeiro@example.com");
         RascunhoSolicitacaoOnline segundo = service.salvar(
-            u.getId(), "Nome 2", "RGCT-2", LocalDate.of(2026, 2, 2), "Justificativa 2");
+            u.getId(), "Nome 2", "RGCT-2", LocalDate.of(1990, 2, 2), "22233344405",
+            Sexo.FEMININO, "Mae 2", LocalDate.of(2026, 2, 2), "Justificativa 2", "segundo@example.com");
 
         assertThat(repository.count()).isEqualTo(1);
         RascunhoSolicitacaoOnline reler = repository.findById(segundo.getId()).orElseThrow();
         assertThat(reler.getPacienteNome()).isEqualTo("Nome 2");
         assertThat(reler.getPacienteRgct()).isEqualTo("RGCT-2");
+        assertThat(reler.getPacienteDataNascimento()).isEqualTo(LocalDate.of(1990, 2, 2));
+        assertThat(reler.getPacienteCpf()).isEqualTo("22233344405");
+        assertThat(reler.getPacienteSexo()).isEqualTo(Sexo.FEMININO);
+        assertThat(reler.getPacienteNomeMae()).isEqualTo("Mae 2");
         assertThat(reler.getDataSituacaoEspecial()).isEqualTo(LocalDate.of(2026, 2, 2));
         assertThat(reler.getJustificativaClinica()).isEqualTo("Justificativa 2");
+        assertThat(reler.getEmailAdicional()).isEqualTo("segundo@example.com");
     }
 
     @Test
@@ -96,7 +110,8 @@ class RascunhoSolicitacaoOnlineServiceTest {
     @Test
     void apagarRemoveORascunhoDoUsuario() {
         Usuario u = criarSolicitante("rascunho-apagar");
-        service.salvar(u.getId(), "Nome", "RGCT", LocalDate.now(), "Justificativa");
+        service.salvar(u.getId(), "Nome", "RGCT", LocalDate.of(1985, 3, 15), "11144477735",
+            Sexo.MASCULINO, null, LocalDate.now(), "Justificativa", null);
         assertThat(service.buscarPorUsuario(u.getId())).isPresent();
 
         service.apagar(u.getId());
@@ -125,7 +140,8 @@ class RascunhoSolicitacaoOnlineServiceTest {
         Usuario u = criarSolicitante("rascunho-nao-vaza-triagem");
 
         service.salvar(u.getId(), "Paciente Rascunho", "999999999-99999",
-            LocalDate.now(), "Justificativa clinica completa do rascunho.");
+            LocalDate.of(1985, 3, 15), "11144477735", Sexo.MASCULINO, null,
+            LocalDate.now(), "Justificativa clinica completa do rascunho.", null);
 
         assertThat(solicitacaoOnlineRepository.findAllByOrderByDataEnvioDesc()).isEmpty();
         assertThat(solicitacaoOnlineRepository.countByStatus(

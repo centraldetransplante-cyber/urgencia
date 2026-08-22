@@ -101,19 +101,19 @@ de divergência).
    bloqueado pela pausa. E-mail gerado para a equipe solicitante com nome
    completo. `retomarAposInformacao` volta para `ENVIADO` e reabre os
    pareceres marcados.
-7. **Fluxo em 6 passos** (checklist `FluxoProcessoService` + abas):
-   1 Recebimento (sempre automático) · 2 Envio · 3 Respostas · 4 Decisão ·
-   5 Ofício/Comprovante · 6 Resposta ao solicitante. Uma etapa só fica
-   CONCLUÍDA se a própria condição **e** todas as anteriores também
-   estiverem concluídas.
-8. **Passo 1 (Recebimento) é sempre automático, sem endpoint nem anexo,
-   desde 2026-07-27.** Todo `Processo` nasce obrigatoriamente de uma
-   `SolicitacaoOnline` convertida pelo Portal do Solicitante — não existe
-   mais cadastro manual "do zero" (`GET/POST /processos` exigem
-   `origemSolicitacaoOnlineId`). Os valores de enum que essa etapa usava
-   antes (`TipoAnexo.SOLICITACAO_RECEBIDA`, `CAPA_PROCESSO`) **foram
-   removidos do enum por completo** (commit `041dc43`).
-9. **Passo 2 (Envio):** gera PDF único anonimizado (só iniciais do
+7. **Fluxo em 5 passos** (checklist `FluxoProcessoService` + abas, desde
+   2026-08-05 — era 6 com "Recebimento" separado, fundido em Envio):
+   1 Envio · 2 Respostas · 3 Decisão · 4 Ofício/Comprovante · 5 Resposta ao
+   solicitante. Uma etapa só fica CONCLUÍDA se a própria condição **e**
+   todas as anteriores também estiverem concluídas.
+8. **"Recebimento" não é mais etapa/aba própria — é sempre automático e
+   fundido no início do Passo 1 (Envio), desde 2026-08-05.** Todo `Processo`
+   nasce obrigatoriamente de uma `SolicitacaoOnline` convertida pelo Portal
+   do Solicitante — não existe cadastro manual "do zero" (`GET/POST
+   /processos` exigem `origemSolicitacaoOnlineId`). Os valores de enum que
+   essa etapa usava antes (`TipoAnexo.SOLICITACAO_RECEBIDA`, `CAPA_PROCESSO`)
+   **foram removidos do enum por completo** (commit `041dc43`).
+9. **Passo 1 (Envio):** gera PDF único anonimizado (só iniciais do
    paciente) dos documentos clínicos, carimbado página a página com
    cabeçalho institucional. NUNCA inclui a solicitação original (tem nome
    completo). Obrigatório ≥1 documento clínico PDF válido — documentos
@@ -145,17 +145,51 @@ de divergência).
     (`ProcessoVotoView`/`ParecerVotoView`) para fechar por design o risco de
     vazar `pacienteNome`.
 13. Upload condicional na finalização: INDEFERIDO → ofício
-    (`OFICIO_INDEFERIMENTO`); DEFERIDO → comprovante SNT
-    (`COMPROVANTE_SNT`). Mutuamente exclusivos. A etapa 6 (Resposta ao
-    solicitante) é uma ação única (`POST /processos/{id}/finalizar` →
-    `ProcessoService.finalizarResposta`) que envia o e-mail com o anexo
-    obrigatório já embutido, em vez de "gerar e-mail pronto + confirmar"
-    em dois passos.
+    (`OFICIO_INDEFERIMENTO`, **sempre anexado manualmente pelo operador,
+    nunca gerado/anexado automaticamente na decisão** — `OficioService
+    .gerarRascunhoRtf` só oferece um RTF editável de referência); DEFERIDO
+    → comprovante SNT (`COMPROVANTE_SNT`). Mutuamente exclusivos. A etapa 5
+    (Resposta ao solicitante) é uma ação única (`POST /processos/{id}/
+    finalizar` → `ProcessoService.finalizarResposta`) que envia o e-mail
+    com o anexo obrigatório já embutido, em vez de "gerar e-mail pronto +
+    confirmar" em dois passos.
 14. **Solicitante pode cancelar até a decisão final** (desde 2026-07-29):
     `SolicitacaoOnlineService.podeCancelar` libera com a solicitação ainda
     `ENVIADA` ou já `CONVERTIDA` com o `Processo` ainda não decidido.
     Depois de Deferido/Indeferido não cancela mais. Avisa por e-mail os
     avaliadores pendentes (só iniciais).
+15. **Snapshot do coordenador e regra de decisão auditável (2026-08-07/10):**
+    `Parecer.eraCoordenadorNoVoto` (nullable) grava se o votante ERA
+    coordenador NO MOMENTO do voto — `ProcessoValidator
+    .temVotoCoordenadorFavoravel` lê esse snapshot, nunca o cargo ao vivo.
+    `service/dto/RegraDecisao` (`MAIORIA_SIMPLES`/`VOTO_COORDENADOR`/
+    `CANCELAMENTO`/`NAO_DECIDIDO`) + `ProcessoValidator.regraAplicada` é a
+    fonte única de "por que decidiu assim", usada no dossiê, no Relatório
+    Final e no badge `layout :: badgeRegraDecisao` (4 telas).
+16. **"Solicita informação" aceita múltiplos pedidos simultâneos** (vários
+    avaliadores podem pedir informação no mesmo processo, já que a pausa
+    não bloqueia os outros dois de votar): `SolicitacaoOnlineService
+    .EstadoInformacaoComplementar` avalia cada pedido independentemente —
+    um envio do solicitante responde a TODOS os pedidos abertos naquele
+    momento (decisão de produto confirmada).
+17. **Dados adicionais do paciente** (`pacienteDataNascimento`, `pacienteCpf`
+    — módulo-11 via `CpfUtil`, `pacienteSexo` — enum `Sexo`, `pacienteNomeMae`
+    opcional), em `Processo`/`SolicitacaoOnline`, nunca chegam ao avaliador.
+    **`pacienteDataNascimento` PRECISA de `@DateTimeFormat(iso =
+    DateTimeFormat.ISO.DATE)`** — sem essa anotação o Thymeleaf renderiza o
+    `LocalDate` no formato da JVM (não ISO) no `value` do `<input
+    type="date">`, que o navegador descarta em silêncio (campo some, sem
+    erro) — bug real de produção já corrigido; qualquer `LocalDate` novo
+    ligado a `<input type="date">` via `th:field` precisa dessa anotação.
+18. **`Processo.emailAdicional`** (opcional, `SolicitacaoOnline` espelha):
+    recebe CÓPIA (nunca substituição) dos e-mails de atualização daquele
+    processo (`ProcessoService.ccEmailAdicional`, fonte única) — nunca usado
+    nos e-mails ao time interno (avaliador).
+19. **Confirmação de conflito de equipe** (2026-08-17): ao escolher os 3
+    médicos em `processos/form.html`, se algum for da mesma equipe do
+    solicitante (`ConflitoEquipeMatcher`), o front pede confirmação antes de
+    cadastrar (`GET /processos/conflito-equipe`) — aviso client-side,
+    fail-open, não substitui a checagem já existente na tela de detalhe.
 
 ## Perfis e permissões (`SecurityConfig`)
 - **ADMIN**: acesso total, incluindo `/usuarios/**` e `/auditoria/**`
@@ -202,9 +236,28 @@ de divergência).
   como não-nula numa entidade já populada, ou um novo valor de
   `@Enumerated(STRING)`, exige verificação/backfill manual em prod logo
   após o deploy (Postgres da VM, não mais Neon).
+- **Nunca editar arquivo fonte enquanto `mvn test`/`mvn verify` está
+  rodando em background** — corrompe `target/classes`/`target/test-classes`
+  e produz falhas em cascata não relacionadas. Esperar terminar.
+
+## UI — decisões fixas (não reabrir sem pedido explícito do usuário)
+- **Não fragmentar `processos/detalhe.html`** em arquivos/componentes
+  menores — decisão de produto reafirmada em múltiplos relatórios de UI.
+- **Cada opção lado a lado usa SUA PRÓPRIA cor semântica** (voto, atalho,
+  badge) — nunca uma cor neutra genérica. O card "Atalhos" já foi revertido
+  2× de volta pro esquema colorido; não uniformizar de novo.
+- **Chat com o solicitante em `/processos/{id}` fica sempre na barra
+  lateral esquerda** — já foi movido por engano uma vez e teve que voltar.
+- Redesign visual (tokens `--saur-*`, `.cartao-resultado`, `.chip-protocolo`
+  etc.) cobre Portal do Solicitante e Portal do Avaliador; **não** se
+  estende à área do operador (ADMIN/OPERADOR). Dourado continua sendo
+  "atenção", não vira cor de marca; sem ilustrações SVG próprias.
 
 ## Como trabalhar
 - Antes de codar mudanças de domínio, releia `CLAUDE.md` e este arquivo.
+- Precisa do histórico/"porquê" de uma decisão antiga que não está mais
+  aqui? `docs/INDEX.md` cataloga todo `docs/*.md` (resumo de 1 linha cada)
+  — `grep` ali e no arquivo certo em vez de adivinhar.
 - Ao propor um módulo novo, prefira isolar o risco: não afrouxe invariantes
   já documentados do `Processo`/`Parecer` para acomodar um fluxo
   experimental — crie uma entidade de staging separada (como
