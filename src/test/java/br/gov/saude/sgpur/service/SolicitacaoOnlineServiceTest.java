@@ -179,6 +179,36 @@ class SolicitacaoOnlineServiceTest {
         org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(any());
     }
 
+    /**
+     * notificarOperadores (disparado por criar): destinatario e ADMIN/OPERADOR
+     * interno, nunca avaliador - passou a incluir CPF (formatado) e data de
+     * nascimento no bloco de identificacao quando preenchidos (ver
+     * docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md).
+     */
+    @Test
+    void criarNotificaOperadoresComCpfEDataDeNascimentoDoPaciente() {
+        when(repository.save(any(SolicitacaoOnline.class))).thenAnswer(inv -> inv.getArgument(0));
+        Usuario operador = new Usuario();
+        operador.setUsername("operador1");
+        operador.setPerfil(Perfil.OPERADOR);
+        operador.setEmail("operador@example.com");
+        when(usuarioRepository.findByPerfilInAndAtivoTrue(any()))
+            .thenReturn(java.util.List.of(operador));
+        when(emailSenderService.enviar(any(String[].class), any(), any(), any())).thenReturn(true);
+
+        service.criar(solicitacaoPedido(), usuarioSolicitante(1L), null);
+
+        var corpoCaptor = org.mockito.ArgumentCaptor.forClass(String.class);
+        org.mockito.Mockito.verify(emailSenderService)
+            .enviar(any(String[].class), any(), any(), corpoCaptor.capture());
+        String corpo = corpoCaptor.getValue();
+        // solicitacaoPedido() usa CPF "11144477735" e nascimento 1985-03-15
+        assertThat(corpo).contains("CPF: 111.444.777-35");
+        assertThat(corpo).contains("Data de nascimento: 15/03/1985");
+        assertThat(corpo).doesNotContain("CPF: null");
+        assertThat(corpo).doesNotContain("Data de nascimento: null");
+    }
+
     @Test
     void cancelarPorOutroUsuarioLancaExcecao() {
         SolicitacaoOnline s = solicitacaoPedido();

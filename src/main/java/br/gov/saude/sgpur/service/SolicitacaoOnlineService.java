@@ -533,17 +533,32 @@ public class SolicitacaoOnlineService {
                 + "notificacao da solicitacao {} nao enviada.", s.getId());
             return;
         }
+        // Bloco de identificacao (destinatario e ADMIN/OPERADOR interno, nunca
+        // avaliador - CPF/data de nascimento sao nullable em solicitacao antiga
+        // e so entram no e-mail quando ja preenchidos, mesmo criterio de
+        // EmailTemplateService.blocoIdentificacaoPaciente).
+        StringBuilder identificacao = new StringBuilder();
+        identificacao.append("Paciente: ").append(s.getPacienteNome()).append('\n');
+        identificacao.append("RGCT/SNT: ").append(s.getPacienteRgct()).append('\n');
+        if (s.getPacienteCpf() != null && !s.getPacienteCpf().isBlank()) {
+            identificacao.append("CPF: ").append(CpfUtil.formatar(s.getPacienteCpf())).append('\n');
+        }
+        if (s.getPacienteDataNascimento() != null) {
+            identificacao.append("Data de nascimento: ")
+                .append(s.getPacienteDataNascimento().format(
+                    java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy")))
+                .append('\n');
+        }
+        identificacao.append("Equipe solicitante: ").append(s.getSolicitanteEquipe());
+
         String corpo = """
             Uma nova solicitacao de urgencia renal foi enviada pelo Portal do Solicitante.
 
-            Paciente: %s
-            RGCT/SNT: %s
-            Equipe solicitante: %s
+            %s
 
             Acesse a fila de triagem para revisar e prosseguir com o cadastro do processo:
             %s/processos/solicitacoes-online/%d
-            """.formatted(s.getPacienteNome(), s.getPacienteRgct(), s.getSolicitanteEquipe(),
-                baseUrl, s.getId());
+            """.formatted(identificacao, baseUrl, s.getId());
         emailSenderService.enviar(emails, null,
             "Nova solicitacao online aguardando triagem - " + s.getPacienteNome(), corpo);
     }
