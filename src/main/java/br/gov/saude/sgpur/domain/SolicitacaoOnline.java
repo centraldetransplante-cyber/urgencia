@@ -49,25 +49,31 @@ public class SolicitacaoOnline {
 
     /**
      * Data de nascimento, CPF (so digitos) e sexo do paciente.
-     * {@code @NotNull}/{@code @NotBlank} na Bean Validation, mas
-     * DELIBERADAMENTE sem {@code nullable = false} na coluna - mesma lacuna
-     * ja existente em {@code pacienteRgct}, agora por decisao consciente de
-     * compatibilidade com solicitacoes ja gravadas em producao antes destes
-     * campos existirem (ver
-     * docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md). Nunca chegam
-     * ao avaliador (so ate o Relatorio Final/dossie, do lado do operador).
+     *
+     * <p><b>HOTFIX de 2026-08-22 (producao quebrada):</b> mesma correcao
+     * aplicada a {@link Processo#getPacienteDataNascimento()}/
+     * {@code getPacienteCpf()}/{@code getPacienteSexo()} - ver o javadoc
+     * completo la. Resumo: {@code @NotNull}/{@code @NotBlank}/{@code @Size}
+     * na ENTIDADE quebram com {@code ConstraintViolationException}/500
+     * QUALQUER escrita (cancelar, devolver, converter) numa
+     * {@code SolicitacaoOnline} legada com esses campos NULL (criadas antes
+     * deles existirem), porque o Hibernate valida a entidade inteira a cada
+     * flush - nao so na criacao. A obrigatoriedade de verdade, para
+     * solicitacao NOVA, ja vive (e sempre viveu) em
+     * {@code SolicitacaoOnlineService.criar} (checagem explicita,
+     * {@code IllegalArgumentException}) - nunca reintroduzir Bean Validation
+     * obrigatoria nestes 3 campos na entidade.</p>
+     *
+     * <p>Nunca chegam ao avaliador (so ate o Relatorio Final/dossie, do lado
+     * do operador).</p>
      */
-    @NotNull
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     @Column(name = "paciente_data_nascimento")
     private LocalDate pacienteDataNascimento;
 
-    @NotBlank
-    @Size(min = 11, max = 11, message = "CPF deve ter 11 digitos.")
     @Column(name = "paciente_cpf", length = 11)
     private String pacienteCpf;
 
-    @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "paciente_sexo", length = 20)
     private Sexo pacienteSexo;

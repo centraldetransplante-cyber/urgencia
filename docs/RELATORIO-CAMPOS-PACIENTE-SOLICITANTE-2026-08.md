@@ -149,7 +149,54 @@ persiste um `Processo`/`SolicitacaoOnline` de verdade (via `@SpringBootTest`
 + H2 real) precisa deles preenchidos, senão a gravação falha com violação de
 constraint da Bean Validation no flush do Hibernate.
 
-## 8. Não incluído nesta leva (fora de escopo, não esquecimento)
+## 8. HOTFIX de 2026-08-22 — produção quebrada, Bean Validation removida da entidade
+
+**No mesmo dia do merge, produção quebrou por completo para qualquer escrita
+em `Processo` já existente** (finalizar resposta, decidir, editar, reabrir —
+qualquer ação que dispare um flush do Hibernate). Os 12 processos reais de
+produção, criados antes desta feature, têm `pacienteDataNascimento`/
+`pacienteCpf`/`pacienteSexo` NULL — e a seção 7 acima já registrava, sem
+perceber a gravidade, o mecanismo exato da causa: "a gravação falha com
+violação de constraint da Bean Validation no flush do Hibernate". O
+`@NotNull`/`@NotBlank` na ENTIDADE dispara essa validação em **qualquer**
+INSERT/UPDATE (`jakarta.persistence.validation.mode=AUTO`), não só quando o
+controller usa `@Valid` — mesmo um método que só grava `dataEnvioSnt`, sem
+nenhuma relação com paciente, quebrava com `ConstraintViolationException`/500
+num processo legado. A ressalva "DELIBERADAMENTE sem `nullable = false` na
+coluna" (seções acima) não bastava: a coluna aceitar NULL não impede o
+Hibernate de validar a entidade Java antes do flush.
+
+**Correção:** `@NotNull`/`@NotBlank`/`@Size` removidos da entidade em
+`Processo`/`SolicitacaoOnline` para os 3 campos — mesmo padrão já documentado
+no `CLAUDE.md` para `Usuario.email` ("obrigatoriedade fica na camada web, não
+na entidade"). A obrigatoriedade de verdade, para dado **novo**:
+- `SolicitacaoOnline`: já vivia em `SolicitacaoOnlineService.criar`
+  (checagem explícita, `IllegalArgumentException`) — não precisou mudar,
+  só deixou de ser redundante/perigosa na entidade.
+- `Processo`: não existia (dependia só do `@Valid` da entidade). Adicionada
+  em `ProcessoDetalheController.salvar`/`atualizar` (`result.rejectValue`,
+  mesmo padrão já usado ali para o dígito verificador do CPF).
+
+**O mesmo risco também existia (e foi corrigido) em `SolicitacaoOnline`**:
+`cancelar`/`devolver`/`converter` mutam a entidade GERENCIADA carregada do
+banco e dependem do flush no commit da transação — uma `SolicitacaoOnline`
+legada com esses 3 campos NULL quebraria do mesmo jeito ao ser cancelada,
+devolvida ou convertida, mesmo sem `criar` ser chamado de novo.
+
+**Por que a suíte não pegou isso antes do merge:** todo teste que persiste um
+`Processo`/`SolicitacaoOnline` real (H2) já preenchia os 4 campos novos nos
+fixtures (a seção 7 documenta isso como premissa, não como risco) — nenhum
+simulava um registro PRÉ-EXISTENTE sem eles, que é exatamente o cenário real
+de produção (dado legado, não dado de teste criado do zero). Testes de
+regressão novos: `ProcessoAtualizacaoIntegrationTest
+.processoLegadoComCamposDePacienteNulosAceitaQualquerOutraEscritaSemQuebrar`
+e `SolicitacaoOnlineCamposIntegrationTest
+.solicitacaoLegadaComCamposDePacienteNulosAceitaDevolucaoSemQuebrar` —
+ambos criam o registro diretamente com os 3 campos NULL (sem passar pela
+validação de criação) e confirmam que uma escrita não relacionada continua
+funcionando.
+
+## 9. Não incluído nesta leva (fora de escopo, não esquecimento)
 
 O Ofício de Indeferimento (`OficioService`) e os e-mails prontos
 (`EmailTemplateService`) continuam identificando o paciente só pelo nome
