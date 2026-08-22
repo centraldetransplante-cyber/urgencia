@@ -13,6 +13,10 @@ class EmailTemplateServiceTest {
 
     private final EmailTemplateService service = new EmailTemplateService(new EmailProperties());
 
+    /** CPF valido (modulo-11), mesmo usado em CpfUtilTest. */
+    private static final String CPF_VALIDO = "11144477735";
+    private static final String CPF_FORMATADO = "111.444.777-35";
+
     private Processo processo() {
         Processo p = new Processo();
         p.setNumero("07/2026");
@@ -20,6 +24,8 @@ class EmailTemplateServiceTest {
         p.setPacienteRgct("123456-4360");
         p.setSolicitanteEquipe("Hospital Solicitante");
         p.setDataSituacaoEspecial(LocalDate.of(2026, 6, 1));
+        p.setPacienteCpf(CPF_VALIDO);
+        p.setPacienteDataNascimento(LocalDate.of(1990, 3, 15));
         p.addParecer(new Parecer(new MembroUrgenciaRenal("HCPA", "Dr. Avaliador", null)));
         return p;
     }
@@ -70,6 +76,9 @@ class EmailTemplateServiceTest {
         assertThat(info.corpo()).contains("Joao Paciente Secreto");
         assertThat(info.assunto()).contains("Joao Paciente Secreto");
         assertThat(info.corpo()).contains("07/2026");
+        // 2026-08-22: bloco de identificacao tambem leva CPF e data de nascimento
+        assertThat(info.corpo()).contains("CPF: " + CPF_FORMATADO);
+        assertThat(info.corpo()).contains("Data de nascimento: 15/03/1990");
     }
 
     /**
@@ -128,6 +137,11 @@ class EmailTemplateServiceTest {
 
         // Imparcialidade: nome completo do paciente NUNCA aparece no lembrete ao avaliador
         assertThat(lembrete.corpo()).doesNotContain("Joao Paciente Secreto");
+        // 2026-08-22: CPF/data de nascimento sao ainda mais identificadores que o
+        // nome - jamais podem chegar a um template de avaliador.
+        assertThat(lembrete.corpo()).doesNotContain(CPF_VALIDO);
+        assertThat(lembrete.corpo()).doesNotContain(CPF_FORMATADO);
+        assertThat(lembrete.corpo()).doesNotContain("15/03/1990");
         // Deve conter o numero do processo, o texto de disponibilidade para avaliacao
         // e o nome do avaliador destinatario
         assertThat(lembrete.corpo()).contains("07/2026");
@@ -193,7 +207,7 @@ class EmailTemplateServiceTest {
     @Test
     void nenhumTemplateUsaCaixaAltaComoEnfaseNoMeioDaFrase() {
         java.util.Set<String> siglasPermitidas = java.util.Set.of(
-            "SNT", "CET", "RS", "SAUR", "SES", "PDF", "RGCT", "HCPA", "ISCMPA");
+            "SNT", "CET", "RS", "SAUR", "SES", "PDF", "RGCT", "HCPA", "ISCMPA", "CPF");
         var regex = java.util.regex.Pattern.compile("\\b\\p{Lu}{2,}\\b");
 
         for (EmailTemplate t : todosOsTemplates()) {
@@ -248,6 +262,8 @@ class EmailTemplateServiceTest {
             String corpo = t.corpo();
             int bloco = corpo.indexOf("Processo: 07/2026");
             int paciente = corpo.indexOf("Paciente: Joao Paciente Secreto");
+            int cpf = corpo.indexOf("CPF: " + CPF_FORMATADO);
+            int nascimento = corpo.indexOf("Data de nascimento: 15/03/1990");
             int equipe = corpo.indexOf("Equipe solicitante: Hospital Solicitante");
             int prosa = corpo.indexOf("Informamos que o processo acima");
             if (prosa < 0) {
@@ -256,10 +272,112 @@ class EmailTemplateServiceTest {
 
             assertThat(bloco).as("bloco de identificacao ausente em '%s'", t.chave()).isNotNegative();
             assertThat(paciente).isGreaterThan(bloco);
-            assertThat(equipe).isGreaterThan(paciente);
+            // 2026-08-22: CPF e data de nascimento tambem fazem parte do bloco,
+            // entre o paciente e a equipe solicitante.
+            assertThat(cpf).as("CPF ausente do bloco de identificacao em '%s'", t.chave()).isGreaterThan(paciente);
+            assertThat(nascimento)
+                .as("data de nascimento ausente do bloco de identificacao em '%s'", t.chave())
+                .isGreaterThan(cpf);
+            assertThat(equipe).isGreaterThan(nascimento);
             assertThat(prosa)
                 .as("a prosa deve vir DEPOIS do bloco de identificacao em '%s'", t.chave())
                 .isGreaterThan(equipe);
         }
+    }
+
+    // ===================================================================
+    // CPF e data de nascimento do paciente (2026-08-22)
+    //
+    // Item pedido explicitamente pelo dono do produto: os campos novos de
+    // identificacao do paciente (CPF, data de nascimento, sexo, nome da mae)
+    // podem melhorar o bloco de identificacao dos e-mails a EQUIPE
+    // SOLICITANTE, mas JAMAIS podem chegar a um e-mail de avaliador -
+    // imparcialidade e regra absoluta. Sexo/nome da mae ficam de fora do
+    // e-mail de proposito (ver javadoc de EmailTemplateService).
+    // ===================================================================
+
+    /**
+     * Confirma, de uma vez so, que NENHUM template de avaliador (convite
+     * individual, convite em lote, lembrete, cancelamento, aviso de
+     * informacao complementar disponivel) contem o CPF nem a data de
+     * nascimento do paciente - nem formatados, nem crus.
+     */
+    @Test
+    void nenhumTemplateDeAvaliadorContemCpfOuDataDeNascimentoDoPaciente() {
+        Processo enviado = processo();
+        enviado.setStatus(StatusProcesso.ENVIADO);
+        enviado.getPareceres().forEach(par -> par.setDataEnvio(LocalDate.now()));
+
+        MembroUrgenciaRenal membro = new MembroUrgenciaRenal("HCPA", "Dra. Avaliadora", "a@example.com");
+
+        java.util.List<EmailTemplate> templatesDeAvaliador = new java.util.ArrayList<>();
+        // emailConvitePortal (chave "convite-portal") so e gerado via gerar(processo ENVIADO)
+        templatesDeAvaliador.addAll(service.gerar(enviado).stream()
+            .filter(t -> t.chave().equals("convite-portal")).toList());
+        templatesDeAvaliador.add(service.emailConviteAvaliador(enviado, membro));
+        templatesDeAvaliador.add(service.emailCancelamentoAvaliador(enviado, membro));
+        templatesDeAvaliador.add(service.emailLembreteAvaliador(enviado, membro));
+        templatesDeAvaliador.add(service.emailInfoComplementarDisponivel(enviado, membro));
+
+        assertThat(templatesDeAvaliador).isNotEmpty();
+        for (EmailTemplate t : templatesDeAvaliador) {
+            String texto = t.corpo() + "\n" + t.assunto() + "\n" + t.titulo();
+            assertThat(texto)
+                .as("template de avaliador '%s' NAO pode conter o CPF do paciente", t.chave())
+                .doesNotContain(CPF_VALIDO)
+                .doesNotContain(CPF_FORMATADO);
+            assertThat(texto)
+                .as("template de avaliador '%s' NAO pode conter a data de nascimento do paciente", t.chave())
+                .doesNotContain("15/03/1990")
+                .doesNotContain("1990");
+            // Reforco da regra ja existente: nome completo tambem nunca aparece.
+            assertThat(texto).doesNotContain("Joao Paciente Secreto");
+        }
+    }
+
+    /**
+     * Os 3 e-mails a EQUIPE SOLICITANTE (Deferido, Indeferido, pedido de
+     * informacao complementar) passam a exibir CPF e data de nascimento no
+     * bloco de identificacao, quando o processo ja tem esses dados.
+     */
+    @Test
+    void emailsAoSolicitanteExibemCpfEDataDeNascimentoQuandoPreenchidos() {
+        Processo deferido = processo();
+        deferido.setStatus(StatusProcesso.DEFERIDO);
+        Processo indeferido = processo();
+        indeferido.setStatus(StatusProcesso.INDEFERIDO);
+        Processo info = processo();
+        info.setStatus(StatusProcesso.SOLICITA_INFORMACAO);
+
+        for (Processo p : java.util.List.of(deferido, indeferido, info)) {
+            EmailTemplate t = service.gerar(p).get(0);
+            assertThat(t.corpo())
+                .as("template '%s' deveria exibir o CPF formatado do paciente", t.chave())
+                .contains("CPF: " + CPF_FORMATADO);
+            assertThat(t.corpo())
+                .as("template '%s' deveria exibir a data de nascimento do paciente", t.chave())
+                .contains("Data de nascimento: 15/03/1990");
+        }
+    }
+
+    /**
+     * Processo antigo, anterior a estes 4 campos (nullable no banco - ver
+     * docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md, secao 3): o
+     * e-mail nao pode quebrar nem exibir "null" - usa o mesmo fallback "-" ja
+     * usado em PdfRelatorioBuilder.nvl.
+     */
+    @Test
+    void emailAoSolicitanteUsaTracoComoFallbackQuandoCpfEDataDeNascimentoAindaNaoForamPreenchidos() {
+        Processo p = processo();
+        p.setPacienteCpf(null);
+        p.setPacienteDataNascimento(null);
+        p.setStatus(StatusProcesso.DEFERIDO);
+
+        EmailTemplate deferido = service.gerar(p).stream()
+            .filter(e -> e.chave().equals("deferido")).findFirst().orElseThrow();
+
+        assertThat(deferido.corpo()).contains("CPF: -");
+        assertThat(deferido.corpo()).contains("Data de nascimento: -");
+        assertThat(deferido.corpo()).doesNotContain("null");
     }
 }

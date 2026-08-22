@@ -40,6 +40,32 @@ import java.util.stream.Collectors;
  *       solicitante (processo / paciente / equipe), em vez de uma linha de dado
  *       solta no meio dos paragrafos.</li>
  * </ol>
+ *
+ * <p><strong>CPF e data de nascimento do paciente (2026-08-22)</strong> - desde a
+ * coleta desses campos no Portal do Solicitante (ver
+ * docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md), o bloco de identificacao
+ * dos e-mails dirigidos a EQUIPE SOLICITANTE (resposta de Deferido/Indeferido,
+ * pedido de informacao complementar) tambem exibe CPF e data de nascimento -
+ * mesmos dois campos, na mesma ordem, ja usados na tabela "1. Dados da solicitacao"
+ * do Relatorio Final ({@code RelatorioService}) e no dossie exportado
+ * ({@code ExportacaoProcessoService}). Sexo e nome da mae ficam de fora do e-mail
+ * de proposito: a equipe solicitante ja informou esses dados no proprio pedido,
+ * entao repeti-los aqui nao ajuda a identificar nada - CPF e data de nascimento sao
+ * os dois identificadores que valem a pena repetir numa correspondencia curta,
+ * porque sao o que outros sistemas/documentos da Central de Transplantes cruzam.
+ * Fallback {@code "-"} (mesma convencao de {@code PdfRelatorioBuilder.nvl}) quando o
+ * campo ainda nao foi preenchido (processo antigo, anterior a estes campos - ver
+ * secao 3 do relatorio citado, nenhum e {@code NOT NULL} no banco).</p>
+ *
+ * <p><strong>Nunca chega aos e-mails do avaliador.</strong> Os templates
+ * {@link #emailConviteAvaliador}, {@link #emailCancelamentoAvaliador},
+ * {@link #emailLembreteAvaliador}, {@link #emailInfoComplementarDisponivel} e
+ * {@link #emailConvitePortal} continuam usando só {@link Iniciais#de(String)} -
+ * nenhum deles chama {@link #cpfFormatado(Processo)}/
+ * {@link #dataNascimentoFormatada(Processo)}. Regra de imparcialidade inalterada
+ * (ver CLAUDE.md, "Identificacao do paciente") - CPF em particular identifica o
+ * paciente de forma ainda mais inequivoca que o nome completo, entao a mesma trava
+ * vale com força redobrada para ele.</p>
  */
 @Service
 public class EmailTemplateService {
@@ -62,6 +88,28 @@ public class EmailTemplateService {
 
     private String assunto(String resto) {
         return emailProperties.getPrefixoAssunto() + " - " + resto;
+    }
+
+    /**
+     * CPF do paciente formatado ({@code 000.000.000-00}) para o bloco de
+     * identificacao dos e-mails a equipe SOLICITANTE. {@code "-"} quando o
+     * campo ainda nao foi preenchido (processo antigo). Uso restrito aos
+     * templates dirigidos ao solicitante - nunca chamado pelos templates de
+     * avaliador (ver javadoc da classe).
+     */
+    private String cpfFormatado(Processo p) {
+        String cpf = p.getPacienteCpf();
+        return (cpf == null || cpf.isBlank()) ? "-" : CpfUtil.formatar(cpf);
+    }
+
+    /**
+     * Data de nascimento do paciente formatada ({@code dd/MM/yyyy}) para o
+     * bloco de identificacao dos e-mails a equipe SOLICITANTE. {@code "-"}
+     * quando o campo ainda nao foi preenchido (processo antigo). Mesma
+     * restricao de uso de {@link #cpfFormatado(Processo)}.
+     */
+    private String dataNascimentoFormatada(Processo p) {
+        return p.getPacienteDataNascimento() != null ? p.getPacienteDataNascimento().format(DATA) : "-";
     }
 
     public List<EmailTemplate> gerar(Processo p) {
@@ -348,6 +396,8 @@ public class EmailTemplateService {
 
             Processo: %s
             Paciente: %s
+            CPF: %s
+            Data de nascimento: %s
             Equipe solicitante: %s
 
             Durante a análise do processo acima, um(a) dos(as) avaliadores(as)
@@ -361,8 +411,8 @@ public class EmailTemplateService {
 
             Atenciosamente,
             %s
-            """.formatted(p.getNumero(), p.getPacienteNome(), p.getSolicitanteEquipe(),
-                blocoPedidoDeInformacao(p), assinatura());
+            """.formatted(p.getNumero(), p.getPacienteNome(), cpfFormatado(p), dataNascimentoFormatada(p),
+                p.getSolicitanteEquipe(), blocoPedidoDeInformacao(p), assinatura());
 
         return new EmailTemplate("solicita-info",
             "Pedido de informação complementar ao solicitante", "question-circle",
@@ -417,6 +467,8 @@ public class EmailTemplateService {
 
             Processo: %s
             Paciente: %s
+            CPF: %s
+            Data de nascimento: %s
             Equipe solicitante: %s
 
             Informamos que o processo acima foi deferido pela equipe de
@@ -429,7 +481,8 @@ public class EmailTemplateService {
 
             Atenciosamente,
             %s
-            """.formatted(p.getNumero(), p.getPacienteNome(), p.getSolicitanteEquipe(), assinatura());
+            """.formatted(p.getNumero(), p.getPacienteNome(), cpfFormatado(p), dataNascimentoFormatada(p),
+                p.getSolicitanteEquipe(), assinatura());
 
         return new EmailTemplate("deferido", "Resposta ao solicitante (Deferido)", "check-circle",
             assunto("Processo " + p.getNumero() + " - Deferido"), corpo);
@@ -444,6 +497,8 @@ public class EmailTemplateService {
 
             Processo: %s
             Paciente: %s
+            CPF: %s
+            Data de nascimento: %s
             Equipe solicitante: %s
 
             Informamos que o processo acima foi indeferido pela equipe de
@@ -457,7 +512,8 @@ public class EmailTemplateService {
 
             Atenciosamente,
             %s
-            """.formatted(p.getNumero(), p.getPacienteNome(), p.getSolicitanteEquipe(), motivo, assinatura());
+            """.formatted(p.getNumero(), p.getPacienteNome(), cpfFormatado(p), dataNascimentoFormatada(p),
+                p.getSolicitanteEquipe(), motivo, assinatura());
 
         return new EmailTemplate("indeferido", "Resposta ao solicitante (Indeferido)", "x-circle",
             assunto("Processo " + p.getNumero() + " - Indeferido"), corpo);
