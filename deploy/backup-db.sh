@@ -123,10 +123,19 @@ find "${BACKUP_DIR}" -name 'sgpur-*.sql.gz' -type f -mtime +${RETENCAO_DIAS} -de
 # catastrofico. O client_id compartilhado do rclone sera desativado durante
 # 2026 - quando isso acontecer, e AQUI que vai aparecer.
 OFFSITE_OK=0
-if rclone copy "${ARQUIVO}" "${REMOTO}/"; then
+# Toda saida (stdout+stderr) das 3 chamadas de rclone desta secao e acumulada
+# aqui, alem de continuar aparecendo ao vivo no log de cron (via tee) como
+# sempre apareceu - serve so para permitir detectar, depois, um padrao
+# especifico de erro (token OAuth expirado) sem mudar nenhum comportamento de
+# quem le o log manualmente. Truncado a cada execucao; nao contem segredo
+# nenhum (o rclone nunca imprime client_secret/token nessas mensagens).
+RCLONE_ERRO_LOG="${BACKUP_DIR}/.ultimo-erro-rclone.log"
+: > "${RCLONE_ERRO_LOG}"
+
+if rclone copy "${ARQUIVO}" "${REMOTO}/" 2>&1 | tee -a "${RCLONE_ERRO_LOG}"; then
     # Confirma que o arquivo REALMENTE chegou: "rclone copy" pode retornar 0 e
     # ainda assim nada estar la (credencial expirada em alguns modos, quota).
-    if rclone lsf "${REMOTO}/" | grep -qx "${NOME_ARQUIVO}"; then
+    if rclone lsf "${REMOTO}/" 2>&1 | tee -a "${RCLONE_ERRO_LOG}" | grep -qx "${NOME_ARQUIVO}"; then
         OFFSITE_OK=1
         date +%F > "${MARCADOR}"
         log "Copia offsite confirmada no Drive: ${NOME_ARQUIVO}"
@@ -141,7 +150,7 @@ fi
 ANEXOS_DIR="/opt/sgpur/data/anexos"
 if [ "${OFFSITE_OK}" = "1" ] && [ -d "${ANEXOS_DIR}" ]; then
     if rclone sync "${ANEXOS_DIR}" "${REMOTO}/anexos/" \
-            --backup-dir "${REMOTO}/anexos-archive/${TIMESTAMP}/"; then
+            --backup-dir "${REMOTO}/anexos-archive/${TIMESTAMP}/" 2>&1 | tee -a "${RCLONE_ERRO_LOG}"; then
         log "Anexos sincronizados: ${ANEXOS_DIR}"
     else
         log "ERRO: falha ao sincronizar os anexos para o Drive."
@@ -156,6 +165,46 @@ fi
 if [ "${OFFSITE_OK}" != "1" ]; then
     ULTIMO_OK="(nunca confirmado)"
     [ -f "${MARCADOR}" ] && ULTIMO_OK=$(cat "${MARCADOR}")
+
+    # Deteccao de um padrao especifico: token OAuth do rclone expirado/revogado
+    # (achado real em producao em 2026-08, ver CLAUDE.md). Quando reconhecido,
+    # o e-mail ganha um paragrafo extra com o comando exato de correcao - sem
+    # isso, cada ocorrencia exige reconstruir a investigacao do zero.
+    PARAGRAFO_OAUTH=""
+    if grep -qiE "invalid_grant|couldn.t fetch token" "${RCLONE_ERRO_LOG}" 2>/dev/null; then
+        PARAGRAFO_OAUTH="
+
+ISTO PARECE SER TOKEN OAUTH DO RCLONE EXPIRADO/REVOGADO (nao e cota nem rede):
+o erro 'invalid_grant' / 'couldn't fetch token' significa que o refresh_token
+salvo em rclone.conf nao vale mais - precisa reautorizar.
+
+Como corrigir:
+1. Na VM, como root/ubuntu: sudo -u postgres rclone config reconnect gdrive:
+   Responda 'y' (renovar), depois 'y' (usar navegador) as duas primeiras
+   perguntas. O comando vai imprimir uma URL do tipo
+   http://127.0.0.1:53682/auth?state=... e ficar esperando o codigo.
+2. Essa URL so funciona atraves de um tunel SSH ate a porta 53682 da VM
+   (o proprio rclone escuta so em 127.0.0.1:53682 na VM). Abra um tunel de
+   uma maquina com navegador, por exemplo:
+     ssh -L 53682:127.0.0.1:53682 ubuntu@<ip-da-vm>
+   e, com o tunel aberto, acesse a URL impressa no passo 1 no navegador
+   dessa mesma maquina, logando com a conta Google dona do Drive de backup
+   e clicando em Permitir (ignore o erro de 'pagina nao encontrada' no final
+   do fluxo - e esperado).
+3. Depois de autorizar, o comando do passo 1 ainda vai perguntar 'Configure
+   this as a Shared Drive?' - responda 'n' (padrao) para ele terminar e
+   salvar o token novo.
+4. Confirme com: sudo -u postgres rclone lsf gdrive:sgpur-backups/ --max-depth 1
+
+CAUSA RAIZ PROVAVEL, para nao se repetir: o app OAuth (client_id proprio do
+rclone) provavelmente esta em modo 'Testing' no Google Cloud Console, e
+refresh tokens de app em Testing expiram sozinhos a cada 7 dias. Para
+resolver de vez (nao so remendar de novo), publique o app: no Google Cloud
+Console, va em APIs & Services > OAuth consent screen > Publish App. Isso e
+uma acao humana no navegador do dono da conta Google, nao pode ser feita
+por SSH/script."
+    fi
+
     alertar "[SAUR] FALHA no backup offsite (Google Drive)" \
 "O backup diario do SAUR rodou em $(hostname) em $(date +%F\ %T), mas a copia
 para o Google Drive FALHOU.
@@ -165,11 +214,13 @@ Ultima copia offsite confirmada: ${ULTIMO_OK}
 
 Enquanto isso nao for resolvido, perder a VM significa perder os dados.
 
-Causa mais provavel: o rclone desta VM usa o client_id compartilhado do
-projeto rclone, que esta sendo desativado durante 2026. A correcao e criar um
-client_id proprio - ver deploy/README-deploy.md, secao de backup.
+Causa mais provavel (generica): o rclone desta VM usa o client_id
+compartilhado do projeto rclone, que esta sendo desativado durante 2026. A
+correcao e criar um client_id proprio - ver deploy/README-deploy.md, secao
+de backup.${PARAGRAFO_OAUTH}
 
-Verifique: sudo tail -30 /var/log/sgpur-backup.log"
+Verifique: sudo tail -30 /var/log/sgpur-backup.log
+Ultimo erro do rclone capturado em: ${RCLONE_ERRO_LOG}"
 fi
 
 # ---------- Alerta de copia offsite parada ----------
