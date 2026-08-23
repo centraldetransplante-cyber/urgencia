@@ -47,19 +47,30 @@ public class SchemaMigration implements ApplicationRunner {
      * a operacao ja foi feita antes, ou o recurso simplesmente nao existe
      * nesse dialeto. Qualquer outra falha e tratada como inesperada (WARN),
      * de proposito conservador — na duvida, WARN.
+     *
+     * <p><b>Deliberadamente NAO inclui "syntax error" nem "unsupported"</b>
+     * (revisao de codigo, 2026-08-23): sao fragmentos amplos demais e nao
+     * correspondem a nenhum caso de idempotencia real deste arquivo — todas
+     * as etapas hoje so tratam "ja existe"/"nao existe" como esperado.
+     * Incluir esses dois faria um erro de digitacao FUTURO numa das strings
+     * SQL deste proprio arquivo (ex.: `ALTER TABLE`/`DROP CONSTRAINT`) ser
+     * classificado como esperado e cair em DEBUG — reabrindo, neste mesmo
+     * arquivo, exatamente o problema de falha silenciosa que esta classe foi
+     * escrita para eliminar (achado P1 de
+     * `docs/RELATORIO-VISTORIA-CODIGO-2026-08-22.md`). "feature not
+     * supported" cobre com mais precisao o caso legitimo de dialeto (H2 vs.
+     * Postgres) sem esse risco.
      */
     private static final String[] FRAGMENTOS_FALHA_ESPERADA = {
         "already exists",
         "duplicate",
         "does not exist",
         "unknown data type",
-        "syntax error",
         "feature not supported",
         "not found",
         "table not found",
         "column not found",
-        "constraint not found",
-        "unsupported"
+        "constraint not found"
     };
 
     private final JdbcTemplate jdbc;

@@ -1,5 +1,9 @@
 package br.gov.saude.sgpur.service;
 
+import org.springframework.web.multipart.MultipartFile;
+
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.Locale;
 
 /**
@@ -22,6 +26,31 @@ import java.util.Locale;
 public final class AssinaturaArquivoUtil {
 
     private AssinaturaArquivoUtil() {
+    }
+
+    /**
+     * Mensagem de negocio compartilhada pelos dois storage services
+     * ({@code AnexoStorageService}/{@code AnexoSolicitacaoOnlineStorageService})
+     * quando um upload e rejeitado por extensao OU por assinatura invalida —
+     * nunca expoe o detalhe tecnico de "assinatura invalida" ao usuario final.
+     * Extraida aqui (revisao de codigo, 2026-08-23) para nao duplicar o texto
+     * em cada storage service.
+     */
+    public static final String MSG_TIPO_NAO_PERMITIDO_SUFIXO =
+        ". Envie PDF, imagem (PNG/JPG) ou e-mail (EML/MSG).";
+
+    /**
+     * Le so o inicio do arquivo (suficiente para conferir a assinatura), sem
+     * carregar tudo em memoria. Compartilhado pelos dois storage services
+     * (revisao de codigo, 2026-08-23 — estava duplicado identicamente nos
+     * dois).
+     */
+    public static byte[] lerPrimeirosBytes(MultipartFile arquivo) throws IOException {
+        byte[] buffer = new byte[16];
+        try (InputStream in = arquivo.getInputStream()) {
+            int lidos = in.readNBytes(buffer, 0, buffer.length);
+            return lidos == buffer.length ? buffer : java.util.Arrays.copyOf(buffer, lidos);
+        }
     }
 
     private static final byte[] PDF = {0x25, 0x50, 0x44, 0x46, 0x2D}; // "%PDF-"
