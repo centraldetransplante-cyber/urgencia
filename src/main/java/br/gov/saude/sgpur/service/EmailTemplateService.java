@@ -40,6 +40,18 @@ import java.util.stream.Collectors;
  *       solicitante (processo / paciente / equipe), em vez de uma linha de dado
  *       solta no meio dos paragrafos.</li>
  * </ol>
+ *
+ * <p><strong>Campos novos de identificacao do paciente (2026-08, ver
+ * docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md)</strong> - CPF e data de
+ * nascimento passaram a compor o {@link #blocoIdentificacaoPaciente} usado pelos
+ * e-mails dirigidos a EQUIPE SOLICITANTE/interno (nunca ao avaliador), reforcando
+ * a identificacao inequivoca de qual paciente o e-mail se refere. Sexo e nome da
+ * mae ficaram FORA desse bloco de proposito: nao agregam identificacao inequivoca
+ * relevante para uma correspondencia curta (ja constam do dossie/Relatorio Final,
+ * documentos mais completos - ver {@code ExportacaoProcessoService}/
+ * {@code RelatorioService}). Os dois campos sao NULLABLE (processo antigo, anterior
+ * a esta leva de campos, pode nao te-los preenchidos) - o bloco omite a linha
+ * inteira quando o dado nao existe, nunca imprime "null" ou um valor vazio.</p>
  */
 @Service
 public class EmailTemplateService {
@@ -62,6 +74,30 @@ public class EmailTemplateService {
 
     private String assunto(String resto) {
         return emailProperties.getPrefixoAssunto() + " - " + resto;
+    }
+
+    /**
+     * Bloco de identificação do paciente para e-mails dirigidos à EQUIPE
+     * SOLICITANTE (ou uso interno da Secretaria) - NUNCA usado em e-mail ao
+     * avaliador, que segue restrito a {@link Iniciais#de}.
+     *
+     * <p>Sempre imprime Processo/Paciente/Equipe solicitante (como já era);
+     * CPF e data de nascimento entram como linhas adicionais só quando
+     * preenchidos - os dois campos são nullable em processos antigos, então a
+     * ausência nunca vira "null" nem uma linha vazia no e-mail.</p>
+     */
+    private String blocoIdentificacaoPaciente(Processo p) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("Processo: ").append(p.getNumero()).append('\n');
+        sb.append("Paciente: ").append(p.getPacienteNome()).append('\n');
+        if (p.getPacienteCpf() != null && !p.getPacienteCpf().isBlank()) {
+            sb.append("CPF: ").append(CpfUtil.formatar(p.getPacienteCpf())).append('\n');
+        }
+        if (p.getPacienteDataNascimento() != null) {
+            sb.append("Data de nascimento: ").append(p.getPacienteDataNascimento().format(DATA)).append('\n');
+        }
+        sb.append("Equipe solicitante: ").append(p.getSolicitanteEquipe());
+        return sb.toString();
     }
 
     public List<EmailTemplate> gerar(Processo p) {
@@ -261,9 +297,7 @@ public class EmailTemplateService {
         String corpo = """
             Olá,
 
-            Processo: %s
-            Paciente: %s
-            Equipe solicitante: %s
+            %s
 
             O processo acima foi deferido há %d dia(s) e ainda não tem o comprovante
             de inserção da urgência renal no Sistema Nacional de Transplantes (SNT)
@@ -278,8 +312,7 @@ public class EmailTemplateService {
 
             Atenciosamente,
             %s
-            """.formatted(p.getNumero(), p.getPacienteNome(), p.getSolicitanteEquipe(),
-                diasDesdeDecisao, linkProcesso, assinatura());
+            """.formatted(blocoIdentificacaoPaciente(p), diasDesdeDecisao, linkProcesso, assinatura());
 
         return new EmailTemplate("lembrete-comprovante-snt",
             "Lembrete interno: comprovante SNT pendente", "clipboard2-x",
@@ -346,9 +379,7 @@ public class EmailTemplateService {
         String corpo = """
             Prezados(as),
 
-            Processo: %s
-            Paciente: %s
-            Equipe solicitante: %s
+            %s
 
             Durante a análise do processo acima, um(a) dos(as) avaliadores(as)
             da Urgência Renal solicitou informações complementares para
@@ -361,8 +392,7 @@ public class EmailTemplateService {
 
             Atenciosamente,
             %s
-            """.formatted(p.getNumero(), p.getPacienteNome(), p.getSolicitanteEquipe(),
-                blocoPedidoDeInformacao(p), assinatura());
+            """.formatted(blocoIdentificacaoPaciente(p), blocoPedidoDeInformacao(p), assinatura());
 
         return new EmailTemplate("solicita-info",
             "Pedido de informação complementar ao solicitante", "question-circle",
@@ -415,9 +445,7 @@ public class EmailTemplateService {
         String corpo = """
             Prezados(as),
 
-            Processo: %s
-            Paciente: %s
-            Equipe solicitante: %s
+            %s
 
             Informamos que o processo acima foi deferido pela equipe de
             Urgência Renal.
@@ -429,7 +457,7 @@ public class EmailTemplateService {
 
             Atenciosamente,
             %s
-            """.formatted(p.getNumero(), p.getPacienteNome(), p.getSolicitanteEquipe(), assinatura());
+            """.formatted(blocoIdentificacaoPaciente(p), assinatura());
 
         return new EmailTemplate("deferido", "Resposta ao solicitante (Deferido)", "check-circle",
             assunto("Processo " + p.getNumero() + " - Deferido"), corpo);
@@ -442,9 +470,7 @@ public class EmailTemplateService {
         String corpo = """
             Prezados(as),
 
-            Processo: %s
-            Paciente: %s
-            Equipe solicitante: %s
+            %s
 
             Informamos que o processo acima foi indeferido pela equipe de
             Urgência Renal.
@@ -457,7 +483,7 @@ public class EmailTemplateService {
 
             Atenciosamente,
             %s
-            """.formatted(p.getNumero(), p.getPacienteNome(), p.getSolicitanteEquipe(), motivo, assinatura());
+            """.formatted(blocoIdentificacaoPaciente(p), motivo, assinatura());
 
         return new EmailTemplate("indeferido", "Resposta ao solicitante (Indeferido)", "x-circle",
             assunto("Processo " + p.getNumero() + " - Indeferido"), corpo);

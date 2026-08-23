@@ -262,4 +262,129 @@ class EmailTemplateServiceTest {
                 .isGreaterThan(equipe);
         }
     }
+
+    // ===================================================================
+    // Campos novos de identificacao do paciente (2026-08, ver
+    // docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md): CPF e data de
+    // nascimento no bloco de identificacao dos e-mails a equipe solicitante,
+    // e a garantia de que eles NUNCA vazam para o lado do avaliador.
+    // ===================================================================
+
+    private Processo processoComCpfEDataNascimento() {
+        Processo p = processo();
+        p.setPacienteCpf("52998224725"); // CPF valido (modulo-11) usado nos testes de CpfUtil
+        p.setPacienteDataNascimento(LocalDate.of(1990, 3, 15));
+        return p;
+    }
+
+    /**
+     * Os 3 e-mails dirigidos a EQUIPE SOLICITANTE (Deferido/Indeferido/Solicita
+     * informacao) passam a exibir CPF (formatado) e data de nascimento no bloco
+     * de identificacao, quando o processo os tem preenchidos.
+     */
+    @Test
+    void emailsAoSolicitanteIncluemCpfEDataDeNascimentoQuandoPreenchidos() {
+        Processo deferido = processoComCpfEDataNascimento();
+        deferido.setStatus(StatusProcesso.DEFERIDO);
+        Processo indeferido = processoComCpfEDataNascimento();
+        indeferido.setStatus(StatusProcesso.INDEFERIDO);
+        Processo info = processoComCpfEDataNascimento();
+        info.setStatus(StatusProcesso.SOLICITA_INFORMACAO);
+
+        for (Processo p : java.util.List.of(deferido, indeferido, info)) {
+            EmailTemplate t = service.gerar(p).get(0);
+            assertThat(t.corpo())
+                .as("CPF formatado ausente em '%s'", t.chave())
+                .contains("CPF: 529.982.247-25");
+            assertThat(t.corpo())
+                .as("Data de nascimento ausente em '%s'", t.chave())
+                .contains("Data de nascimento: 15/03/1990");
+            // Continua dentro do bloco de identificacao, antes da prosa
+            int paciente = t.corpo().indexOf("Paciente: Joao Paciente Secreto");
+            int cpf = t.corpo().indexOf("CPF: 529.982.247-25");
+            int nascimento = t.corpo().indexOf("Data de nascimento: 15/03/1990");
+            int equipe = t.corpo().indexOf("Equipe solicitante: Hospital Solicitante");
+            assertThat(cpf).isGreaterThan(paciente);
+            assertThat(nascimento).isGreaterThan(cpf);
+            assertThat(equipe).isGreaterThan(nascimento);
+        }
+    }
+
+    /**
+     * Processo antigo (anterior a esta leva de campos): CPF/data de nascimento
+     * nulos nao podem virar "null" nem uma linha vazia/quebrada no e-mail - o
+     * bloco simplesmente omite as duas linhas, mantendo Processo/Paciente/Equipe
+     * como sempre foi.
+     */
+    @Test
+    void emailAoSolicitanteSemCpfNemDataDeNascimentoNaoQuebraNemImprimeNull() {
+        Processo p = processo(); // sem CPF/data de nascimento
+        p.setStatus(StatusProcesso.DEFERIDO);
+        EmailTemplate t = service.gerar(p).get(0);
+
+        assertThat(t.corpo()).doesNotContain("CPF: null");
+        assertThat(t.corpo()).doesNotContain("Data de nascimento: null");
+        assertThat(t.corpo()).doesNotContain("CPF:");
+        assertThat(t.corpo()).doesNotContain("Data de nascimento:");
+        assertThat(t.corpo()).contains("Paciente: Joao Paciente Secreto");
+        assertThat(t.corpo()).contains("Equipe solicitante: Hospital Solicitante");
+    }
+
+    /**
+     * Regra inviolavel de imparcialidade: NENHUM e-mail dirigido ao avaliador
+     * (convite, lembrete, cancelamento, convite em lote, aviso de informacao
+     * complementar disponivel) pode conter CPF nem data de nascimento do
+     * paciente, mesmo quando esses campos estao preenchidos no Processo.
+     */
+    @Test
+    void emailsAoAvaliadorNuncaExpoemCpfNemDataDeNascimentoDoPaciente() {
+        Processo p = processoComCpfEDataNascimento();
+        p.setStatus(StatusProcesso.DEFERIDO);
+        MembroUrgenciaRenal membro = new MembroUrgenciaRenal("HCPA", "Dra. Avaliadora", "a@example.com");
+
+        java.util.List<EmailTemplate> emailsAvaliador = java.util.List.of(
+            service.emailConviteAvaliador(p, membro),
+            service.emailCancelamentoAvaliador(p, membro),
+            service.emailLembreteAvaliador(p, membro),
+            service.emailInfoComplementarDisponivel(p, membro)
+        );
+
+        String cpfFormatado = "529.982.247-25";
+        String cpfCru = "52998224725";
+        String dataFormatada = "15/03/1990";
+
+        for (EmailTemplate t : emailsAvaliador) {
+            assertThat(t.corpo())
+                .as("e-mail '%s' ao avaliador vazou o CPF formatado do paciente", t.chave())
+                .doesNotContain(cpfFormatado);
+            assertThat(t.corpo())
+                .as("e-mail '%s' ao avaliador vazou o CPF cru do paciente", t.chave())
+                .doesNotContain(cpfCru);
+            assertThat(t.corpo())
+                .as("e-mail '%s' ao avaliador vazou a data de nascimento do paciente", t.chave())
+                .doesNotContain(dataFormatada);
+            assertThat(t.corpo())
+                .as("e-mail '%s' ao avaliador vazou o nome completo do paciente", t.chave())
+                .doesNotContain("Joao Paciente Secreto");
+        }
+    }
+
+    /**
+     * Mesmo teste acima, mas para o template agrupado "convite-portal" (lista
+     * todos os avaliadores de uma vez, exibido na aba Envio).
+     */
+    @Test
+    void emailConvitePortalEmLoteNuncaExpoeCpfNemDataDeNascimento() {
+        Processo p = processoComCpfEDataNascimento();
+        p.setStatus(StatusProcesso.ENVIADO);
+        p.getPareceres().forEach(par -> par.setDataEnvio(LocalDate.now()));
+
+        EmailTemplate convitePortal = service.gerar(p).stream()
+            .filter(e -> e.chave().equals("convite-portal")).findFirst().orElseThrow();
+
+        assertThat(convitePortal.corpo()).doesNotContain("529.982.247-25");
+        assertThat(convitePortal.corpo()).doesNotContain("52998224725");
+        assertThat(convitePortal.corpo()).doesNotContain("15/03/1990");
+        assertThat(convitePortal.corpo()).doesNotContain("Joao Paciente Secreto");
+    }
 }
