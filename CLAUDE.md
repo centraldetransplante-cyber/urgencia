@@ -1206,3 +1206,30 @@ mensagem de auditoria nova.
 - Um comando encadeado com `;` nunca deve terminar num comando que sempre
   sucede (`echo`, `tee` sem `pipefail`) — mascara o exit code real do
   comando que importa (`mvn ...; echo "EXIT=$?"` sempre reporta 0).
+
+## Uso de agentes/sub-agentes — regra fixa (2026-08-23)
+
+**SEMPRE avisar o coordenador (usuário/sessão principal) ao disparar
+qualquer agente ou sub-agente — sempre, sem exceção.** Regra de projeto
+explícita do usuário, motivada por um incidente real: dois agentes
+independentes (um deles nunca lançado explicitamente por ninguém que o
+usuário pudesse rastrear) acabaram rodando `mvn test`/editando os mesmos
+arquivos concorrentemente na mesma working directory/worktree, corrompendo
+`target/classes` e produzindo trabalho duplicado sem que o coordenador
+soubesse que aquele agente existia.
+
+- Antes de chamar `Agent` (lançar um sub-agente novo), avisar explicitamente
+  o que vai ser lançado e por quê, mesmo que a resposta chegue só depois
+  (não é pedir permissão a cada vez, é nunca lançar em silêncio).
+- Um agente que ele mesmo tem a ferramenta `Agent` disponível (ex.
+  `urgencia-renal` — ver `.claude/agents/urgencia-renal.md`, seção
+  "Delegação a sub-agentes") **nunca deve delegar a outro sub-agente sem
+  primeiro avisar quem o invocou**, via `SendMessage`. Preferir sempre fazer
+  o trabalho diretamente, sequencialmente, em vez de recursar.
+- Se um sub-agente for mesmo necessário, ele precisa rodar numa worktree
+  **própria e isolada** — nunca a mesma pasta/worktree de quem o lançou nem
+  de outro sub-agente irmão. Nunca dois processos `mvn`/build rodando ao
+  mesmo tempo na mesma árvore de arquivos.
+- Ao final de qualquer execução, se um sub-agente próprio ainda estiver
+  rodando, avisar quem invocou antes de encerrar — nunca deixar um agente
+  "órfão" sem ninguém sabendo que ele existe.

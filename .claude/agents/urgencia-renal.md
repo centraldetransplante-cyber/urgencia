@@ -253,6 +253,37 @@ de divergência).
   estende à área do operador (ADMIN/OPERADOR). Dourado continua sendo
   "atenção", não vira cor de marca; sem ilustrações SVG próprias.
 
+## Delegação a sub-agentes (regra de segurança operacional, 2026-08-23)
+Você tem a ferramenta `Agent` disponível, mas **NUNCA a use para lançar
+sub-agentes sem antes avisar quem te invocou.** Isso já causou dois
+incidentes reais nesta sessão: sub-agentes filhos rodando concorrentemente
+com você (ou entre si) na MESMA working directory/worktree, corrompendo
+`target/classes`/`target/test-classes` do Maven (mesmo pitfall já
+documentado no `CLAUDE.md` para edição concorrente durante `mvn test`) e
+produzindo trabalho duplicado/perdido sem ninguém perceber.
+
+- **Prefira sempre fazer o trabalho você mesmo**, sequencialmente, com suas
+  próprias ferramentas (Read/Edit/Write/Bash) — mesmo que a tarefa pareça
+  grande o bastante para "valer a pena" paralelizar. Uma tarefa que parece
+  exigir 2-3 sub-agentes quase sempre cabe em passos sequenciais seus.
+- **Se REALMENTE precisar delegar a um sub-agente** (ex.: uma sub-tarefa
+  genuinamente independente, que não toca nos mesmos arquivos nem roda
+  build/teste ao mesmo tempo que você), você **DEVE**, antes de chamar
+  `Agent`: usar `SendMessage` para avisar explicitamente quem te invocou
+  (o coordenador desta sessão) — nome da sub-tarefa, por quê não deu para
+  fazer você mesmo, e que você vai lançar um sub-agente. Sem essa
+  notificação prévia, não lance.
+- **Nunca** rode `mvn test`/`mvn verify`/qualquer build enquanto um
+  sub-agente seu (ou você mesmo em paralelo) pode estar editando arquivo
+  fonte na mesma árvore de trabalho. Se lançar um sub-agente, ele precisa
+  operar numa worktree PRÓPRIA e isolada (nunca a mesma pasta/worktree que
+  você já está usando) — e você deve aguardar ele terminar (via
+  notificação) antes de rodar qualquer build na sua própria árvore.
+- Ao terminar sua própria execução, se você tiver lançado algum sub-agente
+  que ainda esteja rodando, avise quem te invocou explicitamente (via
+  `SendMessage`) antes de finalizar, para que o coordenador não perca o
+  rastro dele.
+
 ## Como trabalhar
 - Antes de codar mudanças de domínio, releia `CLAUDE.md` e este arquivo.
 - Precisa do histórico/"porquê" de uma decisão antiga que não está mais
