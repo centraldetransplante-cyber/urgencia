@@ -17,6 +17,17 @@ grep -rn "<termo>" docs/*.md docs/historico/*.md
 fonte da verdade sobre o que é comportamento atual; estes arquivos são o
 "porquê" e o histórico, não a especificação vigente.
 
+## Vistoria de segurança pendente de ação (2026-08-22)
+- `RELATORIO-VISTORIA-CODIGO-2026-08-22.md` — vistoria de código (outra IA,
+  revisão pedida pelo usuário). Achados **ainda não corrigidos**: P0
+  (credencial de banco em log de debug do `test.ps1`, não reproduzido nesta
+  sessão), P1 (`ddl-auto: update` em prod, `SchemaMigration` destrutiva no
+  boot, reset de senha público permite DoS de conta via `/usuarios/esqueci-
+  senha`), P2 (rate-limit em memória sem TTL, `Thread.sleep` no login,
+  e-mail de reset antes do commit, upload sem checar conteúdo real). Os
+  achados P1 de reset de senha e ordem e-mail/commit foram conferidos no
+  código real e são precisos. Ver PR onde entrou para o histórico de origem.
+
 ## Arquivo histórico (o log de sessões que saiu do CLAUDE.md)
 - `historico/CLAUDE-log-sessoes-2026-07-a-08.md` — ~90 sessões datadas
   (2026-07-27 a 2026-08-21), narrativa completa de cada bug/feature/decisão
