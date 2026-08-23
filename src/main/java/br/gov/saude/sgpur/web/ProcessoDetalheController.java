@@ -339,9 +339,27 @@ public class ProcessoDetalheController {
             result.reject("medicos", "Selecione exatamente "
                 + ProcessoService.AVALIADORES_POR_PROCESSO + " medicos avaliadores.");
         }
-        // Digito verificador de CPF (as anotacoes @NotBlank/@Size ja cobrem
-        // ausencia/tamanho errado - so a validacao de modulo-11 fica aqui).
-        if (processo.getPacienteCpf() != null && !processo.getPacienteCpf().isBlank()) {
+        // Data de nascimento, CPF e sexo do paciente: obrigatorios para
+        // processo NOVO, mas SEM Bean Validation na entidade (ver o javadoc
+        // de Processo.pacienteDataNascimento - hotfix de 2026-08-22, a
+        // obrigatoriedade de verdade fica aqui, nao na entidade, para nao
+        // quebrar escrita de processo legado sem esses campos). Mesmo padrao
+        // ja usado por SolicitacaoOnlineService.criar.
+        if (processo.getPacienteDataNascimento() == null) {
+            result.rejectValue("pacienteDataNascimento", "obrigatorio",
+                "Informe a data de nascimento do paciente.");
+        } else if (processo.getPacienteDataNascimento().isAfter(LocalDate.now())) {
+            result.rejectValue("pacienteDataNascimento", "futuro",
+                "A data de nascimento do paciente nao pode ser no futuro.");
+        }
+        if (processo.getPacienteSexo() == null) {
+            result.rejectValue("pacienteSexo", "obrigatorio", "Informe o sexo do paciente.");
+        }
+        // Digito verificador de CPF (module-11), alem da propria ausencia -
+        // as anotacoes @NotBlank/@Size saíram da entidade (mesmo hotfix).
+        if (processo.getPacienteCpf() == null || processo.getPacienteCpf().isBlank()) {
+            result.rejectValue("pacienteCpf", "obrigatorio", "Informe o CPF do paciente.");
+        } else {
             String cpfDigits = CpfUtil.normalizar(processo.getPacienteCpf());
             if (!CpfUtil.valido(cpfDigits)) {
                 result.rejectValue("pacienteCpf", "invalido", "CPF inválido.");
@@ -771,9 +789,28 @@ public class ProcessoDetalheController {
     public String atualizar(@PathVariable Long id,
                             @Valid @ModelAttribute("processo") Processo form,
                             BindingResult result, Model model, RedirectAttributes ra) {
-        // Digito verificador de CPF (as anotacoes @NotBlank/@Size ja cobrem
-        // ausencia/tamanho errado - so a validacao de modulo-11 fica aqui).
-        if (form.getPacienteCpf() != null && !form.getPacienteCpf().isBlank()) {
+        // Mesmas checagens explicitas de salvar() (hotfix de 2026-08-22: sem
+        // Bean Validation na entidade para nao quebrar escrita de processo
+        // legado sem esses 3 campos - ver javadoc de
+        // Processo.pacienteDataNascimento). O formulario de edicao marca os
+        // 3 campos como obrigatorios (required) e ja pre-preenche com o
+        // valor atual do processo, entao um processo legado so fica
+        // bloqueado de salvar SE o operador nao preencher esses campos
+        // agora - nunca por causa de outro campo sem relacao.
+        if (form.getPacienteDataNascimento() == null) {
+            result.rejectValue("pacienteDataNascimento", "obrigatorio",
+                "Informe a data de nascimento do paciente.");
+        } else if (form.getPacienteDataNascimento().isAfter(LocalDate.now())) {
+            result.rejectValue("pacienteDataNascimento", "futuro",
+                "A data de nascimento do paciente nao pode ser no futuro.");
+        }
+        if (form.getPacienteSexo() == null) {
+            result.rejectValue("pacienteSexo", "obrigatorio", "Informe o sexo do paciente.");
+        }
+        // Digito verificador de CPF (module-11), alem da propria ausencia.
+        if (form.getPacienteCpf() == null || form.getPacienteCpf().isBlank()) {
+            result.rejectValue("pacienteCpf", "obrigatorio", "Informe o CPF do paciente.");
+        } else {
             String cpfDigits = CpfUtil.normalizar(form.getPacienteCpf());
             if (!CpfUtil.valido(cpfDigits)) {
                 result.rejectValue("pacienteCpf", "invalido", "CPF inválido.");
