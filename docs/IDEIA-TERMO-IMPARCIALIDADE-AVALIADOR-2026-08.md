@@ -1,13 +1,101 @@
 # Termo de imparcialidade do avaliador — e a hipótese de remover a anonimização
 
-> **Status: EM ESPERA — proposta de ALTO RISCO institucional. NÃO
-> implementar sem aprovação explícita e informada do dono do produto (e,
-> muito provavelmente, sem consulta jurídica/regulatória externa antes).**
->
-> Este documento **não decide nada**. Ele existe para que, quando a decisão
-> for tomada, ela seja tomada com o custo real na mesa — e não como "trocar
-> uma flag". Nada foi implementado; nenhum arquivo `.java`/`.html`/`.js` foi
-> alterado nesta sessão.
+> **Status: DECISÃO DE PRODUTO REGISTRADA (2026-08-23) — Opção 4 (remoção
+> completa) + termo obrigatório como trava de acesso. Implementação ainda
+> NÃO iniciada nesta sessão** — este documento grava a decisão; o desenho
+> técnico detalhado (ver seção 0.3, itens em aberto) precisa ser fechado
+> antes de codar. Nenhum arquivo `.java`/`.html`/`.js` foi alterado até
+> aqui.
+
+---
+
+## 0. Decisão registrada (2026-08-23)
+
+Depois de ler a análise completa (seções 1–8), o dono do produto respondeu
+às perguntas da seção 8 e confirmou a decisão abaixo — inclusive depois de
+lhe ser apresentada explicitamente a alternativa de menor risco (automatizar
+a redação do nome nos documentos anexados, sem remover a anonimização do
+avaliador).
+
+### 0.1 O que foi decidido
+
+- **Q1 (origem):** a anonimização nasceu de convenção/boa prática da equipe,
+  **não** de um episódio concreto contestado ou de cobrança externa.
+- **Q2 (problema real, reformulado):** o motivador original era o esforço
+  operacional de **apagar manualmente o nome de dentro dos documentos
+  clínicos anexados** (laudos/exames trazem o nome do paciente escrito no
+  corpo, página a página — o carimbo automático de capa não resolve isso).
+  Uma alternativa que resolveria exatamente esse esforço **sem** expor o
+  nome ao avaliador (automação de redação/OCR) foi oferecida e **rejeitada
+  explicitamente** — a decisão é prosseguir com a exposição do nome de
+  qualquer forma. Portanto: **o esforço de redação deixou de ser o
+  argumento decisivo**; a decisão passa a se apoiar só no termo de
+  imparcialidade como salvaguarda.
+- **Q4/Q6 (termo sem remoção / consulta externa):** o dono do produto **não
+  quer só a Opção 1** (termo aditivo, mantendo anonimização) — quer
+  prosseguir com a exposição do nome. **Não pretende** consultar
+  jurídico/regulatório antes (posição explícita, contrária à recomendação
+  da seção 7, item 2 — registrada aqui como decisão informada e assumida
+  pelo dono do produto, não como omissão).
+- **Mecanismo do termo, definido pelo usuário:** o termo de imparcialidade
+  **não é meramente informativo** — é uma **trava de acesso por caso**. Se o
+  avaliador, ao ser confrontado com o termo, **não se comprometer**, ele
+  **fica impedido de avaliar aquele processo específico** (precisa ser
+  substituído por outro avaliador). Isto é mais próximo da **Opção 2**
+  (declaração por caso, com trava) combinada com a **Opção 4** (nome
+  exposto) do que da Opção 1 pura — ou seja, a decisão final é um **híbrido
+  não previsto nas 4 opções originais da seção 4**: nome exposto (Opção 4) +
+  aceite obrigatório e bloqueante por processo (mecanismo da Opção 2).
+
+### 0.2 O que isso confirma da análise das seções 1–7 (não anula, reforça)
+
+- A ressalva da seção 3.2.4 (erosão dos DTOs projetados) e da seção 5.5
+  (tabela arquivo-a-arquivo) continuam valendo **integralmente** — a decisão
+  de expor o nome não elimina o cuidado de manter os DTOs projetados
+  expondo *mais* campos, nunca a entidade inteira.
+- A seção 5.4 (impacto no fluxo de decisão da Opção 2) passa a ser
+  **obrigatória**, não mais hipotética: como o avaliador pode ficar
+  impedido por processo, o sistema PRECISA de um caminho de substituição
+  que hoje não existe (`ProcessoService.AVALIADORES_POR_PROCESSO = 3`,
+  atribuídos no cadastro, sem mecanismo de troca pós-atribuição) — ver
+  pergunta em aberto Q5' abaixo.
+- A condição 3 da seção 7 (nunca expor CPF/nome da mãe junto) continua
+  valendo até segunda ordem — **não foi perguntado nem confirmado** que o
+  escopo inclui esses campos; assumir por padrão que é **só nome completo**
+  até o usuário dizer o contrário (ver Q3' abaixo).
+
+### 0.3 Perguntas que CONTINUAM em aberto (substituem as Q3/Q5/Q7/Q8 originais)
+
+**Q3' — Escopo do dado exposto.** Confirma que é **só o nome completo**, e
+que `pacienteCpf`/`pacienteDataNascimento`/`pacienteNomeMae` **continuam
+nunca chegando** ao avaliador (como hoje, regra 17 do `CLAUDE.md`)? A
+análise recomenda fortemente manter esse limite.
+→ *Decisão do usuário:*
+
+**Q5' — Substituição do avaliador impedido.** Quando um avaliador não aceita
+o termo e fica impedido naquele processo: (a) o operador atribui
+manualmente outro médico no lugar (exige tela/fluxo novo — hoje não existe
+substituição pós-atribuição); (b) o processo segue e é decidido com os
+outros 2 pareceres, sem repor o 3º avaliador (a maioria simples 2-de-3
+continua fechando normalmente com 2 votos, mas nesse caso o processo teria,
+de fato, só 2 avaliadores desde o início — precisa checar se isso é
+aceitável ou se sempre precisa dos 3)? Isto toca a regra de negócio mais
+protegida do sistema (`ProcessoValidator`) e merece desenho técnico próprio
+antes de codar.
+→ *Decisão do usuário:*
+
+**Q7' — Frequência do termo.** O aceite/recusa é **por processo** (parece
+ser o caso, já que a trava é "não pode avaliar o caso em questão") — isso
+está confirmado, ou pode ser por período com a possibilidade de recusa
+pontual num caso específico mesmo já tendo aceitado o termo geral antes?
+→ *Decisão do usuário:*
+
+**Q8' — Retroatividade e comunicação.** Processos já decididos sob regime
+anonimizado ficam marcados como tal no dossiê/Relatório Final (para não
+confundir, daqui a 2 anos, sob qual regra cada processo foi julgado)?
+Avaliadores e equipes solicitantes serão avisados da mudança antes dela
+valer?
+→ *Decisão do usuário:*
 
 ---
 
