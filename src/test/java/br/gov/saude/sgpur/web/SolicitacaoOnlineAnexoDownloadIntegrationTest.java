@@ -75,7 +75,7 @@ class SolicitacaoOnlineAnexoDownloadIntegrationTest {
         solicitacaoBId = b.getId();
 
         MockMultipartFile arquivo = new MockMultipartFile(
-            "documentos", "exame-creatinina.pdf", "application/pdf", "conteudo-do-exame".getBytes());
+            "documentos", "exame-creatinina.pdf", "application/pdf", "%PDF-1.4\nconteudo-do-exame".getBytes());
         AnexoSolicitacaoOnline anexo = anexoStorage.salvar(a, arquivo);
         anexoDaSolicitacaoAId = anexo.getId();
     }

@@ -289,6 +289,39 @@ deriva, com OU — nunca confiar só no campo cacheado quando existe um
 caminho (reabertura, corrida entre transações) que pode dessincronizar os
 dois.
 
+### 3.3 Mapas de rate-limit em memória sem TTL crescem sem limite, e `Thread.sleep` do atraso progressivo podia ocupar threads HTTP sem teto
+**Sintoma (achado em vistoria de segurança, `docs/RELATORIO-VISTORIA-CODIGO-2026-08-22.md`, achados P2):** `LoginAttemptService`/`PasswordResetAttemptService`
+guardam um `ConcurrentHashMap<String, ...>` por username. Uma entrada só é
+removida no SUCESSO daquele username (login) ou quando a MESMA chave é
+acessada de novo após a janela expirar (reset de senha) — uma sequência de
+usernames inventados, cada um usado uma única vez, nunca aciona essa
+remoção, então o mapa cresce sem limite (vazamento de memória de longo
+prazo). Separadamente, o atraso progressivo do login (`Thread.sleep`, até
+5s) roda na MESMA thread HTTP que processa o POST de login — um ataque
+distribuído disparando muitas tentativas simultâneas contra usernames
+diferentes podia, em teoria, ocupar boa parte do pool de threads do Tomcat.
+**Causa raiz:** nenhuma limpeza periódica dos dois mapas; nenhum teto para
+quantas threads podiam estar dormindo ao mesmo tempo por causa do atraso.
+**Correção aplicada (2026-08-23):** `limparExpirados()` em ambas as
+classes, varrido a cada poucos minutos por `RateLimitLimpezaScheduler`
+(ligado por padrão em produção, desligado em dev/teste, mesma convenção de
+`DecisaoAutomaticaScheduler`) — remove entradas cuja janela já expirou, sem
+mudar limiar/janela/atraso do rate-limit em si. Para o `Thread.sleep`: um
+`Semaphore` (`LoginAttemptService.permissoesAtraso`, capacidade
+configurável, default 20) limita quantas threads podem estar dormindo ao
+mesmo tempo — `tryAcquire()` não-bloqueante, se saturado a tentativa atual
+PULA o atraso (nunca bloqueia esperando a vez, nunca impede o login de
+prosseguir). O atraso em si foi mantido de propósito (decisão de produto já
+aprovada — precisa acontecer antes da resposta).
+**Como evitar recair:** todo `ConcurrentHashMap` indexado por uma chave que
+o CLIENTE controla (username, IP, e-mail) e cuja entrada só é removida
+"quando essa mesma chave for acessada de novo" precisa de uma limpeza
+periódica baseada em tempo, não só em acesso — senão um atacante que nunca
+repete a chave nunca aciona a remoção. Todo `Thread.sleep` dentro de uma
+thread HTTP de resposta a um cliente não confiável (login, reset de senha)
+precisa de um teto de concorrência (semáforo/pool dedicado), mesmo quando o
+atraso em si é intencional.
+
 ---
 
 ## 4. Fluxo de decisão (maioria simples, pausa "Solicita informação", coordenador)
@@ -571,6 +604,34 @@ se ele engloba estados que **não deveriam** ser tocados por aquela ação
 específica (aqui, a pausa é um subconjunto de "em andamento" que precisa
 de tratamento diferente).
 
+### 6.4 Upload validava só a extensão do nome do arquivo, nunca o conteúdo real
+**Sintoma (achado em vistoria de segurança, `docs/RELATORIO-VISTORIA-CODIGO-2026-08-22.md`, achado P2 "Upload valida extensão, mas não o conteúdo real"):**
+`AnexoStorageService`/`AnexoSolicitacaoOnlineStorageService` só olhavam a
+extensão do nome do arquivo INFORMADO PELO CLIENTE (`EXTENSOES_PERMITIDAS =
+Set.of("pdf", "eml", "msg", "png", "jpg", "jpeg")`) — um executável ou
+script renomeado para `documento.pdf` passava direto e era gravado em disco
+do jeito que veio.
+**Causa raiz:** nenhuma verificação do conteúdo real do arquivo, só do nome.
+**Correção aplicada (2026-08-23):** `AssinaturaArquivoUtil` (utilitário
+puro, sem dependência nova — o projeto não usa Apache Tika nem
+equivalente) verifica os primeiros bytes contra a assinatura (magic number)
+esperada da extensão declarada (`%PDF-` para PDF, `89 50 4E 47 0D 0A 1A 0A`
+para PNG, `FF D8 FF` para JPEG, `D0 CF 11 E0 A1 B1 1A E1` OLE2 para MSG; para
+`.eml`, que é texto RFC822 puro sem assinatura binária própria, rejeita
+apenas quando o conteúdo começa com a assinatura binária de outro formato
+conhecido, incluindo executáveis Windows `MZ`). Chamado nos dois storage
+services logo após a checagem de extensão já existente, ANTES de gravar em
+disco, com a mesma mensagem de negócio de sempre (não vaza detalhe técnico
+de "assinatura inválida").
+**Como evitar recair:** qualquer upload que grava em disco baseado numa
+allowlist de extensão precisa também validar o conteúdo real contra essa
+extensão — o nome do arquivo é inteiramente controlado pelo cliente.
+Testes que exercitam o caminho real do `salvar()` (não mockado) de um
+upload precisam usar bytes de conteúdo condizentes com a extensão
+declarada (ex. `"%PDF-1.4\n..."`.getBytes()`), não texto arbitrário — do
+contrário quebram junto com esta validação (recaída já corrigida em vários
+`@SpringBootTest`/testes de serviço nesta mesma correção).
+
 ---
 
 ## 7. (reservado)
@@ -742,8 +803,10 @@ mesma investigação do zero:
 | Adicionar conteúdo que deve viajar com um fragment | §2.4 |
 | Renomear/acentuar um rótulo/botão visível | §2.5 |
 | Adicionar rota que grava algo irreversível (voto, decisão, exclusão) | §3.1 |
+| Adicionar `ConcurrentHashMap` de rate-limit indexado por chave do cliente, ou `Thread.sleep` numa thread HTTP | §3.3 |
 | Mexer em `ProcessoValidator`/pausa/coordenador/maioria | §4 (todos) |
 | Mexer no chat avaliador↔operador ou solicitante↔operador | §5.3, `docs/RELATORIO-VISTORIA-CHAT-2026-08-10.md` |
 | Adicionar/alterar envio de e-mail com anexo | §6 |
+| Adicionar allowlist de extensão para upload, ou escrever teste que chama o `salvar()` real de anexo | §6.4 |
 | Escrever teste de `Service.atualizar()` | §10.4 |
 | Investigar "Deploy falhou do nada" | §9 |

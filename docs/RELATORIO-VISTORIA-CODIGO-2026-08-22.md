@@ -51,11 +51,15 @@ Arquivos: [UsuarioController.java](src/main/java/br/gov/saude/sgpur/web/UsuarioC
 
 **Ação recomendada:** usar cache com TTL e tamanho máximo, ou armazenamento externo com expiração; incluir limite por IP.
 
+**Corrigido em 2026-08-23:** ambas as classes ganharam `limparExpirados()`, varrido periodicamente por `RateLimitLimpezaScheduler` (ligado por padrão em produção via `AgendamentoRateLimitConfig`/`app.rate-limit.limpeza.varredura.habilitado`, desligado em dev/teste — mesma convenção de `DecisaoAutomaticaScheduler`/`ComprovanteSntLembreteScheduler`). A cada `app.rate-limit.limpeza.varredura.intervalo-ms` (default 5 min), remove do mapa em memória toda entrada cuja janela já expirou — usa a mesma noção de janela que cada classe já tinha (`janelaMinutos` em `LoginAttemptService`, `JANELA` em `PasswordResetAttemptService`), sem mudar limiar/janela/atraso do rate-limit em si. Coberto por testes que chamam `limparExpirados()` diretamente (sem esperar o scheduler de verdade), usando o mesmo hook de relógio injetável de teste que `LoginAttemptService` já tinha (`usarRelogioParaTeste`, replicado em `PasswordResetAttemptService`).
+
 ### P2 — `Thread.sleep` no fluxo de autenticação ocupa threads HTTP
 
 Após erros de login, `LoginAttemptService` aplica atraso progressivo por `Thread.sleep`, chegando a 5 segundos. Requisições simultâneas podem ocupar as threads do servidor e degradar o serviço.
 
 **Ação recomendada:** preferir rate limit antes de alocar trabalho de autenticação, com resposta controlada; não bloquear a thread de requisição para impor atraso.
+
+**Corrigido em 2026-08-23:** o atraso em si foi MANTIDO de propósito (decisão de produto já aprovada — precisa acontecer antes da resposta, é o ponto da mitigação). O que foi corrigido foi o risco real: um `Semaphore` (`LoginAttemptService.permissoesAtraso`, capacidade configurável via `app.login.rate-limit.max-threads-atraso-simultaneas`, default 20) agora limita quantas threads HTTP podem estar dormindo por causa deste atraso ao mesmo tempo. `tryAcquire()` não-bloqueante: se o limite já foi atingido, a tentativa atual PULA o atraso (loga em DEBUG) em vez de esperar a vez — nunca bloqueia esperando o semáforo, nunca impede o login de prosseguir, e não muda o comportamento em uso normal. Coberto por `LoginAttemptServiceTest.aplicarAtrasoComSemaforoSaturadoPulaOAtrasoSemLancarNemTravar`/`aplicarAtrasoComSemaforoLivreDormeEDevolveAPermissao`.
 
 ### P2 — E-mail é enviado antes do commit da troca de senha
 
@@ -68,6 +72,8 @@ Após erros de login, `LoginAttemptService` aplica atraso progressivo por `Threa
 [AnexoStorageService.java](src/main/java/br/gov/saude/sgpur/service/AnexoStorageService.java) e [AnexoSolicitacaoOnlineStorageService.java](src/main/java/br/gov/saude/sgpur/service/AnexoSolicitacaoOnlineStorageService.java) usam allowlist de extensões e aceitam o MIME fornecido pelo cliente. Não há validação da assinatura do arquivo nem varredura antimalware.
 
 **Ação recomendada:** verificar tipo real do conteúdo, tratar MIME como não confiável, adicionar varredura compatível com a infraestrutura e manter downloads como attachment.
+
+**Corrigido em 2026-08-23:** novo utilitário `AssinaturaArquivoUtil` (sem dependência nova — o projeto não usa Apache Tika nem equivalente) verifica a assinatura (magic number) dos primeiros bytes do arquivo contra a extensão declarada: PDF (`%PDF-`), PNG (`89 50 4E 47 0D 0A 1A 0A`), JPEG (`FF D8 FF`) e MSG/OLE2 (`D0 CF 11 E0 A1 B1 1A E1`); para `.eml` (texto RFC822 puro, sem assinatura binária própria) rejeita apenas quando o conteúdo começa com a assinatura binária de outro formato conhecido, incluindo executáveis Windows (`MZ`). Chamado nos DOIS storage services (`AnexoStorageService`/`AnexoSolicitacaoOnlineStorageService`), logo depois da checagem de extensão já existente e ANTES de gravar em disco — rejeita com a mesma mensagem de negócio amigável de sempre, sem vazar detalhe técnico de "assinatura inválida". Varredura antimalware de verdade continua fora de escopo (infraestrutura), como a ação recomendada já observava. Coberto por `AssinaturaArquivoUtilTest` e por casos de rejeição/aceitação em `AnexoStorageServiceTest`/`AnexoSolicitacaoOnlineStorageServiceTest` (PDF/PNG genuínos aceitos; texto puro renomeado para `.pdf` e executável Windows renomeado para `.png`/`.pdf` rejeitados mesmo com extensão "correta").
 
 ### P3 — Compatibilidade futura dos testes com JDK
 

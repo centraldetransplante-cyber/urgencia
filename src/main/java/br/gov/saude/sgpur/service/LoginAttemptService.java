@@ -23,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -54,6 +55,21 @@ import java.util.concurrent.atomic.AtomicInteger;
  * -- nao cresce sem limite porque falha antiga fora da janela e descartada
  * na proxima leitura, e {@link #aoLogarComSucesso} zera o contador do
  * username assim que ele acerta).</p>
+ *
+ * <p><b>Limite de threads dormindo ao mesmo tempo (2026-08-23):</b> o
+ * {@code Thread.sleep} de {@link #aoFalhar} roda na MESMA thread HTTP que
+ * processa o POST de login - e a semantica DELIBERADA do atraso (precisa
+ * acontecer antes da resposta, senao nao atrasa nada). Sob um ataque
+ * distribuido disparando muitas tentativas simultaneas contra usernames
+ * DIFERENTES, isso poderia ocupar boa parte do pool de threads do Tomcat
+ * por ate {@link #atrasoMaximoMs} ms cada. {@link #permissoesAtraso} limita
+ * quantas threads podem estar dormindo por causa deste atraso ao mesmo
+ * tempo: {@code tryAcquire()} nao-bloqueante - se o limite ja foi atingido,
+ * a tentativa atual simplesmente PULA o atraso (loga em DEBUG) em vez de
+ * esperar a vez. Nunca impede o login de prosseguir, nunca bloqueia
+ * esperando o semaforo, e nao muda o comportamento em uso normal (mesmo
+ * teto de {@link #atrasoMaximoMs} ms por tentativa) - so limita o dano
+ * maximo de "threads presas dormindo" sob ataque massivo.</p>
  *
  * <p><b>Por que por username e nao por IP:</b> um atacante tentando adivinhar
  * a senha de UM usuario especifico e o cenario que este mecanismo mitiga
@@ -96,16 +112,25 @@ public class LoginAttemptService implements Filter {
     private final long atrasoMaximoMs;
     private final int janelaMinutos;
 
+    /**
+     * Limita quantas threads HTTP podem estar dormindo (dentro de
+     * {@link #aoFalhar}) ao mesmo tempo por causa do atraso progressivo -
+     * ver javadoc da classe. {@code tryAcquire()} nunca bloqueia.
+     */
+    final Semaphore permissoesAtraso;
+
     /** Permite ao teste "avancar" o relogio sem esperar minutos de verdade. */
     private java.util.function.Supplier<Instant> relogio = Instant::now;
 
     public LoginAttemptService(
             @Value("${app.login.rate-limit.atraso-por-tentativa-ms:1000}") long atrasoPorTentativaMs,
             @Value("${app.login.rate-limit.atraso-maximo-ms:5000}") long atrasoMaximoMs,
-            @Value("${app.login.rate-limit.janela-minutos:15}") int janelaMinutos) {
+            @Value("${app.login.rate-limit.janela-minutos:15}") int janelaMinutos,
+            @Value("${app.login.rate-limit.max-threads-atraso-simultaneas:20}") int maxThreadsAtrasoSimultaneas) {
         this.atrasoPorTentativaMs = atrasoPorTentativaMs;
         this.atrasoMaximoMs = atrasoMaximoMs;
         this.janelaMinutos = janelaMinutos;
+        this.permissoesAtraso = new Semaphore(maxThreadsAtrasoSimultaneas);
     }
 
     /** Ponto de extensao usado SO por teste, para nao depender de tempo real. */
@@ -155,6 +180,22 @@ public class LoginAttemptService implements Filter {
     }
 
     /**
+     * Varredura periodica (ver {@code RateLimitLimpezaScheduler}) que remove
+     * do mapa em memoria toda entrada cuja janela ja expirou. Sem isso, um
+     * atacante testando muitos USERNAMES INVENTADOS diferentes (nenhum deles
+     * jamais acerta a senha, entao {@link #limparContador} nunca roda para
+     * eles) faz {@link #tentativas} crescer sem limite - vazamento de
+     * memoria de longo prazo. Nao muda nenhuma semantica de rate-limit: so
+     * libera memoria de chaves que ja nao afetariam mais o calculo do
+     * proximo atraso mesmo se permanecessem.
+     */
+    void limparExpirados() {
+        Instant agora = relogio.get();
+        tentativas.entrySet().removeIf(entry ->
+            Duration.between(entry.getValue().inicioJanela, agora).toMinutes() >= janelaMinutos);
+    }
+
+    /**
      * Captura o IP remoto da requisicao corrente num ThreadLocal, ANTES da
      * cadeia do Spring Security processar a autenticacao (ver javadoc da
      * classe). Nao interfere em mais nada da requisicao.
@@ -181,14 +222,31 @@ public class LoginAttemptService implements Filter {
 
         long atrasoMs = calcularAtrasoMsEContabilizarFalha(username);
         if (atrasoMs > 0) {
+            aplicarAtraso(atrasoMs, username, ip);
+        }
+    }
+
+    /**
+     * Aplica o {@code Thread.sleep} do atraso progressivo, respeitando o
+     * teto de threads dormindo simultaneamente ({@link #permissoesAtraso}).
+     * Se o limite ja foi atingido, PULA o atraso desta vez (nunca bloqueia
+     * esperando a vez) - ver javadoc da classe.
+     */
+    void aplicarAtraso(long atrasoMs, String username, String ip) {
+        if (!permissoesAtraso.tryAcquire()) {
+            log.debug("Login: atraso progressivo PULADO para usuario '{}' (ip {}) - "
+                + "limite de threads dormindo simultaneamente ja atingido.", username, ip);
+            return;
+        }
+        try {
             log.info("Login: atraso progressivo de {} ms aplicado para usuario '{}' "
                 + "(ip {}) apos falhas seguidas - NAO e bloqueio, a proxima tentativa "
                 + "com a senha certa continua autenticando normalmente.", atrasoMs, username, ip);
-            try {
-                Thread.sleep(atrasoMs);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
+            Thread.sleep(atrasoMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            permissoesAtraso.release();
         }
     }
 

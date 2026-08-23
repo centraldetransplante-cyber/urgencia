@@ -36,7 +36,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
  */
 class LoginAttemptServiceTest {
 
-    private final LoginAttemptService service = new LoginAttemptService(1, 5, 15);
+    private final LoginAttemptService service = new LoginAttemptService(1, 5, 15, 20);
 
     /**
      * Simula uma requisicao HTTP passando pelo filtro (que captura o IP no
@@ -157,7 +157,7 @@ class LoginAttemptServiceTest {
 
     /** service com constantes de producao (usado so para checar os valores default). */
     private final LoginAttemptService serviceComConstantesDeProducao =
-            new LoginAttemptService(1000, 5000, 15);
+            new LoginAttemptService(1000, 5000, 15, 20);
 
     @Test
     void primeirasFalhasNaoGeramAtraso() {
@@ -169,7 +169,7 @@ class LoginAttemptServiceTest {
 
     @Test
     void falhasSeguintesAumentamOAtrasoProgressivamente() {
-        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15);
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15, 20);
         String u = "usuario-atraso-crescente";
         s.calcularAtrasoMsEContabilizarFalha(u); // 1a - sem atraso
         s.calcularAtrasoMsEContabilizarFalha(u); // 2a - sem atraso (LIMIAR_INICIAL)
@@ -184,7 +184,7 @@ class LoginAttemptServiceTest {
 
     @Test
     void atrasoNuncaUltrapassaOTeto() {
-        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15);
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15, 20);
         String u = "usuario-muitas-falhas";
         long ultimoAtraso = 0;
         for (int i = 0; i < 50; i++) {
@@ -196,7 +196,7 @@ class LoginAttemptServiceTest {
 
     @Test
     void loginComSucessoZeraOContadorDeAtraso() {
-        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15);
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15, 20);
         String u = "usuario-reseta-apos-sucesso";
         for (int i = 0; i < 10; i++) {
             s.calcularAtrasoMsEContabilizarFalha(u);
@@ -214,7 +214,7 @@ class LoginAttemptServiceTest {
 
     @Test
     void janelaExpiradaReiniciaAContagemSemAtraso() {
-        LoginAttemptService s = new LoginAttemptService(1000, 5000, 1);
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 1, 20);
         AtomicReference<Instant> agora = new AtomicReference<>(Instant.now());
         s.usarRelogioParaTeste(agora::get);
         String u = "usuario-janela-expira";
@@ -228,6 +228,83 @@ class LoginAttemptServiceTest {
         // reinicia a contagem, como se fosse a primeira de novo.
         agora.set(agora.get().plusSeconds(120));
         assertThat(s.calcularAtrasoMsEContabilizarFalha(u)).isZero();
+    }
+
+    // -----------------------------------------------------------------
+    // Limpeza periodica (2026-08-23) - libera memoria de entradas expiradas.
+    // -----------------------------------------------------------------
+
+    @Test
+    void limparExpiradosRemoveEntradaComJanelaJaExpirada() throws ReflectiveOperationException {
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 1, 20);
+        AtomicReference<Instant> agora = new AtomicReference<>(Instant.now());
+        s.usarRelogioParaTeste(agora::get);
+        String u = "usuario-expira-e-e-limpo";
+
+        s.calcularAtrasoMsEContabilizarFalha(u);
+        assertThat(tamanhoDoMapaDeTentativas(s)).isEqualTo(1);
+
+        // Ainda dentro da janela (1 min): a limpeza NAO remove.
+        s.limparExpirados();
+        assertThat(tamanhoDoMapaDeTentativas(s)).isEqualTo(1);
+
+        // Avanca o relogio alem da janela: a limpeza remove a entrada.
+        agora.set(agora.get().plusSeconds(120));
+        s.limparExpirados();
+        assertThat(tamanhoDoMapaDeTentativas(s)).isZero();
+    }
+
+    @Test
+    void limparExpiradosNaoRemoveEntradaAindaDentroDaJanela() throws ReflectiveOperationException {
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15, 20);
+        String u = "usuario-ainda-na-janela";
+        s.calcularAtrasoMsEContabilizarFalha(u);
+
+        s.limparExpirados();
+
+        assertThat(tamanhoDoMapaDeTentativas(s)).isEqualTo(1);
+    }
+
+    @SuppressWarnings("unchecked")
+    private int tamanhoDoMapaDeTentativas(LoginAttemptService s) throws ReflectiveOperationException {
+        Field f = LoginAttemptService.class.getDeclaredField("tentativas");
+        f.setAccessible(true);
+        var mapa = (java.util.concurrent.ConcurrentHashMap<String, Object>) f.get(s);
+        return mapa.size();
+    }
+
+    // -----------------------------------------------------------------
+    // Semaforo de threads dormindo simultaneamente (2026-08-23).
+    // -----------------------------------------------------------------
+
+    @Test
+    void aplicarAtrasoComSemaforoSaturadoPulaOAtrasoSemLancarNemTravar() {
+        // Semaforo com capacidade 1: a 1a chamada adquire e fica "dormindo"
+        // (simulado aqui mantendo a permissao presa manualmente, sem thread
+        // de verdade), a 2a chamada deve PULAR o atraso em vez de bloquear.
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15, 1);
+        assertThat(s.permissoesAtraso.tryAcquire()).isTrue(); // ocupa a unica permissao
+
+        long antes = System.currentTimeMillis();
+        assertThatCode(() -> s.aplicarAtraso(5000, "usuario-saturado", "10.0.0.1"))
+            .doesNotThrowAnyException();
+        long duracaoMs = System.currentTimeMillis() - antes;
+
+        // Sem permissao disponivel, aplicarAtraso nao deve dormir os 5000ms
+        // configurados - deve retornar quase instantaneamente.
+        assertThat(duracaoMs).isLessThan(500);
+    }
+
+    @Test
+    void aplicarAtrasoComSemaforoLivreDormeEDevolveAPermissao() {
+        LoginAttemptService s = new LoginAttemptService(1000, 5000, 15, 1);
+
+        assertThatCode(() -> s.aplicarAtraso(50, "usuario-com-permissao", "10.0.0.1"))
+            .doesNotThrowAnyException();
+
+        // A permissao foi devolvida ao final (finally) - uma nova aquisicao
+        // deve funcionar sem travar.
+        assertThat(s.permissoesAtraso.tryAcquire()).isTrue();
     }
 
     /**

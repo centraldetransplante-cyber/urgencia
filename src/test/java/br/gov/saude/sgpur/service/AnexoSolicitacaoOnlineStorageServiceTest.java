@@ -47,11 +47,19 @@ class AnexoSolicitacaoOnlineStorageServiceTest {
             .thenAnswer(inv -> inv.getArgument(0));
     }
 
+    /** Bytes minimos de um PDF de verdade ("%PDF-1.4" + resto qualquer) - passa na checagem de assinatura. */
+    private static final byte[] CONTEUDO_PDF_VALIDO = "%PDF-1.4\nconteudo".getBytes();
+    private static final byte[] CONTEUDO_PNG_VALIDO =
+        {(byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x01};
+    private static final byte[] CONTEUDO_JPEG_VALIDO = {(byte) 0xFF, (byte) 0xD8, (byte) 0xFF, (byte) 0xE0};
+    private static final byte[] CONTEUDO_MSG_VALIDO =
+        {(byte) 0xD0, (byte) 0xCF, 0x11, (byte) 0xE0, (byte) 0xA1, (byte) 0xB1, 0x1A, (byte) 0xE1};
+
     @Test
     void aceitaExtensaoPdf() throws IOException {
         stubSaveRetornandoOArgumento();
         MockMultipartFile arquivo = new MockMultipartFile("documentos", "laudo.pdf",
-            "application/pdf", "conteudo".getBytes());
+            "application/pdf", CONTEUDO_PDF_VALIDO);
 
         AnexoSolicitacaoOnline salvo = service.salvar(solicitacao, arquivo);
 
@@ -62,7 +70,7 @@ class AnexoSolicitacaoOnlineStorageServiceTest {
     void aceitaExtensaoEml() throws IOException {
         stubSaveRetornandoOArgumento();
         MockMultipartFile arquivo = new MockMultipartFile("documentos", "copia.eml",
-            "message/rfc822", "conteudo".getBytes());
+            "message/rfc822", "From: a@b.com\r\nSubject: teste\r\n\r\nCorpo.".getBytes());
 
         AnexoSolicitacaoOnline salvo = service.salvar(solicitacao, arquivo);
 
@@ -73,7 +81,7 @@ class AnexoSolicitacaoOnlineStorageServiceTest {
     void aceitaExtensaoMsg() throws IOException {
         stubSaveRetornandoOArgumento();
         MockMultipartFile arquivo = new MockMultipartFile("documentos", "copia.msg",
-            "application/octet-stream", "conteudo".getBytes());
+            "application/octet-stream", CONTEUDO_MSG_VALIDO);
 
         AnexoSolicitacaoOnline salvo = service.salvar(solicitacao, arquivo);
 
@@ -84,18 +92,18 @@ class AnexoSolicitacaoOnlineStorageServiceTest {
     void aceitaExtensaoPngJpgJpeg() throws IOException {
         stubSaveRetornandoOArgumento();
         assertThat(service.salvar(solicitacao, new MockMultipartFile("documentos", "a.png",
-            "image/png", "x".getBytes())).getNomeArquivo()).isEqualTo("a.png");
+            "image/png", CONTEUDO_PNG_VALIDO)).getNomeArquivo()).isEqualTo("a.png");
         assertThat(service.salvar(solicitacao, new MockMultipartFile("documentos", "b.jpg",
-            "image/jpeg", "x".getBytes())).getNomeArquivo()).isEqualTo("b.jpg");
+            "image/jpeg", CONTEUDO_JPEG_VALIDO)).getNomeArquivo()).isEqualTo("b.jpg");
         assertThat(service.salvar(solicitacao, new MockMultipartFile("documentos", "c.jpeg",
-            "image/jpeg", "x".getBytes())).getNomeArquivo()).isEqualTo("c.jpeg");
+            "image/jpeg", CONTEUDO_JPEG_VALIDO)).getNomeArquivo()).isEqualTo("c.jpeg");
     }
 
     @Test
     void aceitaExtensaoEmMaiusculaPorSerCaseInsensitive() throws IOException {
         stubSaveRetornandoOArgumento();
         MockMultipartFile arquivo = new MockMultipartFile("documentos", "LAUDO.PDF",
-            "application/pdf", "conteudo".getBytes());
+            "application/pdf", CONTEUDO_PDF_VALIDO);
 
         AnexoSolicitacaoOnline salvo = service.salvar(solicitacao, arquivo);
 
@@ -133,12 +141,26 @@ class AnexoSolicitacaoOnlineStorageServiceTest {
     }
 
     @Test
+    void rejeitaExecutavelDisfarcadoDeExtensaoPermitida() {
+        // Extensao ".pdf" (passa na allowlist), mas conteudo real e um
+        // executavel Windows ("MZ...") - deve ser rejeitado pela checagem de
+        // assinatura (magic number), mesmo com a extensao correta.
+        byte[] bytesExecutavel = {0x4D, 0x5A, (byte) 0x90, 0x00, 0x03};
+        MockMultipartFile arquivo = new MockMultipartFile("documentos", "laudo.pdf",
+            "application/pdf", bytesExecutavel);
+
+        assertThatThrownBy(() -> service.salvar(solicitacao, arquivo))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("nao permitido");
+    }
+
+    @Test
     void dedupeDeNomeQuandoJaExisteArquivoComMesmoNome() throws IOException {
         stubSaveRetornandoOArgumento();
         MockMultipartFile arquivo1 = new MockMultipartFile("documentos", "laudo.pdf",
-            "application/pdf", "primeiro".getBytes());
+            "application/pdf", "%PDF-1.4\nprimeiro".getBytes());
         MockMultipartFile arquivo2 = new MockMultipartFile("documentos", "laudo.pdf",
-            "application/pdf", "segundo".getBytes());
+            "application/pdf", "%PDF-1.4\nsegundo".getBytes());
 
         AnexoSolicitacaoOnline salvo1 = service.salvar(solicitacao, arquivo1);
         AnexoSolicitacaoOnline salvo2 = service.salvar(solicitacao, arquivo2);
@@ -171,7 +193,7 @@ class AnexoSolicitacaoOnlineStorageServiceTest {
     void resolverArquivoAceitaCaminhoValidoDentroDaArea() throws IOException {
         stubSaveRetornandoOArgumento();
         MockMultipartFile arquivo = new MockMultipartFile("documentos", "laudo.pdf",
-            "application/pdf", "conteudo".getBytes());
+            "application/pdf", CONTEUDO_PDF_VALIDO);
         AnexoSolicitacaoOnline salvo = service.salvar(solicitacao, arquivo);
 
         Path resolvido = service.resolverArquivo(salvo);

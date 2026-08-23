@@ -212,6 +212,32 @@ app:
         atraso-inicial-ms: ${SGPUR_SNT_LEMBRETE_ATRASO_MS:180000}
       prazo-dias: ${SGPUR_SNT_PRAZO_DIAS:7}
 
+  # Atraso progressivo do login (LoginAttemptService) - ver javadoc da
+  # classe. Valores em milissegundos, exceto janela-minutos.
+  login:
+    rate-limit:
+      atraso-por-tentativa-ms: ${SGPUR_LOGIN_ATRASO_POR_TENTATIVA_MS:1000}
+      atraso-maximo-ms: ${SGPUR_LOGIN_ATRASO_MAXIMO_MS:5000}
+      janela-minutos: ${SGPUR_LOGIN_JANELA_MINUTOS:15}
+      # Limite de threads HTTP dormindo simultaneamente por causa do atraso
+      # progressivo (ver "Limite de threads dormindo" no javadoc da classe) -
+      # acima disso, a tentativa PULA o atraso em vez de esperar a vez.
+      max-threads-atraso-simultaneas: ${SGPUR_LOGIN_MAX_THREADS_ATRASO:20}
+
+  # Varredura periodica que libera memoria dos mapas em memoria de rate-limit
+  # de login (LoginAttemptService) e "esqueci minha senha"
+  # (PasswordResetAttemptService) - ver RateLimitLimpezaScheduler.
+  #
+  # DESLIGADA por padrao aqui (dev/teste), mesmo motivo das outras varreduras
+  # deste arquivo: um job rodando em paralelo poluiria os testes.
+  # application-prod.yml liga por padrao.
+  rate-limit:
+    limpeza:
+      varredura:
+        habilitado: ${SGPUR_RATE_LIMIT_LIMPEZA_HABILITADO:false}
+        intervalo-ms: ${SGPUR_RATE_LIMIT_LIMPEZA_INTERVALO_MS:300000}
+        atraso-inicial-ms: ${SGPUR_RATE_LIMIT_LIMPEZA_ATRASO_MS:120000}
+
   # Portal do Solicitante (modulo experimental, ver docs/PLANO-SOLICITANTE.md):
   # kill-switch que registra ou nao SolicitanteController/triagem
   # (@ConditionalOnProperty). Ligado por padrao em dev; application-prod.yml

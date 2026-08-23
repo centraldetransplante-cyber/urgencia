@@ -37,14 +37,38 @@ public class AnexoSolicitacaoOnlineStorageService {
         this.raiz = Paths.get(dir).toAbsolutePath().normalize().resolve("solicitacoes-online");
     }
 
-    private void validarTipoPermitido(MultipartFile arquivo) {
+    /** Mesma mensagem de negocio da checagem de extensao - nao expoe detalhe tecnico de "assinatura invalida". */
+    private static final String MSG_TIPO_NAO_PERMITIDO_SUFIXO =
+        ". Envie PDF, imagem (PNG/JPG) ou e-mail (EML/MSG).";
+
+    /**
+     * Rejeita uploads com extensao fora da allowlist OU cujo CONTEUDO nao
+     * bate com a assinatura (magic number) esperada para a extensao
+     * declarada (ver {@link AssinaturaArquivoUtil}) - mesma protecao de
+     * {@code AnexoStorageService}.
+     */
+    private void validarTipoPermitido(MultipartFile arquivo) throws IOException {
         String nome = arquivo.getOriginalFilename();
         String extensao = (nome != null && nome.contains("."))
             ? nome.substring(nome.lastIndexOf('.') + 1).toLowerCase(Locale.ROOT)
             : "";
         if (!EXTENSOES_PERMITIDAS.contains(extensao)) {
             throw new IllegalArgumentException(
-                "Tipo de arquivo nao permitido (" + extensao + "). Envie PDF, imagem (PNG/JPG) ou e-mail (EML/MSG).");
+                "Tipo de arquivo nao permitido (" + extensao + ")" + MSG_TIPO_NAO_PERMITIDO_SUFIXO);
+        }
+        byte[] primeirosBytes = lerPrimeirosBytes(arquivo);
+        if (!AssinaturaArquivoUtil.validoParaExtensao(extensao, primeirosBytes)) {
+            throw new IllegalArgumentException(
+                "Tipo de arquivo nao permitido (" + extensao + ")" + MSG_TIPO_NAO_PERMITIDO_SUFIXO);
+        }
+    }
+
+    /** Le so o inicio do arquivo (suficiente para conferir a assinatura), sem carregar tudo em memoria. */
+    private static byte[] lerPrimeirosBytes(MultipartFile arquivo) throws IOException {
+        byte[] buffer = new byte[16];
+        try (InputStream in = arquivo.getInputStream()) {
+            int lidos = in.readNBytes(buffer, 0, buffer.length);
+            return lidos == buffer.length ? buffer : java.util.Arrays.copyOf(buffer, lidos);
         }
     }
 

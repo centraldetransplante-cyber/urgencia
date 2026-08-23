@@ -84,6 +84,56 @@ class PasswordResetAttemptServiceTest {
         assertThat(service.tentarRegistrar("rafael")).isTrue();
     }
 
+    // -----------------------------------------------------------------
+    // Limpeza periodica (2026-08-23) - libera memoria de entradas expiradas.
+    // -----------------------------------------------------------------
+
+    @Test
+    void limparExpiradosRemoveEntradaComJanelaJaExpirada() throws ReflectiveOperationException {
+        PasswordResetAttemptService s = new PasswordResetAttemptService();
+        java.util.concurrent.atomic.AtomicReference<Instant> agora =
+            new java.util.concurrent.atomic.AtomicReference<>(Instant.now());
+        usarRelogioParaTeste(s, agora::get);
+        String u = "usuario-reset-expira";
+
+        s.tentarRegistrar(u);
+        assertThat(tamanhoDoMapa(s)).isEqualTo(1);
+
+        // Ainda dentro da janela (15min): a limpeza NAO remove.
+        s.limparExpirados();
+        assertThat(tamanhoDoMapa(s)).isEqualTo(1);
+
+        // Avanca o relogio alem da janela: a limpeza remove a entrada.
+        agora.set(agora.get().plus(java.time.Duration.ofMinutes(20)));
+        s.limparExpirados();
+        assertThat(tamanhoDoMapa(s)).isZero();
+    }
+
+    @Test
+    void limparExpiradosNaoRemoveEntradaAindaDentroDaJanela() throws ReflectiveOperationException {
+        PasswordResetAttemptService s = new PasswordResetAttemptService();
+        s.tentarRegistrar("usuario-reset-ainda-na-janela");
+
+        s.limparExpirados();
+
+        assertThat(tamanhoDoMapa(s)).isEqualTo(1);
+    }
+
+    private void usarRelogioParaTeste(PasswordResetAttemptService s,
+            java.util.function.Supplier<Instant> relogio) throws ReflectiveOperationException {
+        Field f = PasswordResetAttemptService.class.getDeclaredField("relogio");
+        f.setAccessible(true);
+        f.set(s, relogio);
+    }
+
+    @SuppressWarnings("unchecked")
+    private int tamanhoDoMapa(PasswordResetAttemptService s) throws ReflectiveOperationException {
+        Field f = PasswordResetAttemptService.class.getDeclaredField("tentativasPorUsuario");
+        f.setAccessible(true);
+        var mapa = (ConcurrentHashMap<String, Object>) f.get(s);
+        return mapa.size();
+    }
+
     @SuppressWarnings("unchecked")
     private void forcarInicioJanelaNoPassado(String username, java.time.Duration ha) throws Exception {
         Field mapaField = PasswordResetAttemptService.class.getDeclaredField("tentativasPorUsuario");
