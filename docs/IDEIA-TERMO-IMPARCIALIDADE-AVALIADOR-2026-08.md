@@ -1,11 +1,12 @@
 # Termo de imparcialidade do avaliador — e a hipótese de remover a anonimização
 
-> **Status: DECISÃO DE PRODUTO REGISTRADA (2026-08-23) — Opção 4 (remoção
-> completa) + termo obrigatório como trava de acesso. Implementação ainda
-> NÃO iniciada nesta sessão** — este documento grava a decisão; o desenho
-> técnico detalhado (ver seção 0.3, itens em aberto) precisa ser fechado
-> antes de codar. Nenhum arquivo `.java`/`.html`/`.js` foi alterado até
-> aqui.
+> **Status: DECISÃO DE PRODUTO COMPLETA (2026-08-23) — Opção 4 (remoção
+> completa, todos os dados) + termo obrigatório como trava de acesso por
+> processo, com substituição de avaliador impedido. Implementação ainda NÃO
+> iniciada.** Todas as perguntas (seções 0.1 e 0.3) foram respondidas pelo
+> dono do produto. Falta desenho técnico do fluxo de substituição de
+> avaliador (Q5', o item de maior complexidade) antes de abrir PR de
+> implementação. Nenhum arquivo `.java`/`.html`/`.js` foi alterado até aqui.
 
 ---
 
@@ -64,38 +65,49 @@ avaliador).
   escopo inclui esses campos; assumir por padrão que é **só nome completo**
   até o usuário dizer o contrário (ver Q3' abaixo).
 
-### 0.3 Perguntas que CONTINUAM em aberto (substituem as Q3/Q5/Q7/Q8 originais)
+### 0.3 Perguntas fechadas em 2026-08-23 (substituem as Q3/Q5/Q7/Q8 originais)
 
-**Q3' — Escopo do dado exposto.** Confirma que é **só o nome completo**, e
-que `pacienteCpf`/`pacienteDataNascimento`/`pacienteNomeMae` **continuam
-nunca chegando** ao avaliador (como hoje, regra 17 do `CLAUDE.md`)? A
-análise recomenda fortemente manter esse limite.
-→ *Decisão do usuário:*
+**Q3' — Escopo do dado exposto.** **RESOLVIDO — TODOS os dados**: nome
+completo, `pacienteCpf`, `pacienteDataNascimento` e `pacienteNomeMae`
+passam a chegar ao avaliador. **Decisão contrária à recomendação da análise**
+(seção 4, Opção 4, nota final: "mesmo nesta opção, não juntar CPF/nome da
+mãe no mesmo pacote... dados de identificação civil sem utilidade clínica
+na avaliação — expô-los seria o pior custo pelo menor benefício"). Registrada
+aqui como decisão informada e assumida pelo dono do produto, não como
+omissão da análise.
 
-**Q5' — Substituição do avaliador impedido.** Quando um avaliador não aceita
-o termo e fica impedido naquele processo: (a) o operador atribui
-manualmente outro médico no lugar (exige tela/fluxo novo — hoje não existe
-substituição pós-atribuição); (b) o processo segue e é decidido com os
-outros 2 pareceres, sem repor o 3º avaliador (a maioria simples 2-de-3
-continua fechando normalmente com 2 votos, mas nesse caso o processo teria,
-de fato, só 2 avaliadores desde o início — precisa checar se isso é
-aceitável ou se sempre precisa dos 3)? Isto toca a regra de negócio mais
-protegida do sistema (`ProcessoValidator`) e merece desenho técnico próprio
-antes de codar.
-→ *Decisão do usuário:*
+**Q5' — Substituição do avaliador impedido.** **RESOLVIDO — o operador
+substitui por outro médico.** Confirma a leitura da seção 5.4: isto exige um
+fluxo/tela **novo**, que hoje não existe (`ProcessoService
+.AVALIADORES_POR_PROCESSO = 3` só atribui no cadastro, sem caminho de troca
+pós-atribuição). O processo deve continuar sempre com 3 avaliadores efetivos
+— nunca decidir com só 2 por causa de um impedimento não resolvido. Este é
+o item de maior complexidade de engenharia da decisão inteira, porque toca
+`ProcessoValidator`/maioria simples, e merece desenho técnico dedicado antes
+de codar (não é "adicionar um botão").
 
-**Q7' — Frequência do termo.** O aceite/recusa é **por processo** (parece
-ser o caso, já que a trava é "não pode avaliar o caso em questão") — isso
-está confirmado, ou pode ser por período com a possibilidade de recusa
-pontual num caso específico mesmo já tendo aceitado o termo geral antes?
-→ *Decisão do usuário:*
+**Q7' — Frequência do termo.** **RESOLVIDO — por processo.** Cada processo
+pede o aceite de novo; o avaliador pode recusar pontualmente um caso
+específico mesmo já tendo aceitado o termo em processos anteriores.
 
-**Q8' — Retroatividade e comunicação.** Processos já decididos sob regime
-anonimizado ficam marcados como tal no dossiê/Relatório Final (para não
-confundir, daqui a 2 anos, sob qual regra cada processo foi julgado)?
-Avaliadores e equipes solicitantes serão avisados da mudança antes dela
-valer?
-→ *Decisão do usuário:*
+**Q8' — Retroatividade e comunicação.** **RESOLVIDO — só a marcação
+retroativa**, sem aviso prévio a avaliadores/solicitantes antes da mudança
+valer. Processos decididos antes desta mudança ficam marcados como
+"regime anonimizado" no dossiê/Relatório Final, para que fique claro, daqui
+a anos, sob qual regra cada processo foi julgado — mas a mudança em si entra
+em vigor sem comunicação prévia às partes.
+
+### 0.4 Estado da decisão: completa, pronta para desenho técnico
+
+Todas as 8 perguntas originais (Q1–Q8) e as 4 de acompanhamento (Q3'/Q5'/
+Q7'/Q8') estão respondidas. **O que falta antes de codar não é mais decisão
+de produto — é desenho técnico**, principalmente do fluxo de substituição de
+avaliador impedido (Q5'), que é o único item que toca a regra de decisão
+mais protegida do sistema. Recomenda-se um relatório de desenho técnico
+próprio para esse fluxo específico antes de abrir qualquer PR de
+implementação — os demais itens (exposição dos DTOs, campo de aceite no
+`Parecer`, marcação retroativa) são bem mais diretos e já estão esboçados
+nas seções 5.1–5.5 acima.
 
 ---
 

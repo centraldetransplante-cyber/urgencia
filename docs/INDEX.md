@@ -17,19 +17,20 @@ grep -rn "<termo>" docs/*.md docs/historico/*.md
 fonte da verdade sobre o que é comportamento atual; estes arquivos são o
 "porquê" e o histórico, não a especificação vigente.
 
-## Proposta EM ESPERA — alto risco, nada decidido nem implementado
-- `IDEIA-TERMO-IMPARCIALIDADE-AVALIADOR-2026-08.md` — **EM ESPERA, ALTO
-  RISCO institucional.** Ideia do dono do produto de **remover a
-  anonimização do material do avaliador** (hoje só iniciais) e colocar no
-  lugar um **termo de imparcialidade** aceito antes de cada análise.
-  **Nada foi implementado nem decidido** — o documento separa as duas
-  partes do pedido (adicionar o termo × remover o anonimato, que não
-  precisam andar juntas), compara 4 opções (termo adicional sem remover /
-  declaração de impedimento por caso / revelação sob demanda / remoção
-  completa), mapeia os 27 arquivos e 23 testes que sustentam a
-  anonimização hoje, e termina com 8 perguntas em aberto para o usuário.
-  **Não implementar sem aprovação explícita e provável consulta
-  jurídica/regulatória externa.**
+## Decisão de produto registrada, desenho técnico pendente (ainda não implementado)
+- `IDEIA-TERMO-IMPARCIALIDADE-AVALIADOR-2026-08.md` — **decisão COMPLETA
+  (2026-08-23), implementação NÃO iniciada.** O dono do produto decidiu
+  remover a anonimização do avaliador (nome completo + CPF + data de
+  nascimento + nome da mãe passam a ser exibidos) e exigir um **termo de
+  imparcialidade obrigatório por processo** — se o avaliador não aceitar,
+  fica impedido de avaliar aquele caso e o operador substitui por outro
+  médico. Decisão tomada mesmo após uma alternativa de menor risco
+  (automatizar a redação do nome nos documentos, sem expor nada ao
+  avaliador) ter sido apresentada e recusada, e sem consulta
+  jurídica/regulatória externa (também recusada). Falta só o **desenho
+  técnico do fluxo de substituição de avaliador impedido** (toca
+  `ProcessoValidator`/maioria simples, ainda sem caminho no sistema) antes
+  de abrir PR de implementação.
 
 ## Vistoria de segurança pendente de ação (2026-08-22)
 - `RELATORIO-VISTORIA-CODIGO-2026-08-22.md` — vistoria de código (outra IA,
