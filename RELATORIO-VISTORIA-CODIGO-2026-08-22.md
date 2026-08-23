@@ -1,0 +1,104 @@
+# Relatório de vistoria de código — 22/08/2026
+
+## Escopo e método
+
+Vistoria somente de leitura do projeto SAUR. Após a primeira análise, foi feita
+uma segunda passagem sistemática pelos **116 arquivos Java de produção**
+(**21.739 linhas**), distribuídos entre web (26), service (46), domain (21),
+repository (13), bootstrap (5), config (4) e a classe principal. A passagem
+cobriu mapeamento de rotas e autorização, transações, persistência/queries,
+operações de arquivo, integrações externas, tratamento de erros e modelos de
+domínio. Nenhuma alteração funcional foi feita durante a vistoria.
+
+Foram executados `test.ps1` e verificações estáticas locais. A suíte Maven
+concluiu com **1.088 testes em 125 classes**, sem falhas, erros ou testes
+ignorados. Os testes E2E de navegador e uma auditoria externa de CVEs de
+dependências não foram executados nesta vistoria.
+
+## Achados
+
+### P0 — Rotacionar credencial de banco e impedir vazamento em logs
+
+O arquivo local de configuração não está versionado, o que é correto. Porém, durante `test.ps1`, o log de depuração do Spring imprimiu as propriedades carregadas de `application-local.yml`, incluindo a credencial de banco. Isso expõe o segredo a qualquer destino que capture a saída do build, como console, CI ou logs arquivados.
+
+**Ação recomendada:** rotacionar a credencial já exposta e configurar os logs/testes para mascarar propriedades sensíveis ou não carregar esse arquivo em testes.
+
+### P1 — Schema de produção é alterado automaticamente no boot
+
+[application-prod.yml](src/main/resources/application-prod.yml) usa `spring.jpa.hibernate.ddl-auto: update`. Em produção, alterações implícitas de schema são difíceis de revisar, podem falhar parcialmente e não oferecem trilha de migração reproduzível para dados clínicos.
+
+**Ação recomendada:** substituir por migrações versionadas e revisadas; deixar o Hibernate apenas validar o schema em produção.
+
+### P1 — Migração de schema no boot pode destruir estruturas e ignora falhas
+
+[SchemaMigration.java](src/main/java/br/gov/saude/sgpur/bootstrap/SchemaMigration.java) executa em toda inicialização. Ela remove tabelas cujo nome corresponde a `_COPY_` e remove constraints `CHECK` de tabelas de domínio. Diversos erros são apenas registrados em DEBUG e o boot continua. Isso pode apagar uma estrutura inesperada, remover uma constraint de negócio ou deixar o banco parcialmente migrado sem falhar visivelmente.
+
+**Ação recomendada:** eliminar operações destrutivas automáticas do boot; tornar cada migração explícita, idempotente, versionada e com falha bloqueante quando necessária.
+
+### P1 — Reset público de senha permite indisponibilizar contas conhecidas
+
+O endpoint público `POST /usuarios/esqueci-senha` recebe apenas o login e chama `UsuarioService.resetarSenha`. Para uma conta existente com e-mail, ele gera e grava uma nova senha temporária. Assim, alguém que conheça um username pode invalidar a senha vigente até três vezes por janela de 15 minutos. O invasor não recebe a nova senha, mas consegue causar negação de serviço à conta.
+
+Arquivos: [UsuarioController.java](src/main/java/br/gov/saude/sgpur/web/UsuarioController.java) e [UsuarioService.java](src/main/java/br/gov/saude/sgpur/service/UsuarioService.java).
+
+**Ação recomendada:** usar token de recuperação de uso único, com expiração, em vez de trocar a senha imediatamente. Adicionar limitação também por IP e uma proteção contra automação apropriada ao ambiente.
+
+### P2 — Rate limits em memória não removem usernames inéditos
+
+[LoginAttemptService.java](src/main/java/br/gov/saude/sgpur/service/LoginAttemptService.java) e [PasswordResetAttemptService.java](src/main/java/br/gov/saude/sgpur/service/PasswordResetAttemptService.java) mantêm mapas concorrentes indexados por username. Entradas de usernames aleatórios não são removidas por expiração em segundo plano. Um fluxo contínuo de nomes distintos pode causar crescimento de memória do processo.
+
+**Ação recomendada:** usar cache com TTL e tamanho máximo, ou armazenamento externo com expiração; incluir limite por IP.
+
+### P2 — `Thread.sleep` no fluxo de autenticação ocupa threads HTTP
+
+Após erros de login, `LoginAttemptService` aplica atraso progressivo por `Thread.sleep`, chegando a 5 segundos. Requisições simultâneas podem ocupar as threads do servidor e degradar o serviço.
+
+**Ação recomendada:** preferir rate limit antes de alocar trabalho de autenticação, com resposta controlada; não bloquear a thread de requisição para impor atraso.
+
+### P2 — E-mail é enviado antes do commit da troca de senha
+
+`UsuarioService.resetarSenha` chama o SMTP dentro da transação e antes de a alteração da senha estar confirmada no banco. Se o commit falhar após o envio, o usuário recebe uma senha temporária inválida. Uma falha ou lentidão SMTP também mantém a transação aberta por mais tempo.
+
+**Ação recomendada:** confirmar a persistência antes de disparar o e-mail e implementar um mecanismo confiável de entrega, como outbox transacional.
+
+### P2 — Upload valida extensão, mas não o conteúdo real
+
+[AnexoStorageService.java](src/main/java/br/gov/saude/sgpur/service/AnexoStorageService.java) e [AnexoSolicitacaoOnlineStorageService.java](src/main/java/br/gov/saude/sgpur/service/AnexoSolicitacaoOnlineStorageService.java) usam allowlist de extensões e aceitam o MIME fornecido pelo cliente. Não há validação da assinatura do arquivo nem varredura antimalware.
+
+**Ação recomendada:** verificar tipo real do conteúdo, tratar MIME como não confiável, adicionar varredura compatível com a infraestrutura e manter downloads como attachment.
+
+### P3 — Compatibilidade futura dos testes com JDK
+
+Durante os testes, Mockito carregou um agente dinamicamente. O JDK alertou que esse comportamento poderá ser bloqueado por padrão em versões futuras.
+
+**Ação recomendada:** configurar explicitamente o agente Mockito/Byte Buddy no build antes de atualizar o JDK.
+
+## Resultado da segunda passagem completa
+
+Não foi confirmado um bypass adicional de autorização nas rotas revisadas. As
+rotas de operador/admin dependem das regras centralizadas de `SecurityConfig`,
+e os portais de solicitante e avaliador também conferem posse ou vínculo no
+código antes de expor registros, conversas ou anexos. As queries customizadas
+revisadas usam parâmetros nomeados; não foi encontrado SQL montado a partir de
+entrada HTTP direta.
+
+Os achados acima foram mantidos porque são riscos reais do código atual, não
+apenas observações de estilo. Em particular, os quatro itens de maior impacto
+para priorização são: rotação do segredo/logs, schema automático em produção,
+migração destrutiva no boot e reset público de senha.
+
+## Controles positivos confirmados
+
+- Autorização de rotas por papel, CSRF e cabeçalhos de segurança em produção, incluindo CSP e HSTS: [SecurityConfig.java](src/main/java/br/gov/saude/sgpur/config/SecurityConfig.java).
+- Verificação de posse antes de downloads do portal do solicitante e do avaliador.
+- Proteção contra path traversal ao resolver anexos armazenados.
+- Versionamento otimista em entidades críticas e testes específicos de concorrência.
+- Consultas paginadas e fetch joins em trechos críticos para mitigar N+1.
+- Boa cobertura de regressões transacionais, sessões órfãs, votação e fluxos de chat.
+
+## Estado do repositório durante a vistoria
+
+Foram encontrados dois arquivos não rastreados de chat na raiz. Eles não foram alterados:
+
+- `chat_2026_08_22_23_11_37.md`
+- `chat_2026_08_22_23_11_38.md`
