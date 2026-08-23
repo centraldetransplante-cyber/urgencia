@@ -130,6 +130,45 @@ repositório, sempre. Testar contra Postgres real (não só H2) qualquer query
 nova desse tipo antes de confiar na suíte local. Ver `CLAUDE.md`,
 "Segurança e sessão — reforços".
 
+### 1.6 Falha inesperada em migração de boot ficava invisível em DEBUG
+**Sintoma:** achado de vistoria de código (P1,
+`docs/RELATORIO-VISTORIA-CODIGO-2026-08-22.md`) — se um bloco de
+`SchemaMigration` (que roda a cada boot, sempre em try/catch de propósito
+para nunca travar a subida do app) tomasse uma falha real e inesperada
+(conexão recusada, permissão negada, SQL malformado), o `catch` registrava
+só `log.debug("... erro ignorado: {}", e.getMessage())` — nível que
+tipicamente **nem aparece** no log de produção. Um erro de verdade (schema
+ficando parcialmente migrado, por exemplo) podia passar batido para
+sempre, sem ninguém notar, indistinguível do caso normal e esperado de
+idempotência ("a coluna já existe", "a constraint já foi removida numa
+execução anterior").
+**Causa raiz:** o `catch (Exception e)` de cada bloco tratava **toda**
+exceção do mesmo jeito — não existia distinção entre "falha esperada de
+idempotência/dialeto" (segura, silenciosa) e "falha inesperada" (deveria
+ser barulhenta). O comportamento de nunca bloquear o boot em si **não**
+era o bug — é decisão de projeto deliberada, documentada em várias partes
+do `CLAUDE.md` ("nunca travar o usuário/deploy"), mesmo padrão usado em
+`EnumCheckConstraintValidator`.
+**Correção aplicada (2026-08-23):** cada bloco de `SchemaMigration`
+classifica a exceção via uma heurística conservadora por substring de
+mensagem (`already exists`, `does not exist`, `duplicate`, `syntax error`,
+`unsupported` etc. = esperada → `DEBUG`; qualquer mensagem que não bata
+com um padrão conhecido = inesperada → `WARN` **com a stacktrace completa**
+via `log.warn(msg, e)`, nunca só `e.getMessage()`). Ao final de `run()`, um
+resumo agregado único em WARN ("N de 4 etapa(s) tiveram falha inesperada")
+avisa mesmo que ninguém repare nos WARNs individuais. `run()` continua
+nunca lançando exceção — o boot nunca é bloqueado. Coberto por
+`SchemaMigrationTest` (Mockito puro + `ListAppender` do Logback capturando
+o nível real do log): um teste do caminho de falha esperada (fica em
+DEBUG, sem WARN) e testes do caminho de falha inesperada (WARN com
+stacktrace + resumo agregado, `run()` não lança).
+**Como evitar recair:** qualquer `catch` novo dentro de um mecanismo
+"nunca falha o boot/deploy" (migração de schema, seed de dev, etc.) deve
+classificar a falha antes de decidir o nível do log — nunca jogar toda
+exceção em DEBUG só porque o caminho de falha "é esperado na maioria das
+vezes". Na dúvida sobre se uma falha é esperada, tratar como inesperada
+(WARN) — é preferível um WARN a mais do que um erro real invisível.
+
 ---
 
 ## 2. Thymeleaf / Frontend
