@@ -1,9 +1,18 @@
 # Relatório: otimização do CLAUDE.md
 
-**Status: DIAGNÓSTICO — plano proposto, execução NÃO iniciada.** Este
-relatório mede o problema e propõe o corte; a reescrita em si é uma tarefa
-grande e arriscada (ver seção 6) que pede aprovação explícita antes de
-começar.
+**Status: IMPLEMENTADO** (commit `a1710a3`, 2026-08-21, mesmo dia deste
+relatório). O plano da seção 5 foi executado: as ~90 seções datadas foram
+extraídas para `docs/historico/CLAUDE-log-sessoes-2026-07-a-08.md`
+(47.678 palavras, preservadas na íntegra) e a regra/decisão ainda vigente de
+cada uma foi condensada de volta nas seções de referência do `CLAUDE.md`
+(Regras de negócio adicionais, Redesign visual, Chat/mensageria, PDF,
+Segurança, Auditoria, Infra/Deploy, Decisões de não fazer, Pitfalls de
+processo). Resultado: `CLAUDE.md` caiu para 9.936 palavras — dentro da meta
+de 10-15 mil palavras estimada na seção 5, superando a redução de ~70-75%
+projetada. Este relatório fica como registro do diagnóstico e do plano que
+guiou a execução; a seção 6 (proposta de lotes por mês) acabou não sendo
+necessária — o commit fez a extração completa de uma vez, revisada antes do
+commit único.
 
 ## 1. O problema, medido
 

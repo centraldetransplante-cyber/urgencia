@@ -64,25 +64,40 @@ public class Processo {
 
     /**
      * Data de nascimento, CPF (so digitos) e sexo do paciente.
-     * {@code @NotNull}/{@code @NotBlank} na Bean Validation, mas
-     * DELIBERADAMENTE sem {@code nullable = false} na coluna - mesma lacuna
-     * ja existente em {@code pacienteRgct}, agora por decisao consciente de
-     * compatibilidade com {@code Processo}/{@code SolicitacaoOnline} ja
-     * gravados em producao antes destes campos existirem (ver
-     * docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md). Nunca chegam
-     * ao avaliador (so ate o Relatorio Final/dossie, do lado do operador).
+     *
+     * <p><b>HOTFIX de 2026-08-22 (producao quebrada):</b> este campo teve
+     * {@code @NotNull}/{@code @NotBlank}/{@code @Size} de Bean Validation
+     * na ENTIDADE ate hoje, "deliberadamente sem {@code nullable = false}
+     * na coluna" - mas isso nao bastava. O Hibernate valida a entidade
+     * INTEIRA (Bean Validation, via {@code jakarta.persistence.validation.mode
+     * =AUTO}) a cada INSERT/UPDATE, independente de a coluna aceitar NULL e
+     * independente de o controller usar {@code @Valid} ou nao - e todos os 12
+     * processos ja existentes em producao (criados antes destes 3 campos
+     * existirem) tem os tres NULL. Resultado: qualquer escrita em QUALQUER
+     * {@code Processo} legado - finalizar resposta, decidir, editar, reabrir,
+     * qualquer coisa que dispare um flush - quebrava com
+     * {@code ConstraintViolationException}/500, mesmo mudando um campo sem
+     * nenhuma relacao com estes tres. Mesmo padrao ja documentado no
+     * CLAUDE.md para {@code Usuario.email} ("obrigatoriedade fica na camada
+     * web, nao na entidade") - agora aplicado aqui tambem. A obrigatoriedade
+     * de verdade, para processo NOVO/editado, fica em
+     * {@code ProcessoDetalheController.salvar}/{@code atualizar}
+     * ({@code result.rejectValue(...)}, mesmo padrao ja usado ali para o
+     * digito verificador do CPF) - nunca reintroduzir Bean Validation
+     * obrigatoria nestes 3 campos na entidade. Ver
+     * docs/RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md para o desenho
+     * original (que nao previu processos legados).</p>
+     *
+     * <p>Nunca chegam ao avaliador (so ate o Relatorio Final/dossie, do lado
+     * do operador).</p>
      */
-    @NotNull
     @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
     @Column(name = "paciente_data_nascimento")
     private LocalDate pacienteDataNascimento;
 
-    @NotBlank
-    @Size(min = 11, max = 11, message = "CPF deve ter 11 digitos.")
     @Column(name = "paciente_cpf", length = 11)
     private String pacienteCpf;
 
-    @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "paciente_sexo", length = 20)
     private Sexo pacienteSexo;

@@ -100,4 +100,49 @@ class SolicitacaoOnlineCamposIntegrationTest {
         assertThat(doBanco.getObservacoesTriagem()).isNull();
         assertThat(doBanco.getDataEnvio()).isAfter(LocalDateTime.now().minusMinutes(5));
     }
+
+    /**
+     * <b>Regressao do HOTFIX de 2026-08-22 (producao quebrada):</b> mesma
+     * classe de bug documentada em
+     * {@code ProcessoAtualizacaoIntegrationTest
+     * .processoLegadoComCamposDePacienteNulosAceitaQualquerOutraEscritaSemQuebrar}
+     * - aqui do lado de {@code SolicitacaoOnline}. Uma solicitacao LEGADA
+     * (criada antes de {@code pacienteDataNascimento}/{@code pacienteCpf}/
+     * {@code pacienteSexo} existirem, portanto com os 3 campos NULL) precisa
+     * continuar aceitando escrita via {@code devolver}/{@code cancelar}/
+     * {@code converter} - metodos que carregam a entidade GERENCIADA e mutam
+     * so o status/observacoes, sem tocar nesses 3 campos. Antes da correcao,
+     * o flush no commit da transacao validava a entidade INTEIRA e quebrava
+     * com {@code ConstraintViolationException}/500 mesmo sem nenhuma relacao
+     * com o que estava de fato sendo alterado.
+     */
+    @Test
+    void solicitacaoLegadaComCamposDePacienteNulosAceitaDevolucaoSemQuebrar() {
+        SolicitacaoOnline legada = new SolicitacaoOnline();
+        legada.setUsuarioSolicitante(solicitante);
+        legada.setPacienteNome("Paciente Legado");
+        legada.setPacienteRgct("RGCT-LEGADO");
+        // Os 3 campos novos ficam NULL de proposito - simula uma
+        // SolicitacaoOnline criada ANTES deles existirem.
+        legada.setPacienteDataNascimento(null);
+        legada.setPacienteCpf(null);
+        legada.setPacienteSexo(null);
+        legada.setSolicitanteEquipe("HCPA - Nefrologia");
+        legada.setSolicitanteEmail("solicitante.campos@example.com");
+        legada.setDataSituacaoEspecial(LocalDate.now().minusDays(20));
+        legada.setJustificativaClinica("Justificativa antiga.");
+        legada.setStatus(StatusSolicitacaoOnline.ENVIADA);
+        legada.setDataEnvio(LocalDateTime.now().minusDays(20));
+        Long id = repo.saveAndFlush(legada).getId();
+
+        service.devolver(id, "Falta documento X.");
+
+        SolicitacaoOnline doBanco = repo.findById(id).orElseThrow();
+        assertThat(doBanco.getStatus()).isEqualTo(StatusSolicitacaoOnline.DEVOLVIDA);
+        assertThat(doBanco.getObservacoesTriagem()).isEqualTo("Falta documento X.");
+        // Os 3 campos continuam null - a escrita nao inventou dado nenhum.
+        assertThat(doBanco.getPacienteDataNascimento()).isNull();
+        assertThat(doBanco.getPacienteCpf()).isNull();
+        assertThat(doBanco.getPacienteSexo()).isNull();
+    }
 }

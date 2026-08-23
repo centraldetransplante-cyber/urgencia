@@ -28,10 +28,30 @@ fonte da verdade sobre o que é comportamento atual; estes arquivos são o
   achados P1 de reset de senha e ordem e-mail/commit foram conferidos no
   código real e são precisos. Ver PR onde entrou para o histórico de origem.
 
+## Catálogo de bugs conhecidos (consultar antes de mexer em área de risco)
+- `CATALOGO-BUGS-CONHECIDOS.md` — catálogo vivo, organizado por categoria
+  (persistência/Hibernate, Thymeleaf, concorrência, fluxo de decisão,
+  imparcialidade, e-mail, UI, deploy, build/teste), de todo bug já
+  encontrado e já corrigido no projeto. Consultar **antes** de mexer numa
+  área de risco conhecida (schema/enum, chat, decisão de processo, PDF,
+  concorrência); atualizar quando uma recaída da mesma classe aparecer, em
+  vez de duplicar entrada.
+
 ## Arquivo histórico (o log de sessões que saiu do CLAUDE.md)
 - `historico/CLAUDE-log-sessoes-2026-07-a-08.md` — ~90 sessões datadas
   (2026-07-27 a 2026-08-21), narrativa completa de cada bug/feature/decisão
   já resolvida. Ponto de partida para "como/quando isso foi decidido".
+- `historico/README.md` — índice próprio da pasta `historico/` (arquivo
+  morto de 2026-07-29): `sessao-2026-07-27-resumo.md`,
+  `vistoria-pendente.md` (stub truncado, sem conteúdo),
+  `relatorio-vistoria-limpeza-codigo.txt`, `nota-modulo-solicitante.txt`
+  (ideia original do módulo do solicitante, ditada pelo usuário).
+
+## Mockups (HTML estático, não são relatório)
+- `mockups/solicitante-dashboard-proposta.html` — proposta visual do
+  dashboard do Portal do Solicitante.
+- `mockups/solicitante-detalhe-proposta.html` — proposta visual da tela de
+  detalhe do Portal do Solicitante.
 
 ## Relatórios — status IMPLEMENTADO/CONCLUÍDO (arqueologia do "porquê")
 - `RELATORIO-CAMPOS-PACIENTE-SOLICITANTE-2026-08.md` — data de nascimento/

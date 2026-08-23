@@ -150,6 +150,60 @@ class ProcessoAtualizacaoIntegrationTest {
         }
     }
 
+    /**
+     * <b>Regressao do HOTFIX de 2026-08-22 (producao quebrada):</b> um
+     * {@code Processo} LEGADO - criado antes de
+     * {@code pacienteDataNascimento}/{@code pacienteCpf}/{@code pacienteSexo}
+     * existirem, portanto com os 3 campos NULL, exatamente como os 12
+     * processos reais de producao no momento do incidente - precisa
+     * continuar aceitando QUALQUER escrita que nao mexa nesses 3 campos, sem
+     * lancar {@code ConstraintViolationException}/{@code
+     * TransactionSystemException}. Antes da correcao, {@code @NotNull}/
+     * {@code @NotBlank} na ENTIDADE faziam o Hibernate validar o
+     * {@code Processo} INTEIRO a cada flush - mesmo um metodo que so grava
+     * {@code dataEnvioSnt} (sem nenhuma relacao com paciente) quebrava com
+     * 500 num processo legado.
+     *
+     * <p>Por que a suite nao pegou este bug antes do merge que introduziu os
+     * 3 campos: todo teste existente cria um {@code Processo} de fixture ja
+     * com esses campos preenchidos (ver {@code preparar()} desta propria
+     * classe, por exemplo) - nenhum simulava um processo PRE-EXISTENTE sem
+     * eles, que e exatamente o cenario real de producao (dado legado, nao
+     * dado de teste criado do zero).</p>
+     */
+    @Test
+    void processoLegadoComCamposDePacienteNulosAceitaQualquerOutraEscritaSemQuebrar() {
+        Processo legado = new Processo();
+        legado.setNumero("11/2026");
+        legado.setAno(2026);
+        legado.setSequencial(11);
+        legado.setStatus(StatusProcesso.DEFERIDO);
+        legado.setPacienteNome("Paciente Legado");
+        legado.setPacienteRgct("RGCT-LEGADO");
+        // Os 3 campos novos ficam NULL de proposito - simula um Processo
+        // criado ANTES deles existirem (o cenario real dos 12 processos de
+        // producao no incidente).
+        legado.setPacienteDataNascimento(null);
+        legado.setPacienteCpf(null);
+        legado.setPacienteSexo(null);
+        legado.setSolicitanteEquipe("Equipe Legada");
+        legado.setSolicitanteEmail("legado@example.com");
+        legado.setDataSituacaoEspecial(LocalDate.now().minusDays(30));
+        Long idLegado = repo.saveAndFlush(legado).getId();
+
+        // Escrita SEM NENHUMA relacao com os 3 campos de paciente - o mesmo
+        // tipo de acao que quebrava em producao (finalizar resposta, decidir,
+        // reabrir etc.): so grava a data do comprovante SNT.
+        service.registrarDataEnvioSnt(idLegado);
+
+        Processo doBanco = repo.findById(idLegado).orElseThrow();
+        assertThat(doBanco.getDataEnvioSnt()).isEqualTo(LocalDate.now());
+        // Os 3 campos continuam null - a escrita nao inventou dado nenhum.
+        assertThat(doBanco.getPacienteDataNascimento()).isNull();
+        assertThat(doBanco.getPacienteCpf()).isNull();
+        assertThat(doBanco.getPacienteSexo()).isNull();
+    }
+
     /** Cria um objeto "de formulario" com o estado editavel atual do registro. */
     private Processo copiaEditavel(Processo origem) {
         Processo p = new Processo();
