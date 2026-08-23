@@ -79,3 +79,12 @@ app:
     lembrete:
       varredura:
         habilitado: ${SGPUR_SNT_LEMBRETE_HABILITADO:true}
+  # Varredura de limpeza dos mapas em memoria de rate-limit (login e
+  # "esqueci minha senha"): LIGADA por padrao em producao (default oposto ao
+  # de application.yml/dev). E aqui que ela evita vazamento de memoria de
+  # longo prazo sob tentativas reais de usernames variados. Desliga com
+  # SGPUR_RATE_LIMIT_LIMPEZA_HABILITADO=false.
+  rate-limit:
+    limpeza:
+      varredura:
+        habilitado: ${SGPUR_RATE_LIMIT_LIMPEZA_HABILITADO:true}

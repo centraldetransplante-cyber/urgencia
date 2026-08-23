@@ -116,7 +116,7 @@ class DatasFinalizacaoIntegrationTest {
         processoRepo.saveAndFlush(p);
 
         controller.uploadOficio(processoId, new MockMultipartFile(
-                "arquivo", "oficio.pdf", "application/pdf", "conteudo".getBytes()),
+                "arquivo", "oficio.pdf", "application/pdf", "%PDF-1.4\nconteudo".getBytes()),
                 new RedirectAttributesModelMap());
 
         // O documento anexado agora e outro: a data de emissao acompanha o
@@ -132,7 +132,7 @@ class DatasFinalizacaoIntegrationTest {
         assertThat(relido().getDataEnvioSnt()).isNull();
 
         controller.uploadComprovanteSnt(processoId, new MockMultipartFile(
-                "arquivo", "snt.pdf", "application/pdf", "conteudo".getBytes()),
+                "arquivo", "snt.pdf", "application/pdf", "%PDF-1.4\nconteudo".getBytes()),
                 new RedirectAttributesModelMap());
 
         assertThat(relido().getDataEnvioSnt()).isEqualTo(LocalDate.now());

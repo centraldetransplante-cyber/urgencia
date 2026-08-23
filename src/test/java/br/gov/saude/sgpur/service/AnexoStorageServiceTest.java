@@ -45,11 +45,14 @@ class AnexoStorageServiceTest {
         return p;
     }
 
+    /** Bytes minimos de um PDF de verdade ("%PDF-1.4" + resto qualquer) - passa na checagem de assinatura. */
+    private static final byte[] CONTEUDO_PDF_VALIDO = "%PDF-1.4\nconteudo".getBytes();
+
     @Test
     void salvarRenomeiaParaNomePadrao() throws Exception {
         when(anexoRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         MockMultipartFile arquivo = new MockMultipartFile(
-            "arquivo", "scan0012.pdf", "application/pdf", "conteudo".getBytes());
+            "arquivo", "scan0012.pdf", "application/pdf", CONTEUDO_PDF_VALIDO);
         var anexo = service.salvar(processo(), TipoAnexo.DOCUMENTO_PACIENTE, "desc", arquivo);
         // Nome padrao: "AAAA-MM-DD - CET-RS 07-2026 - Documento paciente.pdf"
         // (a barra do numero vira traco; o nome original do upload e descartado).
@@ -62,9 +65,9 @@ class AnexoStorageServiceTest {
         when(anexoRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         var p = processo();
         service.salvar(p, TipoAnexo.DOCUMENTO_CLINICO_AVALIADOR, "d",
-            new MockMultipartFile("arquivo", "a.pdf", "application/pdf", "1".getBytes()));
+            new MockMultipartFile("arquivo", "a.pdf", "application/pdf", CONTEUDO_PDF_VALIDO));
         var segundo = service.salvar(p, TipoAnexo.DOCUMENTO_CLINICO_AVALIADOR, "d",
-            new MockMultipartFile("arquivo", "b.pdf", "application/pdf", "2".getBytes()));
+            new MockMultipartFile("arquivo", "b.pdf", "application/pdf", CONTEUDO_PDF_VALIDO));
         // O segundo arquivo do mesmo tipo/dia recebe o sufixo " (2)".
         assertThat(segundo.getNomeArquivo()).endsWith("- Documento clinico (2).pdf");
     }
@@ -84,6 +87,19 @@ class AnexoStorageServiceTest {
             "arquivo", "documento-clinico.html", "text/html", "<script>alert(1)</script>".getBytes());
         assertThatThrownBy(() -> service.salvar(processo(), TipoAnexo.DOCUMENTO_CLINICO_AVALIADOR, "desc", arquivo))
             .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void salvarRejeitaExecutavelDisfarcadoDeExtensaoPermitida() {
+        // Extensao ".pdf" (passa na allowlist), mas conteudo real e um
+        // executavel Windows ("MZ...") - a checagem de assinatura (magic
+        // number) deve rejeitar mesmo com a extensao correta.
+        byte[] bytesExecutavel = {0x4D, 0x5A, (byte) 0x90, 0x00, 0x03};
+        MockMultipartFile arquivo = new MockMultipartFile(
+            "arquivo", "documento-clinico.pdf", "application/pdf", bytesExecutavel);
+        assertThatThrownBy(() -> service.salvar(processo(), TipoAnexo.DOCUMENTO_CLINICO_AVALIADOR, "desc", arquivo))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("nao permitido");
     }
 
     @Test

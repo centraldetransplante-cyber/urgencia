@@ -226,7 +226,7 @@ class InfoComplementarAvaliadorIntegrationTest {
     @Test
     void solicitanteRespondeApenasComArquivoComoSempre() throws Exception {
         MockMultipartFile arquivo = new MockMultipartFile("arquivos", "exame.pdf",
-            MediaType.APPLICATION_PDF_VALUE, "conteudo do exame".getBytes());
+            MediaType.APPLICATION_PDF_VALUE, "%PDF-1.4\nconteudo do exame".getBytes());
 
         mvc.perform(multipart("/solicitante/" + solicitacaoId + "/informacao-complementar")
                 .file(arquivo).with(csrf()).with(user("solicitante-ica").roles("SOLICITANTE")))

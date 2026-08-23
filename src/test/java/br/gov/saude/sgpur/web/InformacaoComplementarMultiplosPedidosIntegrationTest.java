@@ -184,7 +184,7 @@ class InformacaoComplementarMultiplosPedidosIntegrationTest {
 
     private void solicitanteEnvia() throws Exception {
         MockMultipartFile arquivo = new MockMultipartFile("arquivos", "exames.pdf",
-                MediaType.APPLICATION_PDF_VALUE, "conteudo".getBytes());
+                MediaType.APPLICATION_PDF_VALUE, "%PDF-1.4\nconteudo".getBytes());
         mvc.perform(multipart("/solicitante/" + solicitacaoId + "/informacao-complementar")
                         .file(arquivo).with(csrf()))
                 .andExpect(status().is3xxRedirection());

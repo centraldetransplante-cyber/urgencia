@@ -35,6 +35,14 @@ public class PasswordResetAttemptService {
 
     private final ConcurrentHashMap<String, Estado> tentativasPorUsuario = new ConcurrentHashMap<>();
 
+    /** Permite ao teste "avancar" o relogio sem esperar minutos de verdade (mesmo padrao de {@link LoginAttemptService}). */
+    private java.util.function.Supplier<Instant> relogio = Instant::now;
+
+    /** Ponto de extensao usado SO por teste, para nao depender de tempo real. */
+    void usarRelogioParaTeste(java.util.function.Supplier<Instant> relogio) {
+        this.relogio = relogio;
+    }
+
     /**
      * Registra mais uma tentativa de reset para o username e informa se ela e
      * permitida. Quando o limite ja foi atingido dentro da janela atual, a
@@ -44,7 +52,7 @@ public class PasswordResetAttemptService {
      */
     public boolean tentarRegistrar(String username) {
         String chave = chave(username);
-        Instant agora = Instant.now();
+        Instant agora = relogio.get();
         boolean[] permitido = new boolean[1];
         tentativasPorUsuario.compute(chave, (key, atual) -> {
             if (atual == null || agora.isAfter(atual.inicioJanela().plus(JANELA))) {
@@ -68,5 +76,22 @@ public class PasswordResetAttemptService {
 
     private String chave(String username) {
         return username == null ? "" : username.toLowerCase(Locale.ROOT);
+    }
+
+    /**
+     * Varredura periodica (ver {@code RateLimitLimpezaScheduler}) que remove
+     * do mapa em memoria toda entrada cuja janela ja expirou. Sem isso, uma
+     * chave (username) que nunca mais e acessada de novo apos a janela
+     * expirar fica PARA SEMPRE em {@link #tentativasPorUsuario} - a entrada
+     * so e substituida quando a MESMA chave e acessada de novo, entao um
+     * ataque testando muitos usernames diferentes (uma vez cada) faz o mapa
+     * crescer sem limite. Nao muda nenhuma semantica de rate-limit: a janela
+     * expirada ja seria ignorada na proxima chamada de {@link #tentarRegistrar}
+     * de qualquer forma (ver o {@code compute} acima) - so libera memoria.
+     */
+    void limparExpirados() {
+        Instant agora = relogio.get();
+        tentativasPorUsuario.entrySet().removeIf(entry ->
+            agora.isAfter(entry.getValue().inicioJanela().plus(JANELA)));
     }
 }

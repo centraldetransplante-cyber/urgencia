@@ -167,7 +167,7 @@ class SolicitanteInformacaoComplementarIntegrationTest {
         // Solicitante envia o arquivo direto pelo portal - so alimenta o dado,
         // NAO decide nem retoma a analise.
         MockMultipartFile arquivo = new MockMultipartFile("arquivos", "exame-complementar.pdf",
-                MediaType.APPLICATION_PDF_VALUE, "conteudo do exame".getBytes());
+                MediaType.APPLICATION_PDF_VALUE, "%PDF-1.4\nconteudo do exame".getBytes());
         mvc.perform(multipart("/solicitante/" + solicitacaoId + "/informacao-complementar")
                 .file(arquivo).with(csrf()))
                 .andExpect(status().is3xxRedirection());
