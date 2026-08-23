@@ -17,6 +17,20 @@ grep -rn "<termo>" docs/*.md docs/historico/*.md
 fonte da verdade sobre o que é comportamento atual; estes arquivos são o
 "porquê" e o histórico, não a especificação vigente.
 
+## Proposta EM ESPERA — alto risco, nada decidido nem implementado
+- `IDEIA-TERMO-IMPARCIALIDADE-AVALIADOR-2026-08.md` — **EM ESPERA, ALTO
+  RISCO institucional.** Ideia do dono do produto de **remover a
+  anonimização do material do avaliador** (hoje só iniciais) e colocar no
+  lugar um **termo de imparcialidade** aceito antes de cada análise.
+  **Nada foi implementado nem decidido** — o documento separa as duas
+  partes do pedido (adicionar o termo × remover o anonimato, que não
+  precisam andar juntas), compara 4 opções (termo adicional sem remover /
+  declaração de impedimento por caso / revelação sob demanda / remoção
+  completa), mapeia os 27 arquivos e 23 testes que sustentam a
+  anonimização hoje, e termina com 8 perguntas em aberto para o usuário.
+  **Não implementar sem aprovação explícita e provável consulta
+  jurídica/regulatória externa.**
+
 ## Vistoria de segurança pendente de ação (2026-08-22)
 - `RELATORIO-VISTORIA-CODIGO-2026-08-22.md` — vistoria de código (outra IA,
   revisão pedida pelo usuário). Achados **ainda não corrigidos**: P0
