@@ -16,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -129,13 +130,20 @@ class ComprovanteSntPendenteQueriesIntegrationTest {
     @Test
     void registrarUltimoLembreteSntGravaOTimestampNoBanco() {
         Processo p = processo(1, StatusProcesso.DEFERIDO, LocalDateTime.now().minusDays(10));
-        LocalDateTime agora = LocalDateTime.now();
+        // Truncado pra milissegundo: o H2 arredonda a precisao de
+        // nanossegundo do LocalDateTime.now() do Java para microssegundo ao
+        // persistir/reler, podendo empurrar o valor lido alguns
+        // nanossegundos pra frente do "agora" capturado em memoria - falso
+        // negativo intermitente (achado real, RELATORIO-RESPONSIVIDADE-
+        // PROGRAMATICA-2026-08-24). Truncar elimina esse ruido sem perder a
+        // precisao que o teste realmente precisa.
+        LocalDateTime agora = LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS);
 
         processoService.registrarLembreteComprovanteSnt(p.getId());
 
-        assertThat(processoRepo.findById(p.getId()).orElseThrow().getUltimoLembreteSntEm())
-            .isNotNull()
-            .isAfterOrEqualTo(agora);
+        LocalDateTime gravado = processoRepo.findById(p.getId()).orElseThrow().getUltimoLembreteSntEm();
+        assertThat(gravado).isNotNull();
+        assertThat(gravado.truncatedTo(ChronoUnit.MILLIS)).isAfterOrEqualTo(agora);
     }
 
     @Test

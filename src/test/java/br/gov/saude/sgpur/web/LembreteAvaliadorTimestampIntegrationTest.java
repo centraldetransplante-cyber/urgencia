@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -116,15 +117,23 @@ class LembreteAvaliadorTimestampIntegrationTest {
     void lembreteIndividualEnviadoComSucessoGravaUltimoLembreteEm() {
         when(emailSenderService.enviar(anyString(), anyString(), anyString())).thenReturn(true);
 
-        LocalDateTime antes = LocalDateTime.now();
+        // Truncado pra milissegundo (nao whole-second) nos 3 pontos de
+        // comparacao: o H2 arredonda a precisao de nanossegundo do
+        // LocalDateTime.now() do Java para microssegundo ao persistir/reler,
+        // podendo empurrar o valor lido alguns nanossegundos pra frente do
+        // "depois" capturado em memoria - falso negativo intermitente
+        // (achado real, RELATORIO-RESPONSIVIDADE-PROGRAMATICA-2026-08-24).
+        // Truncar pra milissegundo elimina esse ruido de sub-microssegundo
+        // sem perder a precisao que o teste realmente precisa.
+        LocalDateTime antes = LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS);
         AcaoResponse resposta = controller.lembreteAvaliador(processoId, parecerId);
-        LocalDateTime depois = LocalDateTime.now();
+        LocalDateTime depois = LocalDateTime.now().truncatedTo(ChronoUnit.MILLIS).plus(1, ChronoUnit.MILLIS);
 
         assertThat(resposta.ok()).isTrue();
 
         Parecer relido = parecerRepo.findById(parecerId).orElseThrow();
         assertThat(relido.getUltimoLembreteEm()).isNotNull();
-        assertThat(relido.getUltimoLembreteEm()).isBetween(antes, depois);
+        assertThat(relido.getUltimoLembreteEm().truncatedTo(ChronoUnit.MILLIS)).isBetween(antes, depois);
     }
 
     /**
