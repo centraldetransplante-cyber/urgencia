@@ -41,7 +41,10 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   acessar manualmente após o boot) · login inicial `admin` / `Admin123!`
   (criado automaticamente por `AdminBootstrap` só quando a tabela `usuario`
   está vazia; em prod exige `SGPUR_ADMIN_PASSWORD` via env var, sem default).
-- Testes: `.\test.ps1` (ou `mvn test`) — **144 testes**, sempre com **JDK 21**.
+- Testes: `.\test.ps1` (ou `mvn test`) — **1.094 testes** (contagem exata via
+  `target/surefire-reports`, verificada em 2026-08-24; a marca de "144
+  testes" ficou desatualizada por várias sessões — corrigida aqui), sempre
+  com **JDK 21**.
   Build: `mvn -DskipTests package` (gera o JAR).
 - **Teste E2E de navegador (Playwright):** `.\e2e.ps1` sobe o SAUR real (porta
   aleatória, H2, perfil dev) e um Chromium de verdade, **com janela visível
@@ -538,6 +541,44 @@ não fazia sentido manter "legado só leitura". Ver detalhe da remoção em
   produção). Coberto por `ExclusaoSolicitanteIntegrationTest`
   (`@SpringBootTest` + H2 real: um teste com repositório mockado nunca
   expressaria uma violação de FK).
+- **"Esqueci minha senha" é um fluxo de TOKEN por link, não mais troca
+  imediata (2026-08-24).** Antes, `POST /usuarios/esqueci-senha` trocava a
+  senha ativa na hora do pedido (`UsuarioService.resetarSenha`, removido) e
+  mandava a senha nova por e-mail — permitia DoS/lockout: qualquer pessoa que
+  soubesse o LOGIN de um avaliador/admin (não precisa do e-mail nem da senha)
+  conseguia derrubar o acesso dele repetidamente. Hoje o fluxo é todo de
+  `PasswordResetService` (novo), em 2 passos:
+  1. `POST /usuarios/esqueci-senha` chama `PasswordResetService
+     .gerarTokenResetSenha`, que gera e persiste um `PasswordResetToken` de
+     uso único com TTL de 60 min (constante `TTL`), invalidando qualquer
+     token pendente anterior do mesmo usuário. A senha ativa NAO muda neste
+     passo — continua válida até o usuário abrir o link. Sempre a mesma
+     mensagem neutra na tela, exista ou não o login (evita enumeração),
+     igual antes.
+  2. `GET/POST /usuarios/redefinir-senha?token=...` — formulário de nova
+     senha; `PasswordResetService.confirmarNovaSenha` valida o token (existe,
+     não expirado, não usado), aplica a mesma política de senha
+     (`SenhaPolicy`, extraída de `UsuarioService` para ser reaproveitada
+     aqui) e troca a senha ativa + marca o token como usado na MESMA
+     transação (atômico). Token inválido/expirado/já usado nunca revela qual
+     dos três motivos — só a mensagem varia por UX.
+  - Ordem commit-antes-de-notificar (mesmo padrão de
+    `RegistroEnvioService.enviarConvitesAvaliadores`): o e-mail com o link
+    só é disparado pelo `UsuarioController` DEPOIS que
+    `gerarTokenResetSenha` retorna (token já comitado), nunca de dentro
+    dessa transação — falha de SMTP não desfaz o token nem impede um
+    reenvio.
+  - Rotas públicas (`permitAll` no `SecurityConfig`, precisam vir ANTES da
+    regra geral `/usuarios/**` de ADMIN): `/usuarios/esqueci-senha` e
+    `/usuarios/redefinir-senha`.
+  - `PasswordResetTokenRepository` + limpeza periódica dos tokens expirados
+    via `RateLimitLimpezaScheduler` (mesmo agendador que já limpava os
+    mapas em memória de `LoginAttemptService`/`PasswordResetAttemptService`).
+  - Auditoria: `SENHA_RESET_SOLICITADO` (passo 1, como antes) +
+    `SENHA_RESET_CONFIRMADO` (novo, passo 2 com sucesso).
+  - `PasswordResetAttemptService` (rate-limit de 3 pedidos/15min por
+    username) continua protegendo o passo 1 contra spam de e-mail, sem
+    mudança de comportamento.
 
 ## Indicador: tempo de resposta dos avaliadores
 - `TempoRespostaService.calcular()` — média de **dias corridos** entre

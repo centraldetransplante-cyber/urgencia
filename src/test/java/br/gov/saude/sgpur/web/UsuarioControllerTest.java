@@ -6,6 +6,7 @@ import br.gov.saude.sgpur.service.MembroUrgenciaRenalService;
 import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
 import br.gov.saude.sgpur.service.AuditoriaService;
+import br.gov.saude.sgpur.service.PasswordResetService;
 import br.gov.saude.sgpur.service.SolicitacaoOnlineService;
 import br.gov.saude.sgpur.service.UsuarioService;
 import org.junit.jupiter.api.BeforeEach;
@@ -17,6 +18,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.util.List;
+import java.util.Optional;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.instanceOf;
@@ -60,6 +62,7 @@ class UsuarioControllerTest {
     @MockitoBean private UsuarioService service;
     @MockitoBean private AuditoriaService auditoria;
     @MockitoBean private MembroUrgenciaRenalService membroService;
+    @MockitoBean private PasswordResetService passwordResetService;
     // Nao usados diretamente pelo UsuarioController, mas exigidos pelo
     // GlobalModelAdvice (@ControllerAdvice global carregado em qualquer
     // slice @WebMvcTest) - sem eles o contexto falha ao subir.
@@ -459,7 +462,7 @@ class UsuarioControllerTest {
         verifyNoInteractions(auditoria);
     }
 
-    // ---- esqueci-senha ----
+    // ---- esqueci-senha (passo 1: gera token + envia link) ----
 
     @Test
     @WithMockUser(roles = "OPERADOR")
@@ -472,6 +475,8 @@ class UsuarioControllerTest {
     @Test
     @WithMockUser(roles = "OPERADOR")
     void redefinirSenhaSempreExibeMensagemNeutraIndependenteDoUsuarioExistir() throws Exception {
+        when(passwordResetService.gerarTokenResetSenha("qualquerLogin")).thenReturn(Optional.empty());
+
         mvc.perform(post("/usuarios/esqueci-senha")
                 .with(csrf())
                 .param("username", "qualquerLogin"))
@@ -480,7 +485,112 @@ class UsuarioControllerTest {
             .andExpect(model().attribute("sucesso", true))
             .andExpect(model().attribute("msgRedefinicao", containsString("Se o login existir")));
 
-        verify(service).resetarSenha("qualquerLogin");
+        verify(passwordResetService).gerarTokenResetSenha("qualquerLogin");
+        verify(passwordResetService, never()).enviarEmail(any());
         verify(auditoria).registrar(eq("SENHA_RESET_SOLICITADO"), eq("Usuario qualquerLogin"), any());
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void redefinirSenhaComUsuarioValidoGeraTokenEEnviaEmailDepois() throws Exception {
+        PasswordResetService.TokenGerado gerado =
+            new PasswordResetService.TokenGerado("tok-123", "op1@example.com", "Operador Um");
+        when(passwordResetService.gerarTokenResetSenha("operador1")).thenReturn(Optional.of(gerado));
+
+        mvc.perform(post("/usuarios/esqueci-senha")
+                .with(csrf())
+                .param("username", "operador1"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("sucesso", true));
+
+        verify(passwordResetService).gerarTokenResetSenha("operador1");
+        verify(passwordResetService).enviarEmail(gerado);
+    }
+
+    // ---- redefinir-senha (passo 2: confirma a nova senha a partir do token) ----
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void redefinirSenhaFormComTokenValidoExibeFormulario() throws Exception {
+        when(passwordResetService.validar("tok-valido")).thenReturn(PasswordResetService.EstadoToken.VALIDO);
+
+        mvc.perform(get("/usuarios/redefinir-senha").param("token", "tok-valido"))
+            .andExpect(status().isOk())
+            .andExpect(view().name("usuarios/redefinir-senha"))
+            .andExpect(model().attribute("token", "tok-valido"))
+            .andExpect(model().attributeDoesNotExist("erroToken"));
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void redefinirSenhaFormComTokenExpiradoExibeErroGenerico() throws Exception {
+        when(passwordResetService.validar("tok-velho")).thenReturn(PasswordResetService.EstadoToken.EXPIRADO);
+
+        mvc.perform(get("/usuarios/redefinir-senha").param("token", "tok-velho"))
+            .andExpect(status().isOk())
+            .andExpect(view().name("usuarios/redefinir-senha"))
+            .andExpect(model().attributeDoesNotExist("token"))
+            .andExpect(model().attribute("erroToken", containsString("expirou")));
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void redefinirSenhaConfirmarComSucessoRedirecionaParaLoginEAuditaComOUsuario() throws Exception {
+        when(passwordResetService.confirmarNovaSenha("tok-123", "NovaSenha123!", "NovaSenha123!"))
+            .thenReturn("operador1");
+
+        mvc.perform(post("/usuarios/redefinir-senha")
+                .with(csrf())
+                .param("token", "tok-123")
+                .param("novaSenha", "NovaSenha123!")
+                .param("confirmacao", "NovaSenha123!"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/login"))
+            .andExpect(flash().attributeExists("msg"));
+
+        verify(passwordResetService).confirmarNovaSenha("tok-123", "NovaSenha123!", "NovaSenha123!");
+        // bug_001: o evento de auditoria precisa nomear o usuario, igual
+        // SENHA_ALTERADA/SENHA_RESET_SOLICITADO ja fazem.
+        verify(auditoria).registrar(eq("SENHA_RESET_CONFIRMADO"), eq("Usuario operador1"), any());
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void redefinirSenhaConfirmarComTokenJaUsadoReexibeFormComErroGenericoSemAuditar() throws Exception {
+        doThrow(new IllegalArgumentException("Este link de redefinição já foi utilizado. Solicite um novo."))
+            .when(passwordResetService).confirmarNovaSenha(eq("tok-usado"), anyString(), anyString());
+        when(passwordResetService.validar("tok-usado")).thenReturn(PasswordResetService.EstadoToken.JA_USADO);
+
+        mvc.perform(post("/usuarios/redefinir-senha")
+                .with(csrf())
+                .param("token", "tok-usado")
+                .param("novaSenha", "NovaSenha123!")
+                .param("confirmacao", "NovaSenha123!"))
+            .andExpect(status().isOk())
+            .andExpect(view().name("usuarios/redefinir-senha"))
+            .andExpect(model().attributeDoesNotExist("token"))
+            .andExpect(model().attribute("erroToken", containsString("já foi utilizado")));
+
+        verifyNoInteractions(auditoria);
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void redefinirSenhaConfirmarComSenhaFracaReexibeFormComToken() throws Exception {
+        doThrow(new IllegalArgumentException("A senha deve ter ao menos 8 caracteres."))
+            .when(passwordResetService).confirmarNovaSenha(eq("tok-123"), anyString(), anyString());
+        when(passwordResetService.validar("tok-123")).thenReturn(PasswordResetService.EstadoToken.VALIDO);
+
+        mvc.perform(post("/usuarios/redefinir-senha")
+                .with(csrf())
+                .param("token", "tok-123")
+                .param("novaSenha", "abc")
+                .param("confirmacao", "abc"))
+            .andExpect(status().isOk())
+            .andExpect(view().name("usuarios/redefinir-senha"))
+            .andExpect(model().attribute("token", "tok-123"))
+            .andExpect(model().attribute("erro", containsString("8 caracteres")));
+
+        verifyNoInteractions(auditoria);
     }
 }

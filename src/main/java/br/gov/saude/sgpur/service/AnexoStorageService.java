@@ -4,6 +4,8 @@ import br.gov.saude.sgpur.domain.Anexo;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.TipoAnexo;
 import br.gov.saude.sgpur.repository.AnexoRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -23,6 +25,8 @@ import java.util.Set;
  */
 @Service
 public class AnexoStorageService {
+
+    private static final Logger log = LoggerFactory.getLogger(AnexoStorageService.class);
 
     /**
      * Extensoes aceitas para upload manual (todo o app so pede PDF, e-mail
@@ -278,8 +282,9 @@ public class AnexoStorageService {
             }
             try {
                 Files.deleteIfExists(resolverArquivo(a));
-            } catch (RuntimeException | IOException ignored) {
-                // best-effort
+            } catch (RuntimeException | IOException e) {
+                // best-effort - so log, nunca interrompe a exclusao do registro
+                log.debug("Nao foi possivel excluir o arquivo fisico do anexo {}: {}", a.getId(), e.getMessage());
             }
             anexoRepository.delete(a);
             try {
@@ -343,8 +348,9 @@ public class AnexoStorageService {
         Long processoId = a.getProcesso().getId();
         try {
             Files.deleteIfExists(resolverArquivo(a));
-        } catch (RuntimeException | IOException ignored) {
-            // best-effort
+        } catch (RuntimeException | IOException e) {
+            // best-effort - so log, nunca interrompe a exclusao do registro
+            log.debug("Nao foi possivel excluir o arquivo fisico do anexo {}: {}", a.getId(), e.getMessage());
         }
         anexoRepository.delete(a);
         return processoId;
@@ -365,11 +371,18 @@ public class AnexoStorageService {
             if (Files.exists(pasta)) {
                 try (var paths = Files.walk(pasta)) {
                     paths.sorted(java.util.Comparator.reverseOrder())
-                        .forEach(p -> { try { Files.deleteIfExists(p); } catch (IOException ignored) { } });
+                        .forEach(p -> {
+                            try {
+                                Files.deleteIfExists(p);
+                            } catch (IOException e) {
+                                log.debug("Nao foi possivel excluir {}: {}", p, e.getMessage());
+                            }
+                        });
                 }
             }
-        } catch (IOException ignored) {
+        } catch (IOException e) {
             // best-effort: metadados ja removidos do banco
+            log.debug("Nao foi possivel remover a pasta de anexos {}: {}", pasta, e.getMessage());
         }
     }
 }

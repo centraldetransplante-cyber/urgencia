@@ -38,7 +38,7 @@ package br.gov.saude.sgpur.web.dto;
  */
 public record SituacaoPedidoView(
     String rotulo,
-    String classeCor,
+    @Deprecated String classeCor,
     String icone,
     String titulo,
     String mensagem,
