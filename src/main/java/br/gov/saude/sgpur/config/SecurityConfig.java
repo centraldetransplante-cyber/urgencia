@@ -136,8 +136,11 @@ public class SecurityConfig {
                     .requestMatchers("/actuator/**").hasRole("ADMIN");
                 // Precisa vir ANTES da regra geral /usuarios/** (ADMIN) - senao ninguem
                 // deslogado consegue acessar a recuperacao de senha, justamente quando
-                // mais precisa (nao consegue logar).
-                auth.requestMatchers("/usuarios/esqueci-senha").permitAll()
+                // mais precisa (nao consegue logar). /redefinir-senha (GET+POST) e o
+                // 2o passo do mesmo fluxo (abrir o link recebido por e-mail e confirmar
+                // a nova senha) - tambem publico, protegido pelo token de uso unico com
+                // TTL curto (PasswordResetService), nao por autenticacao.
+                auth.requestMatchers("/usuarios/esqueci-senha", "/usuarios/redefinir-senha").permitAll()
                     .requestMatchers("/login").permitAll()
                     // Troca da propria senha: qualquer usuario logado (ADMIN/OPERADOR/
                     // AVALIADOR). Precisa vir ANTES da regra /usuarios/** (ADMIN), senao

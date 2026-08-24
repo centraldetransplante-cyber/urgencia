@@ -522,6 +522,44 @@ não fazia sentido manter "legado só leitura". Ver detalhe da remoção em
   produção). Coberto por `ExclusaoSolicitanteIntegrationTest`
   (`@SpringBootTest` + H2 real: um teste com repositório mockado nunca
   expressaria uma violação de FK).
+- **"Esqueci minha senha" é um fluxo de TOKEN por link, não mais troca
+  imediata (2026-08-24).** Antes, `POST /usuarios/esqueci-senha` trocava a
+  senha ativa na hora do pedido (`UsuarioService.resetarSenha`, removido) e
+  mandava a senha nova por e-mail — permitia DoS/lockout: qualquer pessoa que
+  soubesse o LOGIN de um avaliador/admin (não precisa do e-mail nem da senha)
+  conseguia derrubar o acesso dele repetidamente. Hoje o fluxo é todo de
+  `PasswordResetService` (novo), em 2 passos:
+  1. `POST /usuarios/esqueci-senha` chama `PasswordResetService
+     .gerarTokenResetSenha`, que gera e persiste um `PasswordResetToken` de
+     uso único com TTL de 60 min (constante `TTL`), invalidando qualquer
+     token pendente anterior do mesmo usuário. A senha ativa NAO muda neste
+     passo — continua válida até o usuário abrir o link. Sempre a mesma
+     mensagem neutra na tela, exista ou não o login (evita enumeração),
+     igual antes.
+  2. `GET/POST /usuarios/redefinir-senha?token=...` — formulário de nova
+     senha; `PasswordResetService.confirmarNovaSenha` valida o token (existe,
+     não expirado, não usado), aplica a mesma política de senha
+     (`SenhaPolicy`, extraída de `UsuarioService` para ser reaproveitada
+     aqui) e troca a senha ativa + marca o token como usado na MESMA
+     transação (atômico). Token inválido/expirado/já usado nunca revela qual
+     dos três motivos — só a mensagem varia por UX.
+  - Ordem commit-antes-de-notificar (mesmo padrão de
+    `RegistroEnvioService.enviarConvitesAvaliadores`): o e-mail com o link
+    só é disparado pelo `UsuarioController` DEPOIS que
+    `gerarTokenResetSenha` retorna (token já comitado), nunca de dentro
+    dessa transação — falha de SMTP não desfaz o token nem impede um
+    reenvio.
+  - Rotas públicas (`permitAll` no `SecurityConfig`, precisam vir ANTES da
+    regra geral `/usuarios/**` de ADMIN): `/usuarios/esqueci-senha` e
+    `/usuarios/redefinir-senha`.
+  - `PasswordResetTokenRepository` + limpeza periódica dos tokens expirados
+    via `RateLimitLimpezaScheduler` (mesmo agendador que já limpava os
+    mapas em memória de `LoginAttemptService`/`PasswordResetAttemptService`).
+  - Auditoria: `SENHA_RESET_SOLICITADO` (passo 1, como antes) +
+    `SENHA_RESET_CONFIRMADO` (novo, passo 2 com sucesso).
+  - `PasswordResetAttemptService` (rate-limit de 3 pedidos/15min por
+    username) continua protegendo o passo 1 contra spam de e-mail, sem
+    mudança de comportamento.
 
 ## Indicador: tempo de resposta dos avaliadores
 - `TempoRespostaService.calcular()` — média de **dias corridos** entre

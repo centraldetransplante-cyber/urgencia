@@ -6,7 +6,6 @@ import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
 import br.gov.saude.sgpur.repository.RascunhoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
-import br.gov.saude.sgpur.service.EmailSenderService;
 import br.gov.saude.sgpur.service.UsuarioService;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -31,8 +30,6 @@ class AdminBootstrapTest {
     @Mock
     private PasswordEncoder encoder;
     @Mock
-    private EmailSenderService emailSenderService;
-    @Mock
     private SolicitacaoOnlineRepository solicitacaoRepository;
     @Mock
     private RascunhoSolicitacaoOnlineRepository rascunhoRepository;
@@ -43,7 +40,6 @@ class AdminBootstrapTest {
         when(encoder.encode("Admin123!")).thenReturn("hash");
         when(usuarioRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         UsuarioService usuarioService = new UsuarioService(usuarioRepository, encoder, membroRepository,
-            emailSenderService, new br.gov.saude.sgpur.service.PasswordResetAttemptService(),
             solicitacaoRepository, rascunhoRepository);
         AdminBootstrap bootstrap = new AdminBootstrap(usuarioRepository, usuarioService, "admin", "Admin123!");
 
@@ -60,7 +56,6 @@ class AdminBootstrapTest {
     void naoCriaAdminQuandoJaExistemUsuarios() {
         when(usuarioRepository.count()).thenReturn(3L);
         UsuarioService usuarioService = new UsuarioService(usuarioRepository, encoder, membroRepository,
-            emailSenderService, new br.gov.saude.sgpur.service.PasswordResetAttemptService(),
             solicitacaoRepository, rascunhoRepository);
         AdminBootstrap bootstrap = new AdminBootstrap(usuarioRepository, usuarioService, "admin", "admin123");
 

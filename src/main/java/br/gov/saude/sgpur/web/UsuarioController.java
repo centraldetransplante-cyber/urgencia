@@ -4,6 +4,7 @@ import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.Usuario;
 import br.gov.saude.sgpur.service.MembroUrgenciaRenalService;
 import br.gov.saude.sgpur.service.AuditoriaService;
+import br.gov.saude.sgpur.service.PasswordResetService;
 import br.gov.saude.sgpur.service.UsuarioService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -21,12 +22,15 @@ public class UsuarioController {
     private final UsuarioService service;
     private final AuditoriaService auditoria;
     private final MembroUrgenciaRenalService membroService;
+    private final PasswordResetService passwordResetService;
 
     public UsuarioController(UsuarioService service, AuditoriaService auditoria,
-                             MembroUrgenciaRenalService membroService) {
+                             MembroUrgenciaRenalService membroService,
+                             PasswordResetService passwordResetService) {
         this.service = service;
         this.auditoria = auditoria;
         this.membroService = membroService;
+        this.passwordResetService = passwordResetService;
     }
 
     @ModelAttribute("perfis")
@@ -179,16 +183,73 @@ public class UsuarioController {
      * Sempre exibe a mesma mensagem neutra, exista ou nao o usuario e tenha
      * ou nao e-mail cadastrado - evita que a tela seja usada para descobrir
      * quais logins sao validos (enumeracao de usuarios).
+     *
+     * <p>Gera o token (transacional, ja comitado quando o metodo do service
+     * retorna) e SO DEPOIS tenta enviar o e-mail com o link - nunca dentro da
+     * transacao que persiste o token (achado E da vistoria de 2026-08-24, ver
+     * javadoc de {@code PasswordResetService}). Falha de SMTP aqui vira so um
+     * log de aviso, nunca some da mensagem neutra ao usuario.
      */
     @PostMapping("/esqueci-senha")
     public String redefinirSenha(@RequestParam String username, Model model, HttpServletRequest request) {
-        service.resetarSenha(username);
+        passwordResetService.gerarTokenResetSenha(username)
+            .ifPresent(passwordResetService::enviarEmail);
         auditoria.registrar("SENHA_RESET_SOLICITADO", "Usuario " + username, request.getRemoteAddr());
         model.addAttribute("sucesso", true);
         model.addAttribute("msgRedefinicao",
-            "Se o login existir e tiver e-mail cadastrado, enviamos as instrucoes "
-            + "de redefinicao para o e-mail cadastrado. Caso nao tenha e-mail "
-            + "cadastrado, procure o administrador do sistema.");
+            "Se o login existir e tiver e-mail cadastrado, enviamos um link de "
+            + "redefinicao para o e-mail cadastrado, valido por um tempo limitado. "
+            + "Caso nao tenha e-mail cadastrado, procure o administrador do sistema.");
         return "usuarios/esqueci-senha";
+    }
+
+    /**
+     * Formulario de nova senha a partir do link recebido por e-mail. Exibe o
+     * mesmo card de erro generico para token invalido/expirado/ja usado - nao
+     * revela qual dos tres motivos, so a mensagem varia por UX.
+     */
+    @GetMapping("/redefinir-senha")
+    public String redefinirSenhaForm(@RequestParam String token, Model model) {
+        PasswordResetService.EstadoToken estado = passwordResetService.validar(token);
+        if (estado != PasswordResetService.EstadoToken.VALIDO) {
+            model.addAttribute("erroToken", mensagemErroToken(estado));
+            return "usuarios/redefinir-senha";
+        }
+        model.addAttribute("token", token);
+        return "usuarios/redefinir-senha";
+    }
+
+    @PostMapping("/redefinir-senha")
+    public String redefinirSenhaConfirmar(@RequestParam String token,
+                                          @RequestParam String novaSenha,
+                                          @RequestParam String confirmacao,
+                                          Model model, RedirectAttributes ra, HttpServletRequest request) {
+        try {
+            passwordResetService.confirmarNovaSenha(token, novaSenha, confirmacao);
+        } catch (IllegalArgumentException e) {
+            // Token continua invalido/expirado/ja usado, ou a senha nao passou
+            // na politica - reexibe o form (com o token, se ele ainda for
+            // "abrivel") em vez de redirecionar, para preservar a mensagem.
+            PasswordResetService.EstadoToken estado = passwordResetService.validar(token);
+            if (estado == PasswordResetService.EstadoToken.VALIDO) {
+                model.addAttribute("token", token);
+            } else {
+                model.addAttribute("erroToken", mensagemErroToken(estado));
+            }
+            model.addAttribute("erro", e.getMessage());
+            return "usuarios/redefinir-senha";
+        }
+        auditoria.registrar("SENHA_RESET_CONFIRMADO", "Token de reset de senha confirmado",
+            request.getRemoteAddr());
+        ra.addFlashAttribute("msg", "Senha redefinida com sucesso. Faca login com a nova senha.");
+        return "redirect:/login";
+    }
+
+    private String mensagemErroToken(PasswordResetService.EstadoToken estado) {
+        return switch (estado) {
+            case JA_USADO -> "Este link de redefinição já foi utilizado. Solicite um novo.";
+            case EXPIRADO -> "Este link de redefinição expirou. Solicite uma nova redefinição de senha.";
+            default -> "Link de redefinição inválido. Solicite uma nova redefinição de senha.";
+        };
     }
 }
