@@ -3,13 +3,13 @@ package br.gov.saude.sgpur.service;
 import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.Usuario;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
+import br.gov.saude.sgpur.repository.PasswordResetTokenRepository;
 import br.gov.saude.sgpur.repository.RascunhoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -22,11 +22,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
 /**
- * Cobre o fluxo seguro de "esqueci minha senha": a senha nova NUNCA e
- * exposta em texto puro pelo metodo (o antigo comportamento retornava a
- * senha para a tela mostrar); em vez disso e enviada por e-mail. Tambem
- * cobre os casos sem usuario/sem e-mail cadastrado, que devem ser
- * silenciosos (sem excecao) para nao permitir enumeracao de usuarios.
+ * O fluxo "esqueci minha senha" (token de uso unico por link, desde
+ * 2026-08-24) mudou de dono: mora inteiro em {@code PasswordResetService}
+ * (ver {@code PasswordResetServiceTest}) - este arquivo cobre so o CRUD de
+ * usuario (criar/atualizar/excluir/ativar-desativar, auto-lockout do ultimo
+ * ADMIN, vinculo de membro/equipe por perfil).
  */
 @ExtendWith(MockitoExtension.class)
 class UsuarioServiceTest {
@@ -34,135 +34,16 @@ class UsuarioServiceTest {
     @Mock private UsuarioRepository repo;
     @Mock private PasswordEncoder encoder;
     @Mock private MembroUrgenciaRenalRepository membroRepo;
-    @Mock private EmailSenderService emailSenderService;
     @Mock private SolicitacaoOnlineRepository solicitacaoRepo;
     @Mock private RascunhoSolicitacaoOnlineRepository rascunhoRepo;
+    @Mock private PasswordResetTokenRepository passwordResetTokenRepo;
 
-    private PasswordResetAttemptService passwordResetAttemptService;
     private UsuarioService service;
 
     @BeforeEach
     void setUp() {
-        passwordResetAttemptService = new PasswordResetAttemptService();
-        service = new UsuarioService(repo, encoder, membroRepo, emailSenderService,
-            passwordResetAttemptService, solicitacaoRepo, rascunhoRepo);
-    }
-
-    private Usuario usuarioComEmail() {
-        Usuario u = new Usuario();
-        u.setUsername("operador1");
-        u.setNome("Operador Um");
-        u.setEmail("operador1@example.com");
-        // versao != null: representa um Usuario normal, ja persistido (a
-        // situacao real de "versao nula" e legado/seed sem backfill, coberta
-        // a parte por UsuarioMinhaSenhaVersaoNulaIntegrationTest com H2 real
-        // - aqui, sem isso, o service tentaria "corrigir" um dado que so
-        // esta null porque e um POJO de teste nunca persistido).
-        u.setVersao(0L);
-        return u;
-    }
-
-    @Test
-    void resetarSenhaEnviaPorEmailSemExporSenhaEmTextoPuro() {
-        Usuario u = usuarioComEmail();
-        when(repo.findByUsername("operador1")).thenReturn(Optional.of(u));
-        when(encoder.encode(any())).thenReturn("hash-fake");
-        when(emailSenderService.enviar(anyString(), anyString(), anyString())).thenReturn(true);
-
-        service.resetarSenha("operador1");
-
-        verify(repo).save(u);
-        assertThat(u.getSenha()).isEqualTo("hash-fake");
-
-        ArgumentCaptor<String> corpoCaptor = ArgumentCaptor.forClass(String.class);
-        verify(emailSenderService).enviar(eq("operador1@example.com"), anyString(), corpoCaptor.capture());
-        // A senha temporaria gerada aparece no corpo do e-mail, nunca em um valor de retorno do metodo.
-        assertThat(corpoCaptor.getValue()).contains("Nova senha temporária:");
-    }
-
-    @Test
-    void resetarSenhaSemUsuarioNaoLancaExcecaoNemEnviaEmail() {
-        when(repo.findByUsername("inexistente")).thenReturn(Optional.empty());
-
-        service.resetarSenha("inexistente");
-
-        verifyNoInteractions(emailSenderService);
-        verify(repo, never()).save(any());
-    }
-
-    @Test
-    void resetarSenhaSemEmailCadastradoNaoAlteraSenhaNemEnvia() {
-        Usuario u = new Usuario();
-        u.setUsername("sememail");
-        u.setNome("Sem Email");
-        u.setVersao(0L);
-        when(repo.findByUsername("sememail")).thenReturn(Optional.of(u));
-
-        service.resetarSenha("sememail");
-
-        verify(repo, never()).save(any());
-        verifyNoInteractions(emailSenderService);
-    }
-
-    @Test
-    void resetarSenhaComFalhaNoEnvioNaoAlteraSenha() {
-        Usuario u = usuarioComEmail();
-        String senhaOriginal = u.getSenha();
-        when(repo.findByUsername("operador1")).thenReturn(Optional.of(u));
-        when(emailSenderService.enviar(anyString(), anyString(), anyString())).thenReturn(false);
-
-        service.resetarSenha("operador1");
-
-        verify(repo, never()).save(any());
-        assertThat(u.getSenha()).isEqualTo(senhaOriginal);
-    }
-
-    @Test
-    void resetarSenhaBloqueiaAposExcederLimiteDeTentativasParaOMesmoUsername() {
-        Usuario u = usuarioComEmail();
-        when(repo.findByUsername("operador1")).thenReturn(Optional.of(u));
-        when(encoder.encode(any())).thenReturn("hash-fake");
-        when(emailSenderService.enviar(anyString(), anyString(), anyString())).thenReturn(true);
-
-        // As 3 primeiras tentativas devem passar (limite = MAX_TENTATIVAS de
-        // PasswordResetAttemptService); a partir da 4a, o rate-limit bloqueia
-        // silenciosamente - sem exceção, sem novo e-mail, sem nova senha salva.
-        service.resetarSenha("operador1");
-        service.resetarSenha("operador1");
-        service.resetarSenha("operador1");
-        verify(repo, times(3)).save(u);
-        verify(emailSenderService, times(3)).enviar(anyString(), anyString(), anyString());
-
-        service.resetarSenha("operador1");
-        service.resetarSenha("operador1");
-
-        verify(repo, times(3)).save(u);
-        verify(emailSenderService, times(3)).enviar(anyString(), anyString(), anyString());
-    }
-
-    @Test
-    void resetarSenhaRateLimitEIndependentePorUsername() {
-        Usuario u1 = usuarioComEmail();
-        Usuario u2 = new Usuario();
-        u2.setUsername("operador2");
-        u2.setNome("Operador Dois");
-        u2.setEmail("operador2@example.com");
-        u2.setVersao(0L);
-        when(repo.findByUsername("operador1")).thenReturn(Optional.of(u1));
-        when(repo.findByUsername("operador2")).thenReturn(Optional.of(u2));
-        when(encoder.encode(any())).thenReturn("hash-fake");
-        when(emailSenderService.enviar(anyString(), anyString(), anyString())).thenReturn(true);
-
-        service.resetarSenha("operador1");
-        service.resetarSenha("operador1");
-        service.resetarSenha("operador1");
-        service.resetarSenha("operador1"); // bloqueado
-
-        // operador2 nao foi afetado pelo limite consumido por operador1.
-        service.resetarSenha("operador2");
-
-        verify(repo, times(3)).save(u1);
-        verify(repo, times(1)).save(u2);
+        service = new UsuarioService(repo, encoder, membroRepo, solicitacaoRepo, rascunhoRepo,
+            passwordResetTokenRepo);
     }
 
     // ---- Auto-lockout: exclusao/desativacao do ultimo ADMIN ativo ou da propria conta ----
@@ -270,6 +151,12 @@ class UsuarioServiceTest {
         service.excluir(2L, "admin");
 
         verify(repo).delete(op);
+        // Rascunho de solicitacao e eventual PasswordResetToken pendente sao
+        // dado de staging descartavel - apagados junto para nao esbarrar na
+        // FK correspondente (bug_004 da revisao de codigo do PR de
+        // 2026-08-24, mesmo padrao ja usado para o rascunho).
+        verify(rascunhoRepo).deleteByUsuarioSolicitanteId(2L);
+        verify(passwordResetTokenRepo).deleteByUsuarioId(2L);
     }
 
     @Test

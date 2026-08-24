@@ -59,20 +59,7 @@
 
 <script th:replace="~{layout :: scripts}"></script>
 <script th:src="@{/js/mostrar-senha.js}"></script>
-<script>
-(function () {
-    var nova = document.getElementById('novaSenha');
-    var conf = document.getElementById('confirmacao');
-    var msg = document.getElementById('msgConfere');
-    document.getElementById('formSenha').addEventListener('submit', function (e) {
-        if (nova.value !== conf.value) {
-            e.preventDefault();
-            msg.classList.remove('d-none');
-            conf.focus();
-        }
-    });
-})();
-</script>
+<script th:src="@{/js/confere-senha.js}"></script>
 <div th:replace="~{layout :: footer}"></div>
 </body>
 </html>

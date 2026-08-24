@@ -19,9 +19,10 @@
             <div th:if="${sucesso}" class="alert alert-success py-2" th:text="${msgRedefinicao}"></div>
             <div th:if="${erroRedefinicao}" class="alert alert-danger py-2" th:text="${erroRedefinicao}"></div>
             <p class="text-muted small mb-3" th:unless="${sucesso}">
-                Informe seu login para receber uma senha temporária.
-                Após o login, troque a senha no menu com o seu nome (canto
-                superior direito) → "Alterar senha".
+                Informe seu login para receber, por e-mail, um link para
+                definir uma nova senha. O link é válido por tempo limitado e
+                só pode ser usado uma vez; até você abri-lo, sua senha atual
+                continua funcionando normalmente.
             </p>
             <form th:action="@{/usuarios/esqueci-senha}" method="post" th:unless="${sucesso}">
                 <div class="mb-3">

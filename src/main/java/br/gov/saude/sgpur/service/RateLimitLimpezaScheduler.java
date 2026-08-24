@@ -9,18 +9,23 @@ import org.springframework.stereotype.Component;
 
 /**
  * Varredura periodica que libera memoria dos mapas em memoria de rate-limit
- * de {@link LoginAttemptService} e {@link PasswordResetAttemptService}.
+ * de {@link LoginAttemptService} e {@link PasswordResetAttemptService}, e
+ * remove do banco os {@code PasswordResetToken} ja expirados (ver
+ * {@link PasswordResetService#limparTokensExpirados}, desde 2026-08-24).
  *
- * <p><b>Por que existe.</b> As duas classes acumulam uma entrada por username
- * (ou username inventado) que tentou autenticar/resetar senha, e uma entrada
- * so e removida quando a MESMA chave e acessada de novo (sucesso de login, em
- * {@link LoginAttemptService}, ou qualquer chamada apos a janela expirar, em
- * {@link PasswordResetAttemptService}). Um atacante disparando uma sequencia
- * de usernames INVENTADOS diferentes, cada um usado uma unica vez, nunca
- * aciona essa remocao - os mapas crescem sem limite (vazamento de memoria de
- * longo prazo). Este varredor remove periodicamente as entradas cuja janela
- * ja expirou, sem mudar nenhuma semantica de rate-limit (uma janela expirada
- * ja e ignorada no calculo seguinte de qualquer forma).</p>
+ * <p><b>Por que existe.</b> As duas classes de rate-limit em memoria
+ * acumulam uma entrada por username (ou username inventado) que tentou
+ * autenticar/resetar senha, e uma entrada so e removida quando a MESMA chave
+ * e acessada de novo (sucesso de login, em {@link LoginAttemptService}, ou
+ * qualquer chamada apos a janela expirar, em {@link PasswordResetAttemptService}).
+ * Um atacante disparando uma sequencia de usernames INVENTADOS diferentes,
+ * cada um usado uma unica vez, nunca aciona essa remocao - os mapas crescem
+ * sem limite (vazamento de memoria de longo prazo). Este varredor remove
+ * periodicamente as entradas cuja janela ja expirou, sem mudar nenhuma
+ * semantica de rate-limit (uma janela expirada ja e ignorada no calculo
+ * seguinte de qualquer forma). Os tokens de reset de senha expirados tem o
+ * mesmo problema, so que no banco em vez de em memoria - a limpeza evita a
+ * tabela {@code password_reset_token} crescer sem limite.</p>
  *
  * <p>Registrado apenas quando
  * {@code app.rate-limit.limpeza.varredura.habilitado=true} - mesma convencao
@@ -39,11 +44,14 @@ public class RateLimitLimpezaScheduler {
 
     private final LoginAttemptService loginAttemptService;
     private final PasswordResetAttemptService passwordResetAttemptService;
+    private final PasswordResetService passwordResetService;
 
     public RateLimitLimpezaScheduler(LoginAttemptService loginAttemptService,
-                                     PasswordResetAttemptService passwordResetAttemptService) {
+                                     PasswordResetAttemptService passwordResetAttemptService,
+                                     PasswordResetService passwordResetService) {
         this.loginAttemptService = loginAttemptService;
         this.passwordResetAttemptService = passwordResetAttemptService;
+        this.passwordResetService = passwordResetService;
     }
 
     /**
@@ -58,7 +66,7 @@ public class RateLimitLimpezaScheduler {
         varrer();
     }
 
-    /** Roda a limpeza dos dois mapas. Falha de um nao impede o outro. */
+    /** Roda a limpeza dos mapas em memoria + tokens de reset expirados no banco. Falha de um nao impede os outros. */
     public void varrer() {
         try {
             loginAttemptService.limparExpirados();
@@ -69,6 +77,11 @@ public class RateLimitLimpezaScheduler {
             passwordResetAttemptService.limparExpirados();
         } catch (RuntimeException e) {
             log.warn("Limpeza de rate-limit: falha ao limpar PasswordResetAttemptService", e);
+        }
+        try {
+            passwordResetService.limparTokensExpirados();
+        } catch (RuntimeException e) {
+            log.warn("Limpeza de rate-limit: falha ao limpar tokens de reset de senha expirados", e);
         }
     }
 }

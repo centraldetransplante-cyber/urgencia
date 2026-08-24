@@ -4,6 +4,7 @@ import br.gov.saude.sgpur.domain.MembroUrgenciaRenal;
 import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.Usuario;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
+import br.gov.saude.sgpur.repository.PasswordResetTokenRepository;
 import br.gov.saude.sgpur.repository.RascunhoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -23,24 +24,21 @@ public class UsuarioService {
     private final UsuarioRepository repo;
     private final PasswordEncoder encoder;
     private final MembroUrgenciaRenalRepository membroRepo;
-    private final EmailSenderService emailSenderService;
-    private final PasswordResetAttemptService passwordResetAttemptService;
     private final SolicitacaoOnlineRepository solicitacaoRepo;
     private final RascunhoSolicitacaoOnlineRepository rascunhoRepo;
+    private final PasswordResetTokenRepository passwordResetTokenRepo;
 
     public UsuarioService(UsuarioRepository repo, PasswordEncoder encoder,
                           MembroUrgenciaRenalRepository membroRepo,
-                          EmailSenderService emailSenderService,
-                          PasswordResetAttemptService passwordResetAttemptService,
                           SolicitacaoOnlineRepository solicitacaoRepo,
-                          RascunhoSolicitacaoOnlineRepository rascunhoRepo) {
+                          RascunhoSolicitacaoOnlineRepository rascunhoRepo,
+                          PasswordResetTokenRepository passwordResetTokenRepo) {
         this.repo = repo;
         this.encoder = encoder;
         this.membroRepo = membroRepo;
-        this.emailSenderService = emailSenderService;
-        this.passwordResetAttemptService = passwordResetAttemptService;
         this.solicitacaoRepo = solicitacaoRepo;
         this.rascunhoRepo = rascunhoRepo;
+        this.passwordResetTokenRepo = passwordResetTokenRepo;
     }
 
     public List<Usuario> listar() {
@@ -87,7 +85,7 @@ public class UsuarioService {
             throw new IllegalArgumentException("Ja existe um usuario com este login.");
         }
         u.setId(null);
-        validarSenha(senhaPura);
+        SenhaPolicy.validar(senhaPura);
         aplicarMembro(u, membroId);
         aplicarEquipeSolicitante(u, equipeSolicitante);
         u.setSenha(encoder.encode(senhaPura));
@@ -151,7 +149,7 @@ public class UsuarioService {
         aplicarMembro(u, membroId);
         aplicarEquipeSolicitante(u, equipeSolicitante);
         if (senhaPura != null && !senhaPura.isBlank()) {
-            validarSenha(senhaPura);
+            SenhaPolicy.validar(senhaPura);
             u.setSenha(encoder.encode(senhaPura));
         }
         return repo.save(u);
@@ -189,6 +187,13 @@ public class UsuarioService {
      * isso a FK {@code rascunho_solicitacao_online.usuario_solicitante_id}
      * bloquearia a exclusao de um solicitante que so tinha comecado a
      * preencher um formulario.
+     *
+     * <p>Um eventual {@code PasswordResetToken} pendente (usuario pediu
+     * "esqueci minha senha" e nunca chegou a abrir o link) e apagado pelo
+     * mesmo motivo - e dado de staging descartavel, e a FK
+     * {@code password_reset_token.usuario_id} bloquearia a exclusao (achado
+     * bug_004 da revisao de codigo do PR de 2026-08-24, mesmo padrao do
+     * rascunho acima).
      */
     @Transactional
     public void excluir(Long id, String usernameLogado) {
@@ -197,6 +202,7 @@ public class UsuarioService {
         validarNaoUltimoAdminAtivo(u, "excluir");
         validarSemHistoricoDeSolicitacoes(u);
         rascunhoRepo.deleteByUsuarioSolicitanteId(u.getId());
+        passwordResetTokenRepo.deleteByUsuarioId(u.getId());
         repo.delete(u);
     }
 
@@ -243,60 +249,6 @@ public class UsuarioService {
     }
 
     /**
-     * Redefine a senha do usuario (se existir e tiver e-mail cadastrado) e
-     * envia a nova senha temporaria por e-mail - NUNCA expoe a senha em texto
-     * puro na tela. Sempre retorna sem lancar excecao, mesmo quando o usuario
-     * nao existe ou nao tem e-mail cadastrado, para o chamador poder exibir
-     * uma mensagem neutra e evitar enumeracao de usuarios validos. Tambem retorna
-     * silenciosamente (sem alterar nada) quando o rate-limit de tentativas de
-     * reset para este username foi excedido ({@link PasswordResetAttemptService}) -
-     * protege contra "bombear" reset de senha/e-mail de um login conhecido.
-     */
-    @Transactional
-    public void resetarSenha(String username) {
-        if (!passwordResetAttemptService.tentarRegistrar(username)) {
-            return;
-        }
-        Usuario u = repo.findByUsername(username).orElse(null);
-        if (u == null) {
-            log.debug("resetarSenha: usuario '{}' nao encontrado.", username);
-            return;
-        }
-        u = normalizarVersaoLegada(u);
-        if (u.getEmail() == null || u.getEmail().isBlank()) {
-            log.warn("resetarSenha: usuario '{}' nao tem e-mail cadastrado - "
-                + "senha NAO foi alterada. Peca ao ADMIN redefinir manualmente.", username);
-            return;
-        }
-        String novaSenha = gerarSenhaTemporaria();
-        // Acentuado em 2026-08-11, junto com EmailTemplateService: e um e-mail
-        // institucional visto pelo usuario, mesma regra de redacao (ver o javadoc
-        // de EmailTemplateService).
-        String corpo = """
-            Olá, %s,
-
-            Sua senha de acesso ao SAUR foi redefinida a seu pedido.
-
-            Nova senha temporária: %s
-
-            Recomendamos alterar esta senha após o próximo login.
-
-            Se você não solicitou esta redefinição, entre em contato com o
-            administrador do sistema imediatamente.
-
-            Atenciosamente,
-            Equipe SAUR - Secretaria de Saúde
-            """.formatted(u.getNome(), novaSenha);
-        boolean enviado = emailSenderService.enviar(u.getEmail(), "SAUR - Redefinição de senha", corpo);
-        if (!enviado) {
-            log.warn("resetarSenha: falha ao enviar e-mail para '{}' - senha NAO foi alterada.", username);
-            return;
-        }
-        u.setSenha(encoder.encode(novaSenha));
-        repo.save(u);
-    }
-
-    /**
      * Permite que o proprio usuario logado troque sua senha, informando a
      * senha atual (verificada) e a nova. Disponivel para todos os perfis
      * (ADMIN/OPERADOR/AVALIADOR), ao contrario da edicao em /usuarios que e
@@ -312,7 +264,7 @@ public class UsuarioService {
         if (senhaAtual == null || !encoder.matches(senhaAtual, u.getSenha())) {
             throw new IllegalArgumentException("Senha atual incorreta.");
         }
-        validarSenha(novaSenha);
+        SenhaPolicy.validar(novaSenha);
         if (!novaSenha.equals(confirmacao)) {
             throw new IllegalArgumentException("A confirmacao nao confere com a nova senha.");
         }
@@ -360,8 +312,15 @@ public class UsuarioService {
      * ser uma instancia DIFERENTE da recebida) e precisa ser chamado logo
      * apos o fetch, ANTES de qualquer {@code set...} no objeto original (que
      * seria perdido pelo {@code clearAutomatically}).</p>
+     *
+     * <p><b>Publico desde 2026-08-24 (bug_006 da revisao de codigo do PR de
+     * reset de senha por token):</b> {@code PasswordResetService
+     * .confirmarNovaSenha} tambem grava a senha de um {@code Usuario} que
+     * pode ter sido carregado com {@code versao} nula (mesmo cenario de
+     * dado legado sem backfill) - reusa este metodo em vez de duplicar a
+     * logica.</p>
      */
-    private Usuario normalizarVersaoLegada(Usuario u) {
+    public Usuario normalizarVersaoLegada(Usuario u) {
         if (u.getVersao() != null) {
             return u;
         }
@@ -370,35 +329,6 @@ public class UsuarioService {
             u.getUsername(), u.getId());
         repo.normalizarVersaoNula(u.getId());
         return buscar(u.getId());
-    }
-
-    private void validarSenha(String senha) {
-        if (senha == null || senha.length() < 8) {
-            throw new IllegalArgumentException("A senha deve ter ao menos 8 caracteres.");
-        }
-        if (!senha.matches(".*[A-Z].*")) {
-            throw new IllegalArgumentException("A senha deve conter ao menos uma letra maiuscula.");
-        }
-        if (!senha.matches(".*[a-z].*")) {
-            throw new IllegalArgumentException("A senha deve conter ao menos uma letra minuscula.");
-        }
-        if (!senha.matches(".*\\d.*")) {
-            throw new IllegalArgumentException("A senha deve conter ao menos um numero.");
-        }
-        if (!senha.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?].*")) {
-            throw new IllegalArgumentException("A senha deve conter ao menos um caractere especial.");
-        }
-    }
-
-    private static final java.security.SecureRandom RANDOM = new java.security.SecureRandom();
-
-    private String gerarSenhaTemporaria() {
-        String chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-        StringBuilder sb = new StringBuilder(8);
-        for (int i = 0; i < 8; i++) {
-            sb.append(chars.charAt(RANDOM.nextInt(chars.length())));
-        }
-        return sb.toString();
     }
 
     /**
