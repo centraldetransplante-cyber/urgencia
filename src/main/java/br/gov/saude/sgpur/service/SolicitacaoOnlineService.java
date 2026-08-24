@@ -491,7 +491,7 @@ public class SolicitacaoOnlineService {
             // resolve de jeito nenhum (nem MX nem A/AAAA), nunca por falha
             // transitoria de rede/DNS do proprio servidor.
             if (!emailDominioValidator.dominioResolvivel(emailAdicional)) {
-                throw new IllegalArgumentException(
+                throw new EmailDominioInvalidoException(
                     "E-mail adicional invalido: o dominio \"" + emailAdicional.substring(emailAdicional.indexOf('@') + 1)
                     + "\" nao existe. Confira o endereco informado.");
             }

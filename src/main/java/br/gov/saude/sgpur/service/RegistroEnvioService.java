@@ -190,8 +190,16 @@ public class RegistroEnvioService {
             }
         }
         if (validos.isEmpty()) {
+            // Inclui o motivo REAL de cada documento descartado (achado real de
+            // revisao, 2026-08-24) - sem isso, o operador so via um texto
+            // generico "sem paginas" mesmo quando o motivo verdadeiro era outro
+            // (ex.: teto de paginas excedido), e reenviar o mesmo arquivo
+            // repetidamente nao resolvia nada.
+            String detalhe = ignorados.isEmpty()
+                ? ""
+                : ": " + String.join("; ", ignorados);
             return RegistroEnvioResultado.erro(
-                "Nenhum dos documentos clinicos anexados e um PDF valido com paginas. "
+                "Nenhum dos documentos clinicos anexados e um PDF valido para envio" + detalhe + ". "
                 + "Remova-os e anexe novamente os documentos originais.");
         }
         partes = validos;

@@ -384,7 +384,7 @@ public class ProcessoService {
         String emailAdicionalForm = form.getEmailAdicional();
         if (emailAdicionalForm != null && !emailAdicionalForm.isBlank()
                 && !emailDominioValidator.dominioResolvivel(emailAdicionalForm.trim())) {
-            throw new IllegalArgumentException(
+            throw new EmailDominioInvalidoException(
                 "E-mail adicional invalido: o dominio \""
                 + emailAdicionalForm.trim().substring(emailAdicionalForm.trim().indexOf('@') + 1)
                 + "\" nao existe. Confira o endereco informado.");

@@ -1,5 +1,6 @@
 package br.gov.saude.sgpur.service;
 
+import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -13,6 +14,11 @@ import javax.naming.directory.InitialDirContext;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Hashtable;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Checagem LEVE de existencia de dominio para {@code Processo}/
@@ -28,17 +34,72 @@ import java.util.Hashtable;
  * sem MX dedicado) antes de concluir que o dominio nao existe.</p>
  *
  * <p><b>Fail-open deliberado:</b> qualquer erro que NAO seja uma resolucao
- * de nome negativa e clara (timeout de DNS, rede fora do ar no proprio
- * servidor, excecao inesperada) faz o metodo devolver {@code true}
- * ("dominio ok") - nunca queremos bloquear um cadastro legitimo por uma
- * falha transitoria de infraestrutura nossa. Um {@code false} so acontece
- * quando NEM o MX NEM o A/AAAA resolvem (o cenario claro de "esse dominio
- * nao existe").</p>
+ * de nome negativa e clara e RAPIDA (DNS respondendo NXDOMAIN de verdade)
+ * faz o metodo devolver {@code true} ("dominio ok") - nunca queremos
+ * bloquear um cadastro legitimo por uma falha transitoria de infraestrutura
+ * nossa. Um {@code false} so acontece quando a consulta CONCLUIU dentro do
+ * teto de tempo e nem MX nem A/AAAA resolveram.</p>
+ *
+ * <p><b>Correcao de 2026-08-24 (revisao adicional do PR #120 - achados 1 e
+ * 3):</b> antes desta correcao havia dois problemas serios:
+ * <ol>
+ *   <li><b>Fail-open quebrado:</b> {@code InetAddress.getAllByName} lanca a
+ *   MESMA {@code UnknownHostException} tanto para "dominio realmente nao
+ *   existe" (NXDOMAIN) quanto para "DNS instavel/rede intermitente" - o
+ *   codigo tratava as duas causas da mesma forma (rejeitando), contradizendo
+ *   o javadoc que prometia fail-open em falha de rede.</li>
+ *   <li><b>DoS sincrono na thread HTTP:</b> a consulta rodava direto na
+ *   thread do servlet, sem teto de tempo agregado - o timeout do MX (1500ms
+ *   x2 tentativas = ate 3s) MAIS o timeout NAO configuravel do
+ *   {@code InetAddress.getAllByName} (pode ser bem maior que isso,
+ *   dependendo do resolver do SO) podiam, sob DNS lento, esgotar o pool de
+ *   threads do Tomcat com varios cadastros simultaneos.</li>
+ * </ol>
+ * A correcao roda a checagem inteira ({@code possuiMxOuEnderecoIp}) num
+ * {@link ExecutorService} dedicado (nunca o pool de request do Tomcat), com
+ * um teto RIGIDO de {@link #TIMEOUT_MS} via
+ * {@code CompletableFuture.get(timeout, ...)}. Qualquer timeout, interrupcao
+ * ou excecao inesperada nesse caminho cai no MESMO fail-open do catch
+ * externo - so uma resposta RAPIDA e limpa de "host not found" (a consulta
+ * terminou dentro do teto e o DNS respondeu negativamente) continua sendo
+ * tratada como dominio inexistente.</p>
  */
 @Component
 public class EmailDominioValidator {
 
     private static final Logger log = LoggerFactory.getLogger(EmailDominioValidator.class);
+
+    private static final long TIMEOUT_MS = 2000;
+
+    private final ExecutorService executor;
+    private final long timeoutMillis;
+
+    public EmailDominioValidator() {
+        this(criarExecutorDedicado(), TIMEOUT_MS);
+    }
+
+    /** Visivel para teste: permite injetar um executor/timeout controlados (ex.: simular timeout). */
+    EmailDominioValidator(ExecutorService executor, long timeoutMillis) {
+        this.executor = executor;
+        this.timeoutMillis = timeoutMillis;
+    }
+
+    private static ExecutorService criarExecutorDedicado() {
+        // Pool pequeno e dedicado, NUNCA o pool de request do Tomcat - um
+        // cadastro com emailAdicional preenchido nao pode competir por
+        // threads HTTP com o resto da aplicacao. Threads daemon: nao impedem
+        // o shutdown da JVM mesmo se alguma consulta ficar presa.
+        return Executors.newFixedThreadPool(4, r -> {
+            Thread t = new Thread(r, "email-dominio-validator");
+            t.setDaemon(true);
+            return t;
+        });
+    }
+
+    @PreDestroy
+    void encerrar() {
+        executor.shutdownNow();
+    }
 
     /**
      * @param email endereco completo (ex. {@code "fulano@dominio.com"});
@@ -46,8 +107,9 @@ public class EmailDominioValidator {
      *              responsabilidade desta classe validar formato - isso ja
      *              e feito por {@code @Email}/regex no chamador).
      * @return {@code true} quando o dominio parece existir (ou a checagem
-     *         nao pode ser concluida com confianca - fail-open); {@code
-     *         false} somente quando nem MX nem A/AAAA resolveram.
+     *         nao pode ser concluida com confianca/dentro do teto de tempo -
+     *         fail-open); {@code false} somente quando a consulta terminou
+     *         DENTRO do teto de tempo e nem MX nem A/AAAA resolveram.
      */
     public boolean dominioResolvivel(String email) {
         if (email == null || email.isBlank()) {
@@ -61,8 +123,16 @@ public class EmailDominioValidator {
         if (dominio.isEmpty()) {
             return true;
         }
+        CompletableFuture<Boolean> futuro = CompletableFuture.supplyAsync(
+            () -> possuiMxOuEnderecoIp(dominio), executor);
         try {
-            return possuiMxOuEnderecoIp(dominio);
+            return futuro.get(timeoutMillis, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            log.warn("EmailDominioValidator: consulta de dominio '{}' excedeu {}ms - "
+                + "fail-open (tratando como valido), sem esperar a rede responder.",
+                dominio, timeoutMillis);
+            futuro.cancel(true);
+            return true;
         } catch (Exception e) {
             log.warn("EmailDominioValidator: falha inesperada verificando dominio '{}' - "
                 + "fail-open (tratando como valido): {}", dominio, e.getMessage());
@@ -86,7 +156,8 @@ public class EmailDominioValidator {
             InetAddress.getAllByName(dominio);
             return true;
         } catch (UnknownHostException e) {
-            log.info("EmailDominioValidator: dominio '{}' nao resolveu (nem MX nem A/AAAA).", dominio);
+            log.info("EmailDominioValidator: dominio '{}' nao resolveu (nem MX nem A/AAAA) "
+                + "dentro do teto de tempo.", dominio);
             return false;
         }
     }

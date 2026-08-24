@@ -941,6 +941,69 @@ class ProcessoDetalheControllerTest {
         verify(auditoria).registrar(eq("PROCESSO_EDITADO"), anyString());
     }
 
+    /**
+     * EmailDominioInvalidoException (dominio de emailAdicional inexistente) -
+     * unico caso que aponta o campo emailAdicional (result.rejectValue),
+     * mantendo o operador no formulario para corrigir o endereco.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void atualizarComEmailDominioInvalidoDestacaCampoEmailAdicional() throws Exception {
+        when(processoService.edicaoBloqueada(processo)).thenReturn(false);
+        when(processoService.atualizarDados(eq(1L), any()))
+            .thenThrow(new EmailDominioInvalidoException(
+                "E-mail adicional invalido: o dominio \"fake.invalido\" nao existe. Confira o endereco informado."));
+
+        mvc.perform(post("/processos/1/editar")
+                .param("numero", "01/2026")
+                .param("pacienteNome", "Maria Silva")
+                .param("pacienteRgct", "RGCT123")
+                .param("pacienteDataNascimento", "1985-03-15")
+                .param("pacienteCpf", "11144477735")
+                .param("pacienteSexo", "MASCULINO")
+                .param("solicitanteEquipe", "Equipe A")
+                .param("solicitanteEmail", "equipe@ex.com")
+                .param("emailAdicional", "contato@fake.invalido")
+                .param("dataSituacaoEspecial", "2026-07-01")
+                .with(csrf()))
+            .andExpect(status().isOk())
+            .andExpect(view().name("processos/editar"))
+            .andExpect(model().attributeHasFieldErrors("processo", "emailAdicional"));
+
+        verify(auditoria, never()).registrar(eq("PROCESSO_EDITADO"), anyString());
+    }
+
+    /**
+     * Achado real de revisao do PR #120 (item 7): uma IllegalArgumentException
+     * generica (QUALQUER motivo que nao seja o dominio do emailAdicional) NAO
+     * pode ser atribuida ao campo emailAdicional - vai para um flash de erro
+     * generico, sem apontar campo nenhum.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void atualizarComIllegalArgumentExceptionGenericaNaoApontaCampoEmailAdicional() throws Exception {
+        when(processoService.edicaoBloqueada(processo)).thenReturn(false);
+        when(processoService.atualizarDados(eq(1L), any()))
+            .thenThrow(new IllegalArgumentException("Erro de validacao sem nenhuma relacao com e-mail adicional."));
+
+        mvc.perform(post("/processos/1/editar")
+                .param("numero", "01/2026")
+                .param("pacienteNome", "Maria Silva")
+                .param("pacienteRgct", "RGCT123")
+                .param("pacienteDataNascimento", "1985-03-15")
+                .param("pacienteCpf", "11144477735")
+                .param("pacienteSexo", "MASCULINO")
+                .param("solicitanteEquipe", "Equipe A")
+                .param("solicitanteEmail", "equipe@ex.com")
+                .param("dataSituacaoEspecial", "2026-07-01")
+                .with(csrf()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/processos/1/editar"))
+            .andExpect(flash().attribute("erro", "Erro de validacao sem nenhuma relacao com e-mail adicional."));
+
+        verify(auditoria, never()).registrar(eq("PROCESSO_EDITADO"), anyString());
+    }
+
     // ----- reabrir -----
 
     @Test

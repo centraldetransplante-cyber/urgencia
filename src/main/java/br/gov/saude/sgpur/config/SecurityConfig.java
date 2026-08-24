@@ -78,6 +78,18 @@ public class SecurityConfig {
      * por um ADMIN - sem isso, a sessao ja aberta continuava valendo ate o
      * timeout de 30min mesmo com o login/senha ja bloqueado para NOVAS
      * autenticacoes (achado real de vistoria, 2026-08-24).
+     *
+     * <p><b>Limitacao conhecida, nao um bug ativo (achado 4 da revisao
+     * adicional do PR #120):</b> {@link SessionRegistryImpl} guarda o estado
+     * das sessoes SOMENTE EM MEMORIA da JVM local - nao escala para um
+     * cluster com multiplas instancias atras de um load balancer (uma sessao
+     * registrada na instancia A nao e visivel/revogavel pela instancia B).
+     * Hoje o SAUR roda numa UNICA VM Oracle, sem cluster nem load balancer
+     * (ver secao "Deploy" do CLAUDE.md) - nao ha problema real em producao.
+     * Se um dia isto for clusterizado, este bean precisa virar um
+     * {@code SessionRegistry} com estado compartilhado (ex.: backed por
+     * Redis/Spring Session) para a revogacao continuar funcionando em
+     * qualquer instancia.</p>
      */
     @Bean
     public SessionRegistry sessionRegistry() {

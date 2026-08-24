@@ -354,9 +354,15 @@ class RegistroEnvioServiceTest {
         verify(processoService).registrarEnvio(1L);
     }
 
-    /** Se TODOS os documentos excedem o teto, o envio e bloqueado com mensagem clara (nunca 500). */
+    /**
+     * Se TODOS os documentos excedem o teto, o envio e bloqueado com mensagem
+     * clara (nunca 500) - e a mensagem tem que citar o MOTIVO REAL (teto de
+     * paginas excedido, achado real de revisao do PR #120), nao so o texto
+     * generico de "sem paginas", que confundia o operador e nao dava
+     * nenhuma pista de como resolver.
+     */
     @Test
-    void bloqueiaQuandoTodosOsDocumentosExcedemOTetoDePaginas() throws Exception {
+    void bloqueiaQuandoTodosOsDocumentosExcedemOTetoDePaginasComMensagemCitandoOMotivo() throws Exception {
         RegistroEnvioService servicoComTetoBaixo = new RegistroEnvioService(processoService,
             solicitacaoAvaliadorService, anexoStorage, auditoria, emailTemplateService, emailSenderService, 2);
         processo.addAnexo(documentoClinicoPdf("gigante.pdf", pdfComPaginas(5)));
@@ -364,6 +370,10 @@ class RegistroEnvioServiceTest {
         RegistroEnvioService.RegistroEnvioResultado resultado = servicoComTetoBaixo.registrar(1L);
 
         assertThat(resultado.ok()).isFalse();
+        assertThat(resultado.mensagemErro())
+            .contains("gigante.pdf")
+            .contains("excede o limite")
+            .contains("2 paginas");
         verifyNoInteractions(solicitacaoAvaliadorService);
         verify(processoService, org.mockito.Mockito.never()).registrarEnvio(any());
     }
