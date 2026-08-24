@@ -222,11 +222,16 @@
                             <div class="text-muted text-detail-xs"
                                  th:text="${#temporals.format(l.processo.dataCadastro, 'dd/MM/yyyy')}">data</div>
                         </td>
+                        <!-- text-wrap (nao text-truncate) em toda a linha - regra geral aplicada
+                             em 24/08 em todos os campos da tabela que cortavam texto com
+                             reticencias (Status, Paciente/Solicitante, Medico): quebra em ate
+                             2-3 linhas em vez de cortar, sem alargar nenhuma coluna (title
+                             continua com o texto completo pra quem passar o mouse). -->
                         <td class="align-top mw-16rem">
-                            <div class="fw-medium text-truncate"
+                            <div class="fw-medium text-wrap"
                                  th:text="${l.processo.pacienteNome}"
                                  th:title="${l.processo.pacienteNome}">Paciente</div>
-                            <div class="text-muted text-truncate text-detail-xs"
+                            <div class="text-muted text-wrap text-detail-xs"
                                  th:text="${l.processo.solicitanteEquipe}"
                                  th:title="${l.processo.solicitanteEquipe}">Solicitante</div>
                         </td>
@@ -259,7 +264,7 @@
                         </td>
                         <td class="align-top mw-9-12rem" th:each="c : ${l.medicos}">
                             <th:block th:if="${c.definido}">
-                                <div class="fw-medium text-truncate text-detail-sm mw-12rem"
+                                <div class="fw-medium text-wrap text-detail-sm"
                                      th:text="${c.medico}" th:title="${c.medico}">Médico</div>
                                 <!-- Mapeamento cor logica (CelulaMedico.cor) -> classe Bootstrap via
                                      th:switch, em vez de ternarios aninhados em th:classappend (regra
