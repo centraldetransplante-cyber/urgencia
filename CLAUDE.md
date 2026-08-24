@@ -41,7 +41,10 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   acessar manualmente após o boot) · login inicial `admin` / `Admin123!`
   (criado automaticamente por `AdminBootstrap` só quando a tabela `usuario`
   está vazia; em prod exige `SGPUR_ADMIN_PASSWORD` via env var, sem default).
-- Testes: `.\test.ps1` (ou `mvn test`) — **144 testes**, sempre com **JDK 21**.
+- Testes: `.\test.ps1` (ou `mvn test`) — **1.094 testes** (contagem exata via
+  `target/surefire-reports`, verificada em 2026-08-24; a marca de "144
+  testes" ficou desatualizada por várias sessões — corrigida aqui), sempre
+  com **JDK 21**.
   Build: `mvn -DskipTests package` (gera o JAR).
 - **Teste E2E de navegador (Playwright):** `.\e2e.ps1` sobe o SAUR real (porta
   aleatória, H2, perfil dev) e um Chromium de verdade, **com janela visível

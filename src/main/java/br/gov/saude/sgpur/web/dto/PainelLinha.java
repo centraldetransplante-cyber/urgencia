@@ -56,7 +56,7 @@ public record PainelLinha(Processo processo, List<CelulaMedico> medicos) {
      * @param icone    bootstrap-icon (sem "bi-")
      * @param definido se ha medico atribuido nessa coluna
      */
-    public record CelulaMedico(String medico, String texto, String cor,
+    public record CelulaMedico(String medico, String texto, @Deprecated String cor,
                                String icone, boolean definido) {
 
         /**
