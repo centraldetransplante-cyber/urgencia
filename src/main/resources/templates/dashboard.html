@@ -230,7 +230,16 @@
                                  th:text="${l.processo.solicitanteEquipe}"
                                  th:title="${l.processo.solicitanteEquipe}">Solicitante</div>
                         </td>
-                        <td class="align-top mw-10rem">
+                        <!-- mw-12rem (nao mw-10rem): a celula precisa bater com o max-width do
+                             proprio texto de pendencia logo abaixo (.mw-12rem no div, linha
+                             seguinte) - com o pai mais estreito que o filho, o filho nunca
+                             conseguia usar a largura que ele mesmo declarava, e rotulos reais
+                             como "Informação complementar" (174px) cortavam com reticencias
+                             mesmo tendo espaco de sobra (192px) no proprio CSS do filho. Bug
+                             relatado pelo usuario em producao (Painel, coluna Status cortada),
+                             reproduzido com Playwright contra dados de QA reais do dev antes
+                             desta correcao (div.scrollWidth 174px > clientWidth 160.8px). -->
+                        <td class="align-top mw-12rem">
                             <span class="badge rounded-pill text-wrap"
                                   th:classappend="${l.processo.status.bootstrapBadge}">
                                 <i class="bi" th:classappend="'bi-' + ${l.processo.status.badgeIcone}"></i>
