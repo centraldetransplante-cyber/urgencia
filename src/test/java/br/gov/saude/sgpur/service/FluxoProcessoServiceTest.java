@@ -42,11 +42,13 @@ class FluxoProcessoServiceTest {
     AnexoStorageService anexoStorageService;
     @Mock
     HistoricoParecerRepository historicoParecerRepository;
+    @Mock
+    EmailDominioValidator emailDominioValidator;
 
     private FluxoProcessoService fluxo() {
         ProcessoService ps = new ProcessoService(processoRepository, membroRepository, new ProcessoValidator(),
                 parecerRepository, solicitacaoOnlineRepository, emailTemplateService, emailSenderService,
-                anexoStorageService, historicoParecerRepository);
+                anexoStorageService, historicoParecerRepository, emailDominioValidator);
         // Por padrao nenhum processo veio do Portal do Solicitante nesses
         // testes (comportamento identico ao existente antes da excecao do
         // Portal); testes especificos sobrescrevem esse stub. Note que desde
@@ -509,7 +511,7 @@ class FluxoProcessoServiceTest {
         // ENVIADO e limpa (reabre) apenas o parecer que pediu informacao.
         ProcessoService ps = new ProcessoService(processoRepository, membroRepository, new ProcessoValidator(),
                 parecerRepository, solicitacaoOnlineRepository, emailTemplateService, emailSenderService,
-                anexoStorageService, historicoParecerRepository);
+                anexoStorageService, historicoParecerRepository, emailDominioValidator);
         org.mockito.Mockito.when(processoRepository.findById(org.mockito.ArgumentMatchers.anyLong()))
                 .thenReturn(java.util.Optional.of(p));
         org.mockito.Mockito.when(processoRepository.save(org.mockito.ArgumentMatchers.any()))

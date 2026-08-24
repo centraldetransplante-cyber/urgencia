@@ -47,6 +47,7 @@ public class ProcessoService {
     private final EmailSenderService emailSenderService;
     private final AnexoStorageService anexoStorage;
     private final HistoricoParecerRepository historicoParecerRepository;
+    private final EmailDominioValidator emailDominioValidator;
 
     public ProcessoService(ProcessoRepository processoRepository,
                            MembroUrgenciaRenalRepository membroRepository,
@@ -56,7 +57,8 @@ public class ProcessoService {
                            EmailTemplateService emailTemplateService,
                            EmailSenderService emailSenderService,
                            AnexoStorageService anexoStorage,
-                           HistoricoParecerRepository historicoParecerRepository) {
+                           HistoricoParecerRepository historicoParecerRepository,
+                           EmailDominioValidator emailDominioValidator) {
         this.processoRepository = processoRepository;
         this.membroRepository = membroRepository;
         this.validator = validator;
@@ -66,6 +68,7 @@ public class ProcessoService {
         this.emailSenderService = emailSenderService;
         this.anexoStorage = anexoStorage;
         this.historicoParecerRepository = historicoParecerRepository;
+        this.emailDominioValidator = emailDominioValidator;
     }
 
     public org.springframework.data.domain.Page<Processo> buscar(
@@ -372,6 +375,20 @@ public class ProcessoService {
         p.setPacienteNomeMae(form.getPacienteNomeMae());
         p.setSolicitanteEquipe(form.getSolicitanteEquipe());
         p.setSolicitanteEmail(form.getSolicitanteEmail());
+        // Checagem leve de dominio (achado real de vistoria, 2026-08-24) - mesma
+        // logica/motivo do formulario do solicitante (ver
+        // SolicitacaoOnlineService.criar): o @Email da entidade so confere a
+        // FORMA, nunca se o dominio existe. Fail-open por design (ver javadoc
+        // de EmailDominioValidator) - so bloqueia quando o dominio nao resolve
+        // de jeito nenhum.
+        String emailAdicionalForm = form.getEmailAdicional();
+        if (emailAdicionalForm != null && !emailAdicionalForm.isBlank()
+                && !emailDominioValidator.dominioResolvivel(emailAdicionalForm.trim())) {
+            throw new IllegalArgumentException(
+                "E-mail adicional invalido: o dominio \""
+                + emailAdicionalForm.trim().substring(emailAdicionalForm.trim().indexOf('@') + 1)
+                + "\" nao existe. Confira o endereco informado.");
+        }
         p.setEmailAdicional(form.getEmailAdicional());
         p.setDataSituacaoEspecial(form.getDataSituacaoEspecial());
         p.setObservacoes(form.getObservacoes());

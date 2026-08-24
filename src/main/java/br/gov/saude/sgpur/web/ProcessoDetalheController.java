@@ -825,7 +825,17 @@ public class ProcessoDetalheController {
         if (bloqueadoPorEncerrado(processoService.buscar(id), ra)) {
             return "redirect:/processos/" + id;
         }
-        processoService.atualizarDados(id, form);
+        try {
+            processoService.atualizarDados(id, form);
+        } catch (IllegalArgumentException e) {
+            // E-mail adicional com dominio inexistente (EmailDominioValidator) -
+            // ver ProcessoService.atualizarDados. Redirect gracioso de volta ao
+            // formulario, com o campo destacado, em vez de cair no handler
+            // generico de "registro nao encontrado" (GlobalExceptionHandler).
+            result.rejectValue("emailAdicional", "invalido", e.getMessage());
+            model.addAttribute("opcoesSexo", Sexo.values());
+            return "processos/editar";
+        }
         auditoria.registrar("PROCESSO_EDITADO", "Processo id " + id);
         ra.addFlashAttribute("msg", "Processo atualizado.");
         return "redirect:/processos/" + id;

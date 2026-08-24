@@ -347,7 +347,18 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   "envenenando" até uma chave `/Info` **customizada** (fora do padrão) some
   por completo — é a mesma proteção de imparcialidade que o texto visível já
   tinha, mas nos metadados (o navegador mostra o `Title` na aba ao abrir um
-  PDF inline). **É
+  PDF inline). **Teto de páginas por PDF individual (2026-08-24, achado real
+  de vistoria — defesa contra DoS por CPU/memória):** o limite de tamanho de
+  arquivo (25MB/30MB, `application.yml`) não protege contra um PDF com
+  páginas minúsculas e milhares delas — a fusão/carimbo página a página
+  custa CPU/memória proporcional ao NÚMERO de páginas, não ao tamanho do
+  arquivo. `RegistroEnvioService.registrar` agora verifica
+  `PdfReader.getNumberOfPages()` contra `app.upload.max-paginas-pdf`
+  (env `SGPUR_MAX_PAGINAS_PDF`, default 300) ANTES de consolidar/carimbar —
+  um documento que excede o teto fica de fora da consolidação com o MESMO
+  tratamento de aviso não-bloqueante já usado para PDF corrompido/sem
+  páginas (envio segue se sobrar outro documento válido); se TODOS excederem,
+  o envio é bloqueado com mensagem de negócio clara, nunca 500. **É
   obrigatório ao menos um documento clínico PDF anexado:** `registrarEnvio`
   **bloqueia** (flash `erro`, sem efetivar o envio) se não houver nenhum. A
   **solicitação original** (a informação completa da `SolicitacaoOnline` de
@@ -1049,6 +1060,24 @@ formato explícita em `SolicitacaoOnlineService.criar` (antes do `save()`,
 para não cair em 500 via `ConstraintViolationException` sem
 `@ExceptionHandler`).
 
+**Validação leve de domínio + isolamento de falha do CC (2026-08-24, achado
+real de vistoria):** `@Email` só confere a FORMA do endereço, nunca se o
+domínio existe — `EmailDominioValidator.dominioResolvivel` (só JDK puro,
+`javax.naming`/`java.net`, sem lib nova) consulta MX e, se não houver,
+A/AAAA do domínio antes de rejeitar. **Fail-open por design**: qualquer erro
+que não seja uma resolução negativa clara (timeout de DNS, rede fora do ar
+no próprio servidor) é tratado como "domínio ok" — só bloqueia quando NEM
+MX NEM A/AAAA resolvem. Chamado em `SolicitacaoOnlineService.criar` (form do
+solicitante) e `ProcessoService.atualizarDados` (form do operador,
+`ProcessoDetalheController.atualizar` trata a rejeição com
+`result.rejectValue` no campo, nunca cai no handler genérico de "registro
+não encontrado"). **Isolamento de falha do CC** (mesmo achado):
+`EmailSenderService.enviar`/`enviarComAnexo` com CC agora tentam de novo
+SEM o CC se o primeiro envio falhar (JavaMailSender rejeita a mensagem
+inteira — TO+CC são o mesmo envelope SMTP) — um `emailAdicional` com
+domínio ruim NUNCA mais bloqueia a entrega ao destinatário principal
+(solicitante), só falha de verdade quando nem sem CC funciona.
+
 ## Redesign visual — Portais do Solicitante e Avaliador (2026-08-06 a 08)
 
 Sistema de design próprio (`app.css`, tokens `--saur-elev-*`,
@@ -1134,6 +1163,26 @@ extração nunca foi de fato reproduzido).
 
 ## Segurança e sessão — reforços
 
+- **Inativar usuário revoga sessão ativa na hora (2026-08-24, achado real de
+  vistoria):** antes, `UsuarioDetailsService.disabled(!u.isAtivo())` só
+  bloqueava autenticações NOVAS — uma sessão HTTP já aberta (Portal do
+  Avaliador, chat, voto) continuava funcionando normalmente até o timeout de
+  30min mesmo com o acesso já revogado no cadastro. `SecurityConfig` agora
+  expõe um bean `SessionRegistry` explícito (amarrado via
+  `.sessionManagement().sessionRegistry(...)`, em vez do registry interno
+  implícito que o Spring Security cria sozinho) e `.expiredUrl("/login")`
+  (sem isso, o `SessionInformationExpiredStrategy` padrão devolve 200 com
+  texto plano, não um redirect). `UsuarioService.revogarSessoesAtivas`,
+  chamado por `alternarAtivo`/`atualizar` sempre que a transição é
+  `ativo=true → false`, percorre `SessionRegistry.getAllPrincipals()`
+  (nunca `getAllSessions(username, ...)` direto — o principal registrado é
+  o `UserDetails`, cujo `equals` não compara igual a uma `String` crua) e
+  expira cada `SessionInformation` encontrada via `expireNow()` — tolerante
+  a usuário sem sessão nenhuma, nunca lança exceção. Auditoria:
+  `SESSAO_REVOGADA_POR_INATIVACAO`. Coberto por
+  `UsuarioInativacaoRevogaSessaoIntegrationTest` (sessão HTTP real via login
+  por formulário, não `@WithMockUser` — mesmo padrão de
+  `AvaliadorSessaoOrfaIntegrationTest`).
 - **Atraso progressivo no login, NÃO bloqueio** (2026-08-07): após 2 falhas
   seguidas do mesmo username numa janela de 15min, cada falha soma atraso
   (teto 5s) — mas login com senha certa **nunca** é atrasado, mesmo logo

@@ -45,14 +45,21 @@ class SolicitacaoOnlineServiceTest {
     ProcessoService processoService;
     @Mock
     AuditoriaService auditoria;
+    @Mock
+    EmailDominioValidator emailDominioValidator;
 
     SolicitacaoOnlineService service;
 
     @BeforeEach
     void setUp() {
+        // Lenient: nem todo teste chega a validar emailAdicional (so os que
+        // preenchem o campo) - default "dominio ok" (fail-open), mesmo
+        // comportamento real quando a checagem de DNS nao pode ser feita.
+        org.mockito.Mockito.lenient().when(emailDominioValidator.dominioResolvivel(org.mockito.ArgumentMatchers.any()))
+            .thenReturn(true);
         service = new SolicitacaoOnlineService(repository, anexoStorage, anexoStorageProcesso,
             usuarioRepository, emailSenderService, emailTemplateService, processoService,
-            auditoria, "http://localhost:3000");
+            auditoria, emailDominioValidator, "http://localhost:3000");
     }
 
     private Usuario usuarioSolicitante(Long id) {
@@ -177,6 +184,47 @@ class SolicitacaoOnlineServiceTest {
             .hasMessageContaining("E-mail adicional invalido");
 
         org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(any());
+    }
+
+    /**
+     * Formato valido, mas o dominio NAO existe (nem MX nem A/AAAA - ver
+     * EmailDominioValidator) - achado real de vistoria (2026-08-24). Pega
+     * erro de digitacao que o regex de formato nao detecta.
+     */
+    @Test
+    void criarComEmailAdicionalDeDominioInexistenteLancaExcecaoAntesDeSalvar() {
+        Usuario usuario = usuarioSolicitante(1L);
+        SolicitacaoOnline pedido = solicitacaoPedido();
+        pedido.setEmailAdicional("contato@dominio-que-nao-existe-de-verdade.invalido");
+        when(emailDominioValidator.dominioResolvivel("contato@dominio-que-nao-existe-de-verdade.invalido"))
+            .thenReturn(false);
+
+        assertThatThrownBy(() -> service.criar(pedido, usuario, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("dominio")
+            .hasMessageContaining("nao existe");
+
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(any());
+    }
+
+    /**
+     * Falha na checagem de DNS (timeout/rede) e fail-open por design - o
+     * cadastro nunca deve ser bloqueado por uma falha transitoria de
+     * infraestrutura do proprio servidor (ver javadoc de
+     * EmailDominioValidator). Aqui simulamos o proprio EmailDominioValidator
+     * ja tendo decidido "true" (fail-open), o comportamento observavel dele.
+     */
+    @Test
+    void criarComEmailAdicionalQuandoChecagemDeDnsFalhaAindaAssimSalva() {
+        when(repository.save(any(SolicitacaoOnline.class))).thenAnswer(inv -> inv.getArgument(0));
+        Usuario usuario = usuarioSolicitante(1L);
+        SolicitacaoOnline pedido = solicitacaoPedido();
+        pedido.setEmailAdicional("contato@equipe.com.br");
+        when(emailDominioValidator.dominioResolvivel("contato@equipe.com.br")).thenReturn(true);
+
+        SolicitacaoOnline salva = service.criar(pedido, usuario, null);
+
+        assertThat(salva.getEmailAdicional()).isEqualTo("contato@equipe.com.br");
     }
 
     /**

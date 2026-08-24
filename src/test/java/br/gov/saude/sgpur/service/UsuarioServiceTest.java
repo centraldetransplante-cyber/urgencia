@@ -37,6 +37,8 @@ class UsuarioServiceTest {
     @Mock private EmailSenderService emailSenderService;
     @Mock private SolicitacaoOnlineRepository solicitacaoRepo;
     @Mock private RascunhoSolicitacaoOnlineRepository rascunhoRepo;
+    @Mock private org.springframework.security.core.session.SessionRegistry sessionRegistry;
+    @Mock private AuditoriaService auditoriaService;
 
     private PasswordResetAttemptService passwordResetAttemptService;
     private UsuarioService service;
@@ -45,7 +47,7 @@ class UsuarioServiceTest {
     void setUp() {
         passwordResetAttemptService = new PasswordResetAttemptService();
         service = new UsuarioService(repo, encoder, membroRepo, emailSenderService,
-            passwordResetAttemptService, solicitacaoRepo, rascunhoRepo);
+            passwordResetAttemptService, solicitacaoRepo, rascunhoRepo, sessionRegistry, auditoriaService);
     }
 
     private Usuario usuarioComEmail() {

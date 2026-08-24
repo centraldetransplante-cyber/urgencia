@@ -9,6 +9,9 @@ import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.core.session.SessionInformation;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,13 +30,17 @@ public class UsuarioService {
     private final PasswordResetAttemptService passwordResetAttemptService;
     private final SolicitacaoOnlineRepository solicitacaoRepo;
     private final RascunhoSolicitacaoOnlineRepository rascunhoRepo;
+    private final SessionRegistry sessionRegistry;
+    private final AuditoriaService auditoriaService;
 
     public UsuarioService(UsuarioRepository repo, PasswordEncoder encoder,
                           MembroUrgenciaRenalRepository membroRepo,
                           EmailSenderService emailSenderService,
                           PasswordResetAttemptService passwordResetAttemptService,
                           SolicitacaoOnlineRepository solicitacaoRepo,
-                          RascunhoSolicitacaoOnlineRepository rascunhoRepo) {
+                          RascunhoSolicitacaoOnlineRepository rascunhoRepo,
+                          SessionRegistry sessionRegistry,
+                          AuditoriaService auditoriaService) {
         this.repo = repo;
         this.encoder = encoder;
         this.membroRepo = membroRepo;
@@ -41,6 +48,8 @@ public class UsuarioService {
         this.passwordResetAttemptService = passwordResetAttemptService;
         this.solicitacaoRepo = solicitacaoRepo;
         this.rascunhoRepo = rascunhoRepo;
+        this.sessionRegistry = sessionRegistry;
+        this.auditoriaService = auditoriaService;
     }
 
     public List<Usuario> listar() {
@@ -147,6 +156,7 @@ public class UsuarioService {
         u.setNome(form.getNome());
         u.setEmail(form.getEmail());
         u.setPerfil(form.getPerfil());
+        boolean estavaAtivo = u.isAtivo();
         u.setAtivo(form.isAtivo());
         aplicarMembro(u, membroId);
         aplicarEquipeSolicitante(u, equipeSolicitante);
@@ -154,7 +164,11 @@ public class UsuarioService {
             validarSenha(senhaPura);
             u.setSenha(encoder.encode(senhaPura));
         }
-        return repo.save(u);
+        Usuario salvo = repo.save(u);
+        if (estavaAtivo && !salvo.isAtivo()) {
+            revogarSessoesAtivas(salvo);
+        }
+        return salvo;
     }
 
     /**
@@ -173,7 +187,10 @@ public class UsuarioService {
             validarNaoUltimoAdminAtivo(u, "desativar");
         }
         u.setAtivo(!u.isAtivo());
-        repo.save(u);
+        Usuario salvo = repo.save(u);
+        if (vaiDesativar) {
+            revogarSessoesAtivas(salvo);
+        }
     }
 
     /**
@@ -224,6 +241,63 @@ public class UsuarioService {
                 + " no Portal do Solicitante, e apaga-lo destruiria esse historico. "
                 + "Use 'Inativar' para bloquear o acesso dele ao sistema, preservando os pedidos ja enviados.");
         }
+    }
+
+    /**
+     * Revoga ativamente qualquer sessao HTTP ja aberta do usuario, quando ele
+     * acaba de ser INATIVADO (transicao ativo=true -&gt; false). Sem isto, o
+     * {@code disabled(!u.isAtivo())} de {@link UsuarioDetailsService} so
+     * bloqueia autenticacoes NOVAS - uma sessao ja aberta (Portal do
+     * Avaliador, chat, voto) continuava funcionando ate o timeout de
+     * inatividade de 30min mesmo com o acesso ja revogado no cadastro
+     * (achado real de vistoria, 2026-08-24).
+     *
+     * <p>Busca por username percorrendo {@link SessionRegistry#getAllPrincipals()}
+     * (nao {@code getAllSessions(username, false)} direto: o principal
+     * registrado eh o {@code UserDetails} retornado por
+     * {@code UsuarioDetailsService}, cujo {@code equals} nao compara igual a
+     * uma {@code String} crua). Cada {@link SessionInformation} encontrada eh
+     * expirada via {@code expireNow()} - na proxima requisicao autenticada
+     * daquele usuario, o {@code ConcurrentSessionFilter} do Spring Security
+     * redireciona para o login (comportamento padrao dele para sessao
+     * expirada pelo registry), sem exigir nenhum codigo extra aqui.</p>
+     *
+     * <p>Tolerante a ausencia de sessao (usuario nunca logado, ou sessao ja
+     * expirada por outro motivo) - simplesmente nao encontra nada para
+     * expirar, sem lancar excecao.</p>
+     */
+    private void revogarSessoesAtivas(Usuario u) {
+        try {
+            int expiradas = 0;
+            for (Object principal : sessionRegistry.getAllPrincipals()) {
+                String principalUsername = extrairUsername(principal);
+                if (principalUsername != null && principalUsername.equalsIgnoreCase(u.getUsername())) {
+                    for (SessionInformation info : sessionRegistry.getAllSessions(principal, false)) {
+                        info.expireNow();
+                        expiradas++;
+                    }
+                }
+            }
+            if (expiradas > 0) {
+                auditoriaService.registrar("SESSAO_REVOGADA_POR_INATIVACAO",
+                    "Usuario '" + u.getUsername() + "' inativado - " + expiradas
+                    + (expiradas == 1 ? " sessao ativa revogada" : " sessoes ativas revogadas") + ".");
+            }
+        } catch (Exception e) {
+            // Revogacao de sessao eh reforco de seguranca, nunca pode impedir
+            // a propria inativacao (que ja bloqueia login novo de qualquer forma).
+            log.warn("Falha ao revogar sessoes ativas de '{}': {}", u.getUsername(), e.getMessage());
+        }
+    }
+
+    private String extrairUsername(Object principal) {
+        if (principal instanceof UserDetails ud) {
+            return ud.getUsername();
+        }
+        if (principal instanceof String s) {
+            return s;
+        }
+        return null;
     }
 
     private void validarNaoAutoGerenciamento(Usuario u, String usernameLogado, String acao) {

@@ -36,6 +36,10 @@ class AdminBootstrapTest {
     private SolicitacaoOnlineRepository solicitacaoRepository;
     @Mock
     private RascunhoSolicitacaoOnlineRepository rascunhoRepository;
+    @Mock
+    private org.springframework.security.core.session.SessionRegistry sessionRegistry;
+    @Mock
+    private br.gov.saude.sgpur.service.AuditoriaService auditoriaService;
 
     @Test
     void criaAdminQuandoBancoVazio() {
@@ -44,7 +48,7 @@ class AdminBootstrapTest {
         when(usuarioRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         UsuarioService usuarioService = new UsuarioService(usuarioRepository, encoder, membroRepository,
             emailSenderService, new br.gov.saude.sgpur.service.PasswordResetAttemptService(),
-            solicitacaoRepository, rascunhoRepository);
+            solicitacaoRepository, rascunhoRepository, sessionRegistry, auditoriaService);
         AdminBootstrap bootstrap = new AdminBootstrap(usuarioRepository, usuarioService, "admin", "Admin123!");
 
         bootstrap.run(null);
@@ -61,7 +65,7 @@ class AdminBootstrapTest {
         when(usuarioRepository.count()).thenReturn(3L);
         UsuarioService usuarioService = new UsuarioService(usuarioRepository, encoder, membroRepository,
             emailSenderService, new br.gov.saude.sgpur.service.PasswordResetAttemptService(),
-            solicitacaoRepository, rascunhoRepository);
+            solicitacaoRepository, rascunhoRepository, sessionRegistry, auditoriaService);
         AdminBootstrap bootstrap = new AdminBootstrap(usuarioRepository, usuarioService, "admin", "admin123");
 
         bootstrap.run(null);

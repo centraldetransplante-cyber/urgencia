@@ -138,6 +138,15 @@ app:
   # Diretorio de armazenamento dos anexos
   anexos:
     dir: ./data/anexos
+
+  # Teto de paginas por PDF individual (documento clinico) aceito na
+  # consolidacao/carimbo do envio aos avaliadores (achado real de vistoria,
+  # 2026-08-24 - defesa contra DoS por CPU/memoria: sem teto de PAGINAS, so
+  # o limite de TAMANHO de arquivo (25MB/30MB acima) ja existia, e um PDF
+  # malicioso com paginas minusculas pode ter poucos MB e ainda assim
+  # milhares de paginas). Ver RegistroEnvioService.
+  upload:
+    max-paginas-pdf: ${SGPUR_MAX_PAGINAS_PDF:300}
   # Usuario administrador inicial: AdminBootstrap so cria esse usuario se a
   # tabela usuario estiver vazia. Default (admin/admin123) vale para dev;
   # o perfil prod (application-prod.yml) exige SGPUR_ADMIN_PASSWORD via env

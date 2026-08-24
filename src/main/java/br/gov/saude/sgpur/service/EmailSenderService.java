@@ -78,6 +78,18 @@ public class EmailSenderService {
 
     /**
      * Envia e-mail para multiplos destinatarios com copia (CC) opcional.
+     *
+     * <p><b>CC nunca derruba o envio ao destinatario principal (2026-08-24).</b>
+     * O CC (hoje, sempre {@code Processo.emailAdicional} - ver
+     * {@code ProcessoService.ccEmailAdicional}) e digitado pelo solicitante,
+     * sem validacao de dominio forte; um endereco com dominio inexistente faz
+     * o {@code JavaMailSender} rejeitar a mensagem inteira (TO + CC sao o
+     * MESMO envelope SMTP). Antes desta correcao isso derrubava tambem o
+     * e-mail PRINCIPAL - achado real de vistoria: um erro de digitacao no
+     * campo opcional bloqueava a resposta oficial de Deferido/Indeferido.
+     * Agora, se o envio com CC falha, tenta-se de novo SEM o CC antes de
+     * desistir; so falha de verdade (retorna {@code false}) quando nem o
+     * reenvio sem CC funciona.</p>
      */
     public boolean enviar(String[] to, String[] cc, String subject, String body) {
         if (to == null || to.length == 0) {
@@ -91,25 +103,44 @@ public class EmailSenderService {
         }
         DestinoResolvido destino = resolverDestino(to, cc, subject);
         try {
-            MimeMessage msg = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(msg, false, "UTF-8");
-            helper.setFrom(from);
-            helper.setTo(destino.to());
-            if (destino.cc() != null && destino.cc().length > 0) {
-                helper.setCc(destino.cc());
-            }
-            helper.setSubject(destino.subject());
-            helper.setText(body, false); // false = texto simples
-
-            mailSender.send(msg);
+            enviarMensagemTexto(destino.to(), destino.cc(), destino.subject(), body);
             log.info("EmailSender: e-mail enviado para {} - assunto: {}",
                 String.join(", ", destino.to()), destino.subject());
             return true;
         } catch (MailException | MessagingException e) {
+            if (destino.cc() != null && destino.cc().length > 0) {
+                log.warn("EmailSender: falha ao enviar e-mail para {} COM copia {}: {}. "
+                    + "Tentando novamente sem a copia, para nao bloquear o destinatario principal.",
+                    String.join(", ", destino.to()), String.join(", ", destino.cc()), e.getMessage());
+                try {
+                    enviarMensagemTexto(destino.to(), null, destino.subject(), body);
+                    log.info("EmailSender: e-mail enviado para {} SEM a copia (falhou apenas o CC).",
+                        String.join(", ", destino.to()));
+                    return true;
+                } catch (MailException | MessagingException e2) {
+                    log.error("EmailSender: falha ao enviar e-mail para {} mesmo sem a copia: {}",
+                        String.join(", ", destino.to()), e2.getMessage());
+                    return false;
+                }
+            }
             log.error("EmailSender: falha ao enviar e-mail para {}: {}",
                 String.join(", ", destino.to()), e.getMessage());
             return false;
         }
+    }
+
+    private void enviarMensagemTexto(String[] to, String[] cc, String subject, String body)
+            throws MessagingException {
+        MimeMessage msg = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(msg, false, "UTF-8");
+        helper.setFrom(from);
+        helper.setTo(to);
+        if (cc != null && cc.length > 0) {
+            helper.setCc(cc);
+        }
+        helper.setSubject(subject);
+        helper.setText(body, false); // false = texto simples
+        mailSender.send(msg);
     }
 
     /**
@@ -162,25 +193,49 @@ public class EmailSenderService {
         }
         DestinoResolvido destino = resolverDestino(new String[]{to}, cc, subject);
         try {
-            MimeMessage msg = mailSender.createMimeMessage();
-            MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
-            helper.setFrom(from);
-            helper.setTo(destino.to());
-            if (destino.cc() != null && destino.cc().length > 0) {
-                helper.setCc(destino.cc());
-            }
-            helper.setSubject(destino.subject());
-            helper.setText(body, false);
-            if (anexo != null) {
-                helper.addAttachment(nomeAnexo != null ? nomeAnexo : anexo.getName(), anexo);
-            }
-            mailSender.send(msg);
+            enviarMensagemComAnexo(destino.to(), destino.cc(), destino.subject(), body, anexo, nomeAnexo);
             log.info("EmailSender: e-mail com anexo enviado para {}", String.join(", ", destino.to()));
             return true;
         } catch (MailException | MessagingException e) {
+            // CC nunca pode bloquear a entrega do e-mail principal (mesma
+            // logica/motivo de #enviar acima) - o CC aqui e sempre
+            // Processo.emailAdicional, digitado pelo solicitante sem garantia
+            // de dominio valido.
+            if (destino.cc() != null && destino.cc().length > 0) {
+                log.warn("EmailSender: falha ao enviar e-mail com anexo para {} COM copia {}: {}. "
+                    + "Tentando novamente sem a copia, para nao bloquear o destinatario principal.",
+                    String.join(", ", destino.to()), String.join(", ", destino.cc()), e.getMessage());
+                try {
+                    enviarMensagemComAnexo(destino.to(), null, destino.subject(), body, anexo, nomeAnexo);
+                    log.info("EmailSender: e-mail com anexo enviado para {} SEM a copia (falhou apenas o CC).",
+                        String.join(", ", destino.to()));
+                    return true;
+                } catch (MailException | MessagingException e2) {
+                    log.error("EmailSender: falha ao enviar e-mail com anexo para {} mesmo sem a copia: {}",
+                        String.join(", ", destino.to()), e2.getMessage());
+                    return false;
+                }
+            }
             log.error("EmailSender: falha ao enviar e-mail com anexo para {}: {}",
                 String.join(", ", destino.to()), e.getMessage());
             return false;
         }
+    }
+
+    private void enviarMensagemComAnexo(String[] to, String[] cc, String subject, String body,
+                                        File anexo, String nomeAnexo) throws MessagingException {
+        MimeMessage msg = mailSender.createMimeMessage();
+        MimeMessageHelper helper = new MimeMessageHelper(msg, true, "UTF-8");
+        helper.setFrom(from);
+        helper.setTo(to);
+        if (cc != null && cc.length > 0) {
+            helper.setCc(cc);
+        }
+        helper.setSubject(subject);
+        helper.setText(body, false);
+        if (anexo != null) {
+            helper.addAttachment(nomeAnexo != null ? nomeAnexo : anexo.getName(), anexo);
+        }
+        mailSender.send(msg);
     }
 }

@@ -38,15 +38,19 @@ class ProcessoServiceTest {
     AnexoStorageService anexoStorageService;
     @Mock
     HistoricoParecerRepository historicoParecerRepository;
+    @Mock
+    EmailDominioValidator emailDominioValidator;
     ProcessoService service;
 
     // Usa o ProcessoValidator real (funcoes puras): as regras de negocio vivem
     // nele, e o servico apenas delega.
     @BeforeEach
     void setUp() {
+        org.mockito.Mockito.lenient().when(emailDominioValidator.dominioResolvivel(org.mockito.ArgumentMatchers.any()))
+            .thenReturn(true);
         service = new ProcessoService(processoRepository, membroRepository, new ProcessoValidator(), parecerRepository,
                 solicitacaoOnlineRepository, emailTemplateService, emailSenderService, anexoStorageService,
-                historicoParecerRepository);
+                historicoParecerRepository, emailDominioValidator);
     }
 
     private Parecer parecer(ResultadoParecer r) {
@@ -149,6 +153,28 @@ class ProcessoServiceTest {
         assertThatThrownBy(() -> service.atualizarDados(50L, new Processo()))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("encerrado");
+    }
+
+    /**
+     * E-mail adicional com dominio inexistente (achado real de vistoria,
+     * 2026-08-24) - EmailDominioValidator.dominioResolvivel devolvendo
+     * {@code false} bloqueia a edicao ANTES do save, com mensagem clara.
+     */
+    @Test
+    void atualizarDadosRejeitaEmailAdicionalComDominioInexistente() {
+        Processo existente = new Processo();
+        existente.setStatus(StatusProcesso.ENVIADO);
+        when(processoRepository.findById(51L)).thenReturn(java.util.Optional.of(existente));
+        Processo form = new Processo();
+        form.setEmailAdicional("contato@dominio-fake.invalido");
+        when(emailDominioValidator.dominioResolvivel("contato@dominio-fake.invalido")).thenReturn(false);
+
+        assertThatThrownBy(() -> service.atualizarDados(51L, form))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("dominio")
+                .hasMessageContaining("nao existe");
+
+        org.mockito.Mockito.verify(processoRepository, org.mockito.Mockito.never()).save(any());
     }
 
     @Test
