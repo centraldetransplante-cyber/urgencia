@@ -230,16 +230,7 @@
                                  th:text="${l.processo.solicitanteEquipe}"
                                  th:title="${l.processo.solicitanteEquipe}">Solicitante</div>
                         </td>
-                        <!-- mw-12rem (nao mw-10rem): a celula precisa bater com o max-width do
-                             proprio texto de pendencia logo abaixo (.mw-12rem no div, linha
-                             seguinte) - com o pai mais estreito que o filho, o filho nunca
-                             conseguia usar a largura que ele mesmo declarava, e rotulos reais
-                             como "Informação complementar" (174px) cortavam com reticencias
-                             mesmo tendo espaco de sobra (192px) no proprio CSS do filho. Bug
-                             relatado pelo usuario em producao (Painel, coluna Status cortada),
-                             reproduzido com Playwright contra dados de QA reais do dev antes
-                             desta correcao (div.scrollWidth 174px > clientWidth 160.8px). -->
-                        <td class="align-top mw-12rem">
+                        <td class="align-top mw-10rem">
                             <span class="badge rounded-pill text-wrap"
                                   th:classappend="${l.processo.status.bootstrapBadge}">
                                 <i class="bi" th:classappend="'bi-' + ${l.processo.status.badgeIcone}"></i>
@@ -252,10 +243,17 @@
                             </div>
                             <!-- Relatorio de clareza (2026-08-05), item 5.1: a celula mostra so o
                                  rotulo curto da etapa pendente (ex. "Envio aos 3 médicos"); a frase
-                                 completa (o que falta de verdade) fica reservada pro title, em vez
-                                 de competir por espaco na tabela / ser cortada sem reticencias. -->
+                                 completa (o que falta de verdade) fica reservada pro title.
+                                 CORRIGIDO em 24/08 (2a tentativa - a 1a alargou a coluna mw-10rem
+                                 pra mw-12rem, o que empurrou a largura total da tabela e fez
+                                 aparecer uma barra de rolagem horizontal nova que o usuario nao
+                                 gostou - revertido). Em vez de alargar a coluna, o rotulo agora
+                                 QUEBRA em ate 2 linhas (text-wrap, sem mw-12rem/text-truncate)
+                                 dentro da MESMA largura de sempre (mw-10rem do pai) - nenhuma
+                                 coluna fica mais larga, so a linha da tabela fica um pouco mais
+                                 alta quando o rotulo nao cabe numa linha so. -->
                             <div th:if="${pendencias.containsKey(l.processo.id)}"
-                                 class="mt-1 text-muted fst-italic text-truncate text-detail-xs mw-12rem"
+                                 class="mt-1 text-muted fst-italic text-wrap text-detail-xs"
                                  th:text="${pendencias.get(l.processo.id).titulo()}"
                                  th:title="${pendencias.get(l.processo.id).titulo()} + ': ' + ${pendencias.get(l.processo.id).detalhe()}">o que falta</div>
                         </td>
