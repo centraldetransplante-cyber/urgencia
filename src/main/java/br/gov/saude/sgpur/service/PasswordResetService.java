@@ -62,6 +62,7 @@ public class PasswordResetService {
     private static final SecureRandom RANDOM = new SecureRandom();
 
     private final UsuarioRepository usuarioRepo;
+    private final UsuarioService usuarioService;
     private final PasswordResetTokenRepository tokenRepo;
     private final PasswordEncoder encoder;
     private final EmailSenderService emailSenderService;
@@ -69,12 +70,14 @@ public class PasswordResetService {
     private final String baseUrl;
 
     public PasswordResetService(UsuarioRepository usuarioRepo,
+                                UsuarioService usuarioService,
                                 PasswordResetTokenRepository tokenRepo,
                                 PasswordEncoder encoder,
                                 EmailSenderService emailSenderService,
                                 PasswordResetAttemptService passwordResetAttemptService,
                                 @Value("${app.base-url:http://localhost:3000}") String baseUrl) {
         this.usuarioRepo = usuarioRepo;
+        this.usuarioService = usuarioService;
         this.tokenRepo = tokenRepo;
         this.encoder = encoder;
         this.emailSenderService = emailSenderService;
@@ -192,9 +195,16 @@ public class PasswordResetService {
      * token sao alterados). No sucesso, troca a senha ATIVA e marca o token
      * como usado NA MESMA TRANSACAO (atomico: ou os dois efeitos acontecem,
      * ou nenhum - nunca uma senha trocada com o token ainda reutilizavel).
+     *
+     * <p>Retorna o {@code username} do usuario afetado - usado pelo
+     * controller para nomear o evento de auditoria
+     * {@code SENHA_RESET_CONFIRMADO} (bug_001 da revisao de codigo do PR de
+     * 2026-08-24), no mesmo padrao dos demais eventos de senha
+     * ({@code SENHA_ALTERADA}, {@code SENHA_RESET_SOLICITADO}), que sempre
+     * nomeiam o usuario.
      */
     @Transactional
-    public void confirmarNovaSenha(String token, String novaSenha, String confirmacao) {
+    public String confirmarNovaSenha(String token, String novaSenha, String confirmacao) {
         PasswordResetToken prt = tokenRepo.findByToken(token)
             .orElseThrow(() -> new IllegalArgumentException(
                 "Link de redefinição inválido. Solicite uma nova redefinição de senha."));
@@ -210,11 +220,15 @@ public class PasswordResetService {
         if (!novaSenha.equals(confirmacao)) {
             throw new IllegalArgumentException("A confirmação não confere com a nova senha.");
         }
-        Usuario u = prt.getUsuario();
+        // Mesma normalizacao de versao legada que UsuarioService.atualizar/
+        // alternarAtivo/alterarPropriaSenha ja fazem (bug_006) - reusada em
+        // vez de duplicada, ver UsuarioService.normalizarVersaoLegada.
+        Usuario u = usuarioService.normalizarVersaoLegada(prt.getUsuario());
         u.setSenha(encoder.encode(novaSenha));
         usuarioRepo.save(u);
         prt.setUsado(true);
         tokenRepo.save(prt);
+        return u.getUsername();
     }
 
     /** Gera um token opaco (nao previsivel) a partir de 32 bytes de SecureRandom, Base64 URL-safe. */

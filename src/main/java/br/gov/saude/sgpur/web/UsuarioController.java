@@ -224,8 +224,9 @@ public class UsuarioController {
                                           @RequestParam String novaSenha,
                                           @RequestParam String confirmacao,
                                           Model model, RedirectAttributes ra, HttpServletRequest request) {
+        String username;
         try {
-            passwordResetService.confirmarNovaSenha(token, novaSenha, confirmacao);
+            username = passwordResetService.confirmarNovaSenha(token, novaSenha, confirmacao);
         } catch (IllegalArgumentException e) {
             // Token continua invalido/expirado/ja usado, ou a senha nao passou
             // na politica - reexibe o form (com o token, se ele ainda for
@@ -239,8 +240,10 @@ public class UsuarioController {
             model.addAttribute("erro", e.getMessage());
             return "usuarios/redefinir-senha";
         }
-        auditoria.registrar("SENHA_RESET_CONFIRMADO", "Token de reset de senha confirmado",
-            request.getRemoteAddr());
+        // Nomeia o usuario no evento de auditoria - mesmo padrao de
+        // SENHA_ALTERADA/SENHA_RESET_SOLICITADO (bug_001 da revisao de
+        // codigo do PR de 2026-08-24).
+        auditoria.registrar("SENHA_RESET_CONFIRMADO", "Usuario " + username, request.getRemoteAddr());
         ra.addFlashAttribute("msg", "Senha redefinida com sucesso. Faca login com a nova senha.");
         return "redirect:/login";
     }

@@ -3,6 +3,7 @@ package br.gov.saude.sgpur.bootstrap;
 import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.Usuario;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
+import br.gov.saude.sgpur.repository.PasswordResetTokenRepository;
 import br.gov.saude.sgpur.repository.RascunhoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -33,6 +34,8 @@ class AdminBootstrapTest {
     private SolicitacaoOnlineRepository solicitacaoRepository;
     @Mock
     private RascunhoSolicitacaoOnlineRepository rascunhoRepository;
+    @Mock
+    private PasswordResetTokenRepository passwordResetTokenRepository;
 
     @Test
     void criaAdminQuandoBancoVazio() {
@@ -40,7 +43,7 @@ class AdminBootstrapTest {
         when(encoder.encode("Admin123!")).thenReturn("hash");
         when(usuarioRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
         UsuarioService usuarioService = new UsuarioService(usuarioRepository, encoder, membroRepository,
-            solicitacaoRepository, rascunhoRepository);
+            solicitacaoRepository, rascunhoRepository, passwordResetTokenRepository);
         AdminBootstrap bootstrap = new AdminBootstrap(usuarioRepository, usuarioService, "admin", "Admin123!");
 
         bootstrap.run(null);
@@ -56,7 +59,7 @@ class AdminBootstrapTest {
     void naoCriaAdminQuandoJaExistemUsuarios() {
         when(usuarioRepository.count()).thenReturn(3L);
         UsuarioService usuarioService = new UsuarioService(usuarioRepository, encoder, membroRepository,
-            solicitacaoRepository, rascunhoRepository);
+            solicitacaoRepository, rascunhoRepository, passwordResetTokenRepository);
         AdminBootstrap bootstrap = new AdminBootstrap(usuarioRepository, usuarioService, "admin", "admin123");
 
         bootstrap.run(null);

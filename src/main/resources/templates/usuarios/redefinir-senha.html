@@ -70,22 +70,6 @@
 </div>
 <script th:replace="~{layout :: scripts}"></script>
 <script th:src="@{/js/mostrar-senha.js}"></script>
-<script th:if="${token}" th:inline="javascript">
-(function () {
-    var nova = document.getElementById('novaSenha');
-    var conf = document.getElementById('confirmacao');
-    var msg = document.getElementById('msgConfere');
-    var form = document.getElementById('formRedefinir');
-    if (form) {
-        form.addEventListener('submit', function (e) {
-            if (nova.value !== conf.value) {
-                e.preventDefault();
-                msg.classList.remove('d-none');
-                conf.focus();
-            }
-        });
-    }
-})();
-</script>
+<script th:if="${token}" th:src="@{/js/confere-senha.js}"></script>
 </body>
 </html>

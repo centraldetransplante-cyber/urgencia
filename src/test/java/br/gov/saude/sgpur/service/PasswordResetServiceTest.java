@@ -38,6 +38,7 @@ import static org.mockito.Mockito.when;
 class PasswordResetServiceTest {
 
     @Mock private UsuarioRepository usuarioRepo;
+    @Mock private UsuarioService usuarioService;
     @Mock private PasswordResetTokenRepository tokenRepo;
     @Mock private PasswordEncoder encoder;
     @Mock private EmailSenderService emailSenderService;
@@ -48,7 +49,7 @@ class PasswordResetServiceTest {
     @BeforeEach
     void setUp() {
         passwordResetAttemptService = new PasswordResetAttemptService();
-        service = new PasswordResetService(usuarioRepo, tokenRepo, encoder, emailSenderService,
+        service = new PasswordResetService(usuarioRepo, usuarioService, tokenRepo, encoder, emailSenderService,
             passwordResetAttemptService, "http://localhost:3000");
     }
 
@@ -270,12 +271,43 @@ class PasswordResetServiceTest {
         Usuario u = prt.getUsuario();
         when(tokenRepo.findByToken("tok-valido")).thenReturn(Optional.of(prt));
         when(encoder.encode("NovaSenha123!")).thenReturn("hash-nova");
+        // normalizarVersaoLegada e reaproveitado de UsuarioService (bug_006) -
+        // aqui o usuario ja tem versao preenchida, entao o "pass-through" e o
+        // proprio objeto (mesmo comportamento do metodo real nesse caso).
+        when(usuarioService.normalizarVersaoLegada(u)).thenReturn(u);
 
-        service.confirmarNovaSenha("tok-valido", "NovaSenha123!", "NovaSenha123!");
+        String username = service.confirmarNovaSenha("tok-valido", "NovaSenha123!", "NovaSenha123!");
 
+        assertThat(username).isEqualTo(u.getUsername());
         assertThat(u.getSenha()).isEqualTo("hash-nova");
+        verify(usuarioService).normalizarVersaoLegada(u);
         verify(usuarioRepo).save(u);
         assertThat(prt.isUsado()).isTrue();
         verify(tokenRepo).save(prt);
+    }
+
+    @Test
+    void confirmarNovaSenhaComUsuarioDeVersaoLegadaUsaEntidadeRenormalizada() {
+        // Cenario do bug_006: o Usuario vinculado ao token foi carregado com
+        // versao nula (dado legado sem backfill) - normalizarVersaoLegada
+        // devolve uma instancia DIFERENTE (recarregada apos o UPDATE em
+        // lote), e e ELA que deve receber a nova senha, nao a original.
+        PasswordResetToken prt = tokenValido();
+        Usuario original = prt.getUsuario();
+        original.setVersao(null);
+        Usuario renormalizado = usuarioComEmail();
+        renormalizado.setVersao(0L);
+        when(tokenRepo.findByToken("tok-valido")).thenReturn(Optional.of(prt));
+        when(encoder.encode("NovaSenha123!")).thenReturn("hash-nova");
+        when(usuarioService.normalizarVersaoLegada(original)).thenReturn(renormalizado);
+
+        service.confirmarNovaSenha("tok-valido", "NovaSenha123!", "NovaSenha123!");
+
+        assertThat(renormalizado.getSenha()).isEqualTo("hash-nova");
+        // A instancia ORIGINAL (versao nula) nunca e tocada - so a
+        // renormalizada e alterada/salva.
+        assertThat(original.getSenha()).isEqualTo("hash-antigo");
+        verify(usuarioRepo).save(renormalizado);
+        verify(usuarioRepo, never()).save(original);
     }
 }

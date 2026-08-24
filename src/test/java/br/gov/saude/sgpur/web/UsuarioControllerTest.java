@@ -535,7 +535,10 @@ class UsuarioControllerTest {
 
     @Test
     @WithMockUser(roles = "OPERADOR")
-    void redefinirSenhaConfirmarComSucessoRedirecionaParaLoginEAuditaSemExporToken() throws Exception {
+    void redefinirSenhaConfirmarComSucessoRedirecionaParaLoginEAuditaComOUsuario() throws Exception {
+        when(passwordResetService.confirmarNovaSenha("tok-123", "NovaSenha123!", "NovaSenha123!"))
+            .thenReturn("operador1");
+
         mvc.perform(post("/usuarios/redefinir-senha")
                 .with(csrf())
                 .param("token", "tok-123")
@@ -546,7 +549,9 @@ class UsuarioControllerTest {
             .andExpect(flash().attributeExists("msg"));
 
         verify(passwordResetService).confirmarNovaSenha("tok-123", "NovaSenha123!", "NovaSenha123!");
-        verify(auditoria).registrar(eq("SENHA_RESET_CONFIRMADO"), anyString(), any());
+        // bug_001: o evento de auditoria precisa nomear o usuario, igual
+        // SENHA_ALTERADA/SENHA_RESET_SOLICITADO ja fazem.
+        verify(auditoria).registrar(eq("SENHA_RESET_CONFIRMADO"), eq("Usuario operador1"), any());
     }
 
     @Test

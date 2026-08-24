@@ -3,6 +3,7 @@ package br.gov.saude.sgpur.service;
 import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.Usuario;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
+import br.gov.saude.sgpur.repository.PasswordResetTokenRepository;
 import br.gov.saude.sgpur.repository.RascunhoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -35,12 +36,14 @@ class UsuarioServiceTest {
     @Mock private MembroUrgenciaRenalRepository membroRepo;
     @Mock private SolicitacaoOnlineRepository solicitacaoRepo;
     @Mock private RascunhoSolicitacaoOnlineRepository rascunhoRepo;
+    @Mock private PasswordResetTokenRepository passwordResetTokenRepo;
 
     private UsuarioService service;
 
     @BeforeEach
     void setUp() {
-        service = new UsuarioService(repo, encoder, membroRepo, solicitacaoRepo, rascunhoRepo);
+        service = new UsuarioService(repo, encoder, membroRepo, solicitacaoRepo, rascunhoRepo,
+            passwordResetTokenRepo);
     }
 
     // ---- Auto-lockout: exclusao/desativacao do ultimo ADMIN ativo ou da propria conta ----
@@ -148,6 +151,12 @@ class UsuarioServiceTest {
         service.excluir(2L, "admin");
 
         verify(repo).delete(op);
+        // Rascunho de solicitacao e eventual PasswordResetToken pendente sao
+        // dado de staging descartavel - apagados junto para nao esbarrar na
+        // FK correspondente (bug_004 da revisao de codigo do PR de
+        // 2026-08-24, mesmo padrao ja usado para o rascunho).
+        verify(rascunhoRepo).deleteByUsuarioSolicitanteId(2L);
+        verify(passwordResetTokenRepo).deleteByUsuarioId(2L);
     }
 
     @Test

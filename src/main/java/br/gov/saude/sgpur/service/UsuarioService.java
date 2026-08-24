@@ -4,6 +4,7 @@ import br.gov.saude.sgpur.domain.MembroUrgenciaRenal;
 import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.Usuario;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
+import br.gov.saude.sgpur.repository.PasswordResetTokenRepository;
 import br.gov.saude.sgpur.repository.RascunhoSolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
@@ -25,16 +26,19 @@ public class UsuarioService {
     private final MembroUrgenciaRenalRepository membroRepo;
     private final SolicitacaoOnlineRepository solicitacaoRepo;
     private final RascunhoSolicitacaoOnlineRepository rascunhoRepo;
+    private final PasswordResetTokenRepository passwordResetTokenRepo;
 
     public UsuarioService(UsuarioRepository repo, PasswordEncoder encoder,
                           MembroUrgenciaRenalRepository membroRepo,
                           SolicitacaoOnlineRepository solicitacaoRepo,
-                          RascunhoSolicitacaoOnlineRepository rascunhoRepo) {
+                          RascunhoSolicitacaoOnlineRepository rascunhoRepo,
+                          PasswordResetTokenRepository passwordResetTokenRepo) {
         this.repo = repo;
         this.encoder = encoder;
         this.membroRepo = membroRepo;
         this.solicitacaoRepo = solicitacaoRepo;
         this.rascunhoRepo = rascunhoRepo;
+        this.passwordResetTokenRepo = passwordResetTokenRepo;
     }
 
     public List<Usuario> listar() {
@@ -183,6 +187,13 @@ public class UsuarioService {
      * isso a FK {@code rascunho_solicitacao_online.usuario_solicitante_id}
      * bloquearia a exclusao de um solicitante que so tinha comecado a
      * preencher um formulario.
+     *
+     * <p>Um eventual {@code PasswordResetToken} pendente (usuario pediu
+     * "esqueci minha senha" e nunca chegou a abrir o link) e apagado pelo
+     * mesmo motivo - e dado de staging descartavel, e a FK
+     * {@code password_reset_token.usuario_id} bloquearia a exclusao (achado
+     * bug_004 da revisao de codigo do PR de 2026-08-24, mesmo padrao do
+     * rascunho acima).
      */
     @Transactional
     public void excluir(Long id, String usernameLogado) {
@@ -191,6 +202,7 @@ public class UsuarioService {
         validarNaoUltimoAdminAtivo(u, "excluir");
         validarSemHistoricoDeSolicitacoes(u);
         rascunhoRepo.deleteByUsuarioSolicitanteId(u.getId());
+        passwordResetTokenRepo.deleteByUsuarioId(u.getId());
         repo.delete(u);
     }
 
@@ -300,8 +312,15 @@ public class UsuarioService {
      * ser uma instancia DIFERENTE da recebida) e precisa ser chamado logo
      * apos o fetch, ANTES de qualquer {@code set...} no objeto original (que
      * seria perdido pelo {@code clearAutomatically}).</p>
+     *
+     * <p><b>Publico desde 2026-08-24 (bug_006 da revisao de codigo do PR de
+     * reset de senha por token):</b> {@code PasswordResetService
+     * .confirmarNovaSenha} tambem grava a senha de um {@code Usuario} que
+     * pode ter sido carregado com {@code versao} nula (mesmo cenario de
+     * dado legado sem backfill) - reusa este metodo em vez de duplicar a
+     * logica.</p>
      */
-    private Usuario normalizarVersaoLegada(Usuario u) {
+    public Usuario normalizarVersaoLegada(Usuario u) {
         if (u.getVersao() != null) {
             return u;
         }
