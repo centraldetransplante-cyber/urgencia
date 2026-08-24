@@ -8,6 +8,7 @@ import br.gov.saude.sgpur.domain.TipoAnexo;
 import br.gov.saude.sgpur.service.dto.EmailTemplate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -51,19 +52,22 @@ public class RegistroEnvioService {
     private final AuditoriaService auditoria;
     private final EmailTemplateService emailTemplateService;
     private final EmailSenderService emailSenderService;
+    private final int maxPaginasPdf;
 
     public RegistroEnvioService(ProcessoService processoService,
                                 SolicitacaoAvaliadorService solicitacaoAvaliadorService,
                                 AnexoStorageService anexoStorage,
                                 AuditoriaService auditoria,
                                 EmailTemplateService emailTemplateService,
-                                EmailSenderService emailSenderService) {
+                                EmailSenderService emailSenderService,
+                                @Value("${app.upload.max-paginas-pdf:300}") int maxPaginasPdf) {
         this.processoService = processoService;
         this.solicitacaoAvaliadorService = solicitacaoAvaliadorService;
         this.anexoStorage = anexoStorage;
         this.auditoria = auditoria;
         this.emailTemplateService = emailTemplateService;
         this.emailSenderService = emailSenderService;
+        this.maxPaginasPdf = maxPaginasPdf;
     }
 
     /**
@@ -159,23 +163,43 @@ public class RegistroEnvioService {
         // para "ignorados" (mesmo aviso dos anexos nao-PDF) - o operador precisa
         // saber que um documento clinico ficou de fora, em vez de o envio
         // seguir silenciosamente incompleto.
+        //
+        // TETO DE PAGINAS (achado real de vistoria, 2026-08-24 - defesa contra
+        // DoS por CPU/memoria): o limite de TAMANHO de arquivo (25MB/30MB, ver
+        // application.yml) nao protege contra um PDF com paginas minusculas e
+        // milhares delas - a fusao/carimbo pagina a pagina (PdfCabecalhoStamper)
+        // custa CPU/memoria proporcional ao numero de paginas, nao ao tamanho do
+        // arquivo. Verificado ANTES de consolidar/carimbar (aqui, junto da
+        // checagem de "tem paginas"), com mensagem de negocio clara - nunca 500.
         List<byte[]> validos = new ArrayList<>();
         for (int i = 0; i < partes.size(); i++) {
             byte[] bytes = partes.get(i);
             String nome = partesNomes.get(i);
             try (com.lowagie.text.pdf.PdfReader chk = new com.lowagie.text.pdf.PdfReader(bytes)) {
-                if (chk.getNumberOfPages() > 0) {
-                    validos.add(bytes);
-                } else {
+                int paginas = chk.getNumberOfPages();
+                if (paginas <= 0) {
                     ignorados.add(nome + " (PDF sem paginas)");
+                } else if (paginas > maxPaginasPdf) {
+                    ignorados.add(nome + " (" + paginas + " paginas - excede o limite de "
+                        + maxPaginasPdf + " paginas por documento)");
+                } else {
+                    validos.add(bytes);
                 }
             } catch (Exception e) {
                 ignorados.add(nome + " (PDF corrompido ou protegido por senha)");
             }
         }
         if (validos.isEmpty()) {
+            // Inclui o motivo REAL de cada documento descartado (achado real de
+            // revisao, 2026-08-24) - sem isso, o operador so via um texto
+            // generico "sem paginas" mesmo quando o motivo verdadeiro era outro
+            // (ex.: teto de paginas excedido), e reenviar o mesmo arquivo
+            // repetidamente nao resolvia nada.
+            String detalhe = ignorados.isEmpty()
+                ? ""
+                : ": " + String.join("; ", ignorados);
             return RegistroEnvioResultado.erro(
-                "Nenhum dos documentos clinicos anexados e um PDF valido com paginas. "
+                "Nenhum dos documentos clinicos anexados e um PDF valido para envio" + detalhe + ". "
                 + "Remova-os e anexe novamente os documentos originais.");
         }
         partes = validos;

@@ -9,6 +9,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.core.env.Environment;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.session.SessionRegistryImpl;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
@@ -63,6 +65,35 @@ public class SecurityConfig {
     @Bean
     public ServletListenerRegistrationBean<HttpSessionEventPublisher> httpSessionEventPublisher() {
         return new ServletListenerRegistrationBean<>(new HttpSessionEventPublisher());
+    }
+
+    /**
+     * Registro explicito das sessoes autenticadas. Sem expor este bean, o
+     * Spring Security cria um {@code SessionRegistryImpl} interno soh para o
+     * controle de {@code maximumSessions(1)} - nenhum outro componente
+     * consegue enxergar ou expirar uma sessao especifica. Expondo aqui e
+     * amarrando via {@code .sessionRegistry(...)} abaixo, o MESMO registry
+     * fica disponivel para injecao (ver {@code UsuarioService}), permitindo
+     * revogar ativamente a sessao de um usuario que acabou de ser inativado
+     * por um ADMIN - sem isso, a sessao ja aberta continuava valendo ate o
+     * timeout de 30min mesmo com o login/senha ja bloqueado para NOVAS
+     * autenticacoes (achado real de vistoria, 2026-08-24).
+     *
+     * <p><b>Limitacao conhecida, nao um bug ativo (achado 4 da revisao
+     * adicional do PR #120):</b> {@link SessionRegistryImpl} guarda o estado
+     * das sessoes SOMENTE EM MEMORIA da JVM local - nao escala para um
+     * cluster com multiplas instancias atras de um load balancer (uma sessao
+     * registrada na instancia A nao e visivel/revogavel pela instancia B).
+     * Hoje o SAUR roda numa UNICA VM Oracle, sem cluster nem load balancer
+     * (ver secao "Deploy" do CLAUDE.md) - nao ha problema real em producao.
+     * Se um dia isto for clusterizado, este bean precisa virar um
+     * {@code SessionRegistry} com estado compartilhado (ex.: backed por
+     * Redis/Spring Session) para a revogacao continuar funcionando em
+     * qualquer instancia.</p>
+     */
+    @Bean
+    public SessionRegistry sessionRegistry() {
+        return new SessionRegistryImpl();
     }
 
     /**
@@ -197,6 +228,16 @@ public class SecurityConfig {
                 // por seguranca (senha certa nunca deve travar o dono legitimo fora
                 // da propria conta).
                 .maxSessionsPreventsLogin(false)
+                .sessionRegistry(sessionRegistry())
+                // Sem isto, uma sessao expirada pelo registry (concorrencia OU
+                // revogacao ativa por inativacao - ver UsuarioService.
+                // revogarSessoesAtivas) cai no SessionInformationExpiredStrategy
+                // PADRAO do Spring Security (ResponseBodySessionInformationExpiredStrategy),
+                // que escreve um texto plano avisando "sessao expirada" com
+                // status 200 OK - nao um redirect. Um usuario nessa situacao
+                // veria uma pagina tecnica em branco em vez de cair no login
+                // de novo. expiredUrl forca o redirect gracioso de sempre.
+                .expiredUrl("/login")
             )
             .csrf(csrf -> {
                 // H2 console usa frames e nao envia CSRF token - excecao so em dev

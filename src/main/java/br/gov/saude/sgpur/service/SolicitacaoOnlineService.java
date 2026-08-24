@@ -48,6 +48,7 @@ public class SolicitacaoOnlineService {
     private final EmailTemplateService emailTemplateService;
     private final ProcessoService processoService;
     private final AuditoriaService auditoria;
+    private final EmailDominioValidator emailDominioValidator;
     private final String baseUrl;
 
     public SolicitacaoOnlineService(SolicitacaoOnlineRepository repository,
@@ -58,6 +59,7 @@ public class SolicitacaoOnlineService {
                                     EmailTemplateService emailTemplateService,
                                     ProcessoService processoService,
                                     AuditoriaService auditoria,
+                                    EmailDominioValidator emailDominioValidator,
                                     @Value("${app.base-url:http://localhost:3000}") String baseUrl) {
         this.repository = repository;
         this.anexoStorage = anexoStorage;
@@ -67,6 +69,7 @@ public class SolicitacaoOnlineService {
         this.emailTemplateService = emailTemplateService;
         this.processoService = processoService;
         this.auditoria = auditoria;
+        this.emailDominioValidator = emailDominioValidator;
         this.baseUrl = baseUrl;
     }
 
@@ -480,6 +483,17 @@ public class SolicitacaoOnlineService {
             String emailAdicional = solicitacao.getEmailAdicional().trim();
             if (!EMAIL_REGEX.matcher(emailAdicional).matches()) {
                 throw new IllegalArgumentException("E-mail adicional invalido. Confira o endereco informado.");
+            }
+            // Checagem leve de dominio (achado real de vistoria, 2026-08-24):
+            // pega erro de digitacao obvio no dominio (ex. "gmial.com") que o
+            // regex acima nao detecta. Fail-open por design (ver javadoc de
+            // EmailDominioValidator) - so bloqueia quando o dominio nao
+            // resolve de jeito nenhum (nem MX nem A/AAAA), nunca por falha
+            // transitoria de rede/DNS do proprio servidor.
+            if (!emailDominioValidator.dominioResolvivel(emailAdicional)) {
+                throw new EmailDominioInvalidoException(
+                    "E-mail adicional invalido: o dominio \"" + emailAdicional.substring(emailAdicional.indexOf('@') + 1)
+                    + "\" nao existe. Confira o endereco informado.");
             }
             solicitacao.setEmailAdicional(emailAdicional);
         } else {

@@ -10,6 +10,9 @@ import br.gov.saude.sgpur.repository.SolicitacaoOnlineRepository;
 import br.gov.saude.sgpur.repository.UsuarioRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.security.core.session.SessionInformation;
+import org.springframework.security.core.session.SessionRegistry;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,18 +30,24 @@ public class UsuarioService {
     private final SolicitacaoOnlineRepository solicitacaoRepo;
     private final RascunhoSolicitacaoOnlineRepository rascunhoRepo;
     private final PasswordResetTokenRepository passwordResetTokenRepo;
+    private final SessionRegistry sessionRegistry;
+    private final AuditoriaService auditoriaService;
 
     public UsuarioService(UsuarioRepository repo, PasswordEncoder encoder,
                           MembroUrgenciaRenalRepository membroRepo,
                           SolicitacaoOnlineRepository solicitacaoRepo,
                           RascunhoSolicitacaoOnlineRepository rascunhoRepo,
-                          PasswordResetTokenRepository passwordResetTokenRepo) {
+                          PasswordResetTokenRepository passwordResetTokenRepo,
+                          SessionRegistry sessionRegistry,
+                          AuditoriaService auditoriaService) {
         this.repo = repo;
         this.encoder = encoder;
         this.membroRepo = membroRepo;
         this.solicitacaoRepo = solicitacaoRepo;
         this.rascunhoRepo = rascunhoRepo;
         this.passwordResetTokenRepo = passwordResetTokenRepo;
+        this.sessionRegistry = sessionRegistry;
+        this.auditoriaService = auditoriaService;
     }
 
     public List<Usuario> listar() {
@@ -136,6 +145,15 @@ public class UsuarioService {
     @Transactional
     public Usuario atualizar(Long id, Usuario form, String senhaPura, Long membroId, String equipeSolicitante) {
         Usuario u = normalizarVersaoLegada(buscar(id));
+        // Capturados ANTES de qualquer alteracao: a sessao HTTP ja aberta,
+        // se existir, esta registrada no SessionRegistry sob o username COM
+        // QUE O LOGIN FOI FEITO (o antigo) - se username e ativo/perfil
+        // mudarem na MESMA chamada, revogar usando o username NOVO (salvo.
+        // getUsername()) simplesmente nao encontra nada no registry e a
+        // sessao escapa da revogacao (achado real de revisao, 2026-08-24).
+        String usernameAntigo = u.getUsername();
+        Perfil perfilAntigo = u.getPerfil();
+        boolean estavaAtivo = u.isAtivo();
         if (!u.getUsername().equals(form.getUsername())) {
             if (repo.existsByUsername(form.getUsername())) {
                 throw new IllegalArgumentException("Ja existe um usuario com este login.");
@@ -152,7 +170,26 @@ public class UsuarioService {
             SenhaPolicy.validar(senhaPura);
             u.setSenha(encoder.encode(senhaPura));
         }
-        return repo.save(u);
+        Usuario salvo = repo.save(u);
+        boolean foiDesativado = estavaAtivo && !salvo.isAtivo();
+        // Troca de PERFIL (role) tambem precisa revogar a sessao ativa (achado
+        // real de revisao, 2026-08-24): sem isso, um usuario rebaixado (ex.
+        // ADMIN -> AVALIADOR) continua operando com as authorities ANTIGAS
+        // (fixas na Authentication desde o login) ate o timeout de 30min -
+        // um problema mesmo permanecendo "ativo".
+        boolean perfilMudou = perfilAntigo != salvo.getPerfil();
+        if (foiDesativado || perfilMudou) {
+            String acao = foiDesativado
+                ? "SESSAO_REVOGADA_POR_INATIVACAO"
+                : "SESSAO_REVOGADA_POR_MUDANCA_PERFIL";
+            String motivo = foiDesativado && perfilMudou
+                ? "usuario inativado e perfil alterado de " + perfilAntigo + " para " + salvo.getPerfil()
+                : foiDesativado
+                    ? "usuario inativado"
+                    : "perfil alterado de " + perfilAntigo + " para " + salvo.getPerfil();
+            revogarSessoesAtivas(usernameAntigo, acao, motivo);
+        }
+        return salvo;
     }
 
     /**
@@ -171,7 +208,15 @@ public class UsuarioService {
             validarNaoUltimoAdminAtivo(u, "desativar");
         }
         u.setAtivo(!u.isAtivo());
+        // Username com que a sessao HTTP foi aberta - alternarAtivo nunca
+        // muda username, entao usar 'u' (nao o retorno de repo.save, que em
+        // alguns testes/implementacoes de repositorio pode nao ecoar a
+        // mesma instancia) e equivalente e mais robusto.
+        String username = u.getUsername();
         repo.save(u);
+        if (vaiDesativar) {
+            revogarSessoesAtivas(username, "SESSAO_REVOGADA_POR_INATIVACAO", "usuario inativado");
+        }
     }
 
     /**
@@ -230,6 +275,80 @@ public class UsuarioService {
                 + " no Portal do Solicitante, e apaga-lo destruiria esse historico. "
                 + "Use 'Inativar' para bloquear o acesso dele ao sistema, preservando os pedidos ja enviados.");
         }
+    }
+
+    /**
+     * Revoga ativamente qualquer sessao HTTP ja aberta sob {@code username},
+     * quando o usuario acaba de ser INATIVADO (transicao ativo=true -&gt;
+     * false) OU tem o PERFIL alterado. Sem isto, o {@code
+     * disabled(!u.isAtivo())} de {@link UsuarioDetailsService} so bloqueia
+     * autenticacoes NOVAS - uma sessao ja aberta (Portal do Avaliador, chat,
+     * voto) continuava funcionando com as authorities/estado ANTIGOS ate o
+     * timeout de inatividade de 30min mesmo com o acesso ja revogado ou o
+     * perfil ja rebaixado no cadastro (achados reais de vistoria/revisao,
+     * 2026-08-24).
+     *
+     * <p><b>Sempre chamar com o username COM QUE A SESSAO FOI ABERTA</b> (o
+     * antigo, se o proprio username tambem mudou nesta mesma edicao) - nunca
+     * o username novo. O principal registrado no {@link SessionRegistry} eh
+     * fixado no login e nao acompanha uma troca de username feita depois por
+     * um ADMIN; buscar pelo username novo simplesmente nao encontra nada e a
+     * sessao escapa da revogacao.</p>
+     *
+     * <p>Busca percorrendo {@link SessionRegistry#getAllPrincipals()} (nao
+     * {@code getAllSessions(username, false)} direto: o principal registrado
+     * eh o {@code UserDetails} retornado por {@code UsuarioDetailsService},
+     * cujo {@code equals} nao compara igual a uma {@code String} crua). Cada
+     * {@link SessionInformation} encontrada eh expirada via
+     * {@code expireNow()} - na proxima requisicao autenticada daquele
+     * usuario, o {@code ConcurrentSessionFilter} do Spring Security
+     * redireciona para o login (comportamento padrao dele para sessao
+     * expirada pelo registry, ver {@code SecurityConfig.expiredUrl}), sem
+     * exigir nenhum codigo extra aqui.</p>
+     *
+     * <p>Tolerante a ausencia de sessao (usuario nunca logado, ou sessao ja
+     * expirada por outro motivo) - simplesmente nao encontra nada para
+     * expirar, sem lancar excecao.</p>
+     *
+     * @param username        username sob o qual a sessao HTTP foi aberta (o
+     *                        ANTIGO, se tiver mudado nesta mesma chamada)
+     * @param acaoAuditoria   ex.: {@code "SESSAO_REVOGADA_POR_INATIVACAO"} ou
+     *                        {@code "SESSAO_REVOGADA_POR_MUDANCA_PERFIL"}
+     * @param detalheMotivo   texto curto explicando o motivo, para o log de auditoria
+     */
+    private void revogarSessoesAtivas(String username, String acaoAuditoria, String detalheMotivo) {
+        try {
+            int expiradas = 0;
+            for (Object principal : sessionRegistry.getAllPrincipals()) {
+                String principalUsername = extrairUsername(principal);
+                if (principalUsername != null && principalUsername.equalsIgnoreCase(username)) {
+                    for (SessionInformation info : sessionRegistry.getAllSessions(principal, false)) {
+                        info.expireNow();
+                        expiradas++;
+                    }
+                }
+            }
+            if (expiradas > 0) {
+                auditoriaService.registrar(acaoAuditoria,
+                    "Usuario '" + username + "' - " + detalheMotivo + " - " + expiradas
+                    + (expiradas == 1 ? " sessao ativa revogada" : " sessoes ativas revogadas") + ".");
+            }
+        } catch (Exception e) {
+            // Revogacao de sessao eh reforco de seguranca, nunca pode impedir
+            // a propria alteracao (que ja bloqueia login novo/vale a partir da
+            // proxima autenticacao de qualquer forma).
+            log.warn("Falha ao revogar sessoes ativas de '{}': {}", username, e.getMessage());
+        }
+    }
+
+    private String extrairUsername(Object principal) {
+        if (principal instanceof UserDetails ud) {
+            return ud.getUsername();
+        }
+        if (principal instanceof String s) {
+            return s;
+        }
+        return null;
     }
 
     private void validarNaoAutoGerenciamento(Usuario u, String usernameLogado, String acao) {

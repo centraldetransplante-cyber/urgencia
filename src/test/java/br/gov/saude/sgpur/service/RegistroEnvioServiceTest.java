@@ -63,7 +63,7 @@ class RegistroEnvioServiceTest {
     @BeforeEach
     void setUp() {
         service = new RegistroEnvioService(processoService, solicitacaoAvaliadorService, anexoStorage,
-            auditoria, emailTemplateService, emailSenderService);
+            auditoria, emailTemplateService, emailSenderService, 300);
 
         processo = new Processo();
         processo.setId(1L);
@@ -82,6 +82,26 @@ class RegistroEnvioServiceTest {
             PdfWriter.getInstance(doc, out);
             doc.open();
             doc.add(new Paragraph("Documento clinico de teste"));
+            doc.close();
+            return out.toByteArray();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /** Gera um PDF com N paginas - usado para exercitar o teto de paginas. */
+    private byte[] pdfComPaginas(int numPaginas) {
+        try {
+            Document doc = new Document(PageSize.A4);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            PdfWriter.getInstance(doc, out);
+            doc.open();
+            for (int i = 0; i < numPaginas; i++) {
+                doc.add(new Paragraph("Pagina " + (i + 1)));
+                if (i < numPaginas - 1) {
+                    doc.newPage();
+                }
+            }
             doc.close();
             return out.toByteArray();
         } catch (Exception e) {
@@ -298,6 +318,62 @@ class RegistroEnvioServiceTest {
 
         assertThat(resultado.ok()).isFalse();
         assertThat(resultado.mensagemErro()).contains("PDF valido");
+        verifyNoInteractions(solicitacaoAvaliadorService);
+        verify(processoService, org.mockito.Mockito.never()).registrarEnvio(any());
+    }
+
+    // -------------------------------------------------------------------------
+    // Teto de paginas por PDF (defesa contra DoS por CPU/memoria, 2026-08-24).
+    // -------------------------------------------------------------------------
+
+    /**
+     * Um PDF que excede o teto de paginas fica de fora da consolidacao (mesmo
+     * tratamento de "aviso, nao bloqueio automatico" ja usado para PDF
+     * corrompido) - o envio segue normalmente se houver outro documento
+     * valido dentro do limite.
+     */
+    @Test
+    void documentoQueExcedeTetoDePaginasFicaDeForaComAvisoMasEnvioSeguePorHaverOutroValido() throws Exception {
+        RegistroEnvioService servicoComTetoBaixo = new RegistroEnvioService(processoService,
+            solicitacaoAvaliadorService, anexoStorage, auditoria, emailTemplateService, emailSenderService, 2);
+        processo.addAnexo(documentoClinicoPdf("bom.pdf", pdfComPaginas(1)));
+        processo.addAnexo(documentoClinicoPdf("gigante.pdf", pdfComPaginas(5)));
+
+        when(solicitacaoAvaliadorService.consolidar(any())).thenReturn(pdfValido());
+        when(solicitacaoAvaliadorService.carimbarCabecalho(any(), eq(processo))).thenReturn(pdfValido());
+        Anexo novoAnexo = new Anexo();
+        novoAnexo.setId(200L);
+        when(anexoStorage.salvarBytes(eq(processo), eq(TipoAnexo.SOLICITACAO_AVALIADOR),
+            anyString(), anyString(), anyString(), any(byte[].class))).thenReturn(novoAnexo);
+        when(processoService.registrarEnvio(1L)).thenReturn(processo);
+
+        RegistroEnvioService.RegistroEnvioResultado resultado = servicoComTetoBaixo.registrar(1L);
+
+        assertThat(resultado.ok()).isTrue();
+        assertThat(resultado.avisos()).anyMatch(a -> a.contains("gigante.pdf") && a.contains("excede o limite"));
+        verify(processoService).registrarEnvio(1L);
+    }
+
+    /**
+     * Se TODOS os documentos excedem o teto, o envio e bloqueado com mensagem
+     * clara (nunca 500) - e a mensagem tem que citar o MOTIVO REAL (teto de
+     * paginas excedido, achado real de revisao do PR #120), nao so o texto
+     * generico de "sem paginas", que confundia o operador e nao dava
+     * nenhuma pista de como resolver.
+     */
+    @Test
+    void bloqueiaQuandoTodosOsDocumentosExcedemOTetoDePaginasComMensagemCitandoOMotivo() throws Exception {
+        RegistroEnvioService servicoComTetoBaixo = new RegistroEnvioService(processoService,
+            solicitacaoAvaliadorService, anexoStorage, auditoria, emailTemplateService, emailSenderService, 2);
+        processo.addAnexo(documentoClinicoPdf("gigante.pdf", pdfComPaginas(5)));
+
+        RegistroEnvioService.RegistroEnvioResultado resultado = servicoComTetoBaixo.registrar(1L);
+
+        assertThat(resultado.ok()).isFalse();
+        assertThat(resultado.mensagemErro())
+            .contains("gigante.pdf")
+            .contains("excede o limite")
+            .contains("2 paginas");
         verifyNoInteractions(solicitacaoAvaliadorService);
         verify(processoService, org.mockito.Mockito.never()).registrarEnvio(any());
     }

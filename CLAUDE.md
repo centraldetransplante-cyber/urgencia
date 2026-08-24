@@ -350,7 +350,23 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   "envenenando" até uma chave `/Info` **customizada** (fora do padrão) some
   por completo — é a mesma proteção de imparcialidade que o texto visível já
   tinha, mas nos metadados (o navegador mostra o `Title` na aba ao abrir um
-  PDF inline). **É
+  PDF inline). **Teto de páginas por PDF individual (2026-08-24, achado real
+  de vistoria — defesa contra DoS por CPU/memória):** o limite de tamanho de
+  arquivo (25MB/30MB, `application.yml`) não protege contra um PDF com
+  páginas minúsculas e milhares delas — a fusão/carimbo página a página
+  custa CPU/memória proporcional ao NÚMERO de páginas, não ao tamanho do
+  arquivo. `RegistroEnvioService.registrar` agora verifica
+  `PdfReader.getNumberOfPages()` contra `app.upload.max-paginas-pdf`
+  (env `SGPUR_MAX_PAGINAS_PDF`, default 300) ANTES de consolidar/carimbar —
+  um documento que excede o teto fica de fora da consolidação com o MESMO
+  tratamento de aviso não-bloqueante já usado para PDF corrompido/sem
+  páginas (envio segue se sobrar outro documento válido); se TODOS excederem,
+  o envio é bloqueado com mensagem de negócio que **cita o motivo real de
+  cada documento descartado** (revisão adicional 2026-08-24, PR #120 — antes
+  a mensagem era sempre o texto genérico "sem páginas válidas", mesmo quando
+  o motivo verdadeiro era outro, ex. teto de páginas excedido; o operador não
+  tinha como saber e reenviar o mesmo arquivo não resolvia nada), nunca 500.
+  **É
   obrigatório ao menos um documento clínico PDF anexado:** `registrarEnvio`
   **bloqueia** (flash `erro`, sem efetivar o envio) se não houver nenhum. A
   **solicitação original** (a informação completa da `SolicitacaoOnline` de
@@ -1090,6 +1106,55 @@ formato explícita em `SolicitacaoOnlineService.criar` (antes do `save()`,
 para não cair em 500 via `ConstraintViolationException` sem
 `@ExceptionHandler`).
 
+**Validação leve de domínio + isolamento de falha do CC (2026-08-24, achado
+real de vistoria):** `@Email` só confere a FORMA do endereço, nunca se o
+domínio existe — `EmailDominioValidator.dominioResolvivel` (só JDK puro,
+`javax.naming`/`java.net`, sem lib nova) consulta MX e, se não houver,
+A/AAAA do domínio antes de rejeitar. **Fail-open por design**: qualquer erro
+que não seja uma resolução negativa clara (timeout de DNS, rede fora do ar
+no próprio servidor) é tratado como "domínio ok" — só bloqueia quando NEM
+MX NEM A/AAAA resolvem. Chamado em `SolicitacaoOnlineService.criar` (form do
+solicitante) e `ProcessoService.atualizarDados` (form do operador,
+`ProcessoDetalheController.atualizar` trata a rejeição com
+`result.rejectValue` no campo, nunca cai no handler genérico de "registro
+não encontrado"). **Isolamento de falha do CC** (mesmo achado):
+`EmailSenderService.enviar`/`enviarComAnexo` com CC agora tentam de novo
+SEM o CC se o primeiro envio falhar (JavaMailSender rejeita a mensagem
+inteira — TO+CC são o mesmo envelope SMTP) — um `emailAdicional` com
+domínio ruim NUNCA mais bloqueia a entrega ao destinatário principal
+(solicitante), só falha de verdade quando nem sem CC funciona.
+
+**Revisão adicional (2026-08-24, PR #120) corrigiu 2 problemas na checagem
+de domínio:**
+1) **Fail-open que na prática rejeitava:** `InetAddress.getAllByName` lança
+a MESMA `UnknownHostException` tanto para "domínio realmente não existe"
+quanto para "DNS instável/rede intermitente" — as duas causas eram tratadas
+igual (rejeitando), contradizendo o fail-open prometido no javadoc.
+2) **DoS síncrono na thread HTTP:** a consulta rodava direto na thread do
+servlet, sem teto de tempo agregado (timeout do MX + timeout NÃO
+configurável do `InetAddress` podiam, sob DNS lento, esgotar o pool de
+threads do Tomcat). Corrigido rodando a checagem inteira num
+`ExecutorService` DEDICADO (nunca o pool de request do Tomcat, 4 threads
+daemon) com um teto RÍGIDO de 2s via `CompletableFuture.get(timeout, ...)`
+— qualquer timeout, interrupção ou exceção inesperada cai no MESMO
+fail-open do catch externo; só uma resposta RÁPIDA e limpa de "host not
+found" (dentro do teto) continua rejeitando. Coberto por
+`EmailDominioValidatorTest` (simula timeout ocupando a única thread de um
+executor de teste antes da chamada real, sem depender de rede/DNS real).
+
+**Exceção específica para erro de domínio (`EmailDominioInvalidoException
+extends IllegalArgumentException`, mesma revisão):** antes,
+`ProcessoDetalheController.atualizar` capturava `IllegalArgumentException`
+genérica vinda de `ProcessoService.atualizarDados` e SEMPRE assumia que era
+erro de `emailAdicional` (`result.rejectValue("emailAdicional", ...)`) —
+qualquer outra validação de negócio dentro de `atualizarDados` (atual ou
+futura) seria incorretamente atribuída a esse campo. Agora só
+`EmailDominioInvalidoException` (lançada por
+`SolicitacaoOnlineService.criar`/`ProcessoService.atualizarDados` só no
+ponto que valida `emailAdicional`) aponta o campo; qualquer outra
+`IllegalArgumentException` cai num flash de erro genérico, sem apontar
+campo nenhum.
+
 ## Redesign visual — Portais do Solicitante e Avaliador (2026-08-06 a 08)
 
 Sistema de design próprio (`app.css`, tokens `--saur-elev-*`,
@@ -1175,6 +1240,44 @@ extração nunca foi de fato reproduzido).
 
 ## Segurança e sessão — reforços
 
+- **Inativar usuário revoga sessão ativa na hora (2026-08-24, achado real de
+  vistoria):** antes, `UsuarioDetailsService.disabled(!u.isAtivo())` só
+  bloqueava autenticações NOVAS — uma sessão HTTP já aberta (Portal do
+  Avaliador, chat, voto) continuava funcionando normalmente até o timeout de
+  30min mesmo com o acesso já revogado no cadastro. `SecurityConfig` agora
+  expõe um bean `SessionRegistry` explícito (amarrado via
+  `.sessionManagement().sessionRegistry(...)`, em vez do registry interno
+  implícito que o Spring Security cria sozinho) e `.expiredUrl("/login")`
+  (sem isso, o `SessionInformationExpiredStrategy` padrão devolve 200 com
+  texto plano, não um redirect). `UsuarioService.revogarSessoesAtivas`,
+  chamado por `alternarAtivo`/`atualizar` sempre que a transição é
+  `ativo=true → false`, percorre `SessionRegistry.getAllPrincipals()`
+  (nunca `getAllSessions(username, ...)` direto — o principal registrado é
+  o `UserDetails`, cujo `equals` não compara igual a uma `String` crua) e
+  expira cada `SessionInformation` encontrada via `expireNow()` — tolerante
+  a usuário sem sessão nenhuma, nunca lança exceção. Auditoria:
+  `SESSAO_REVOGADA_POR_INATIVACAO`. Coberto por
+  `UsuarioInativacaoRevogaSessaoIntegrationTest` (sessão HTTP real via login
+  por formulário, não `@WithMockUser` — mesmo padrão de
+  `AvaliadorSessaoOrfaIntegrationTest`). O bean `SessionRegistry` é
+  **JVM-local** (`SessionRegistryImpl`, em memória) — não escala em cluster
+  com múltiplas instâncias; não é problema hoje (SAUR roda numa VM única,
+  sem load balancer), documentado no javadoc do bean para quem um dia avaliar
+  clusterizar.
+  **Revisão adicional (2026-08-24, PR #120) fechou 2 bypasses:**
+  1) `atualizar` agora captura `usernameAntigo`/`perfilAntigo` **antes** de
+  qualquer `set...` — se o ADMIN troca `username` E `ativo=false` na MESMA
+  chamada, revogar pelo username NOVO simplesmente não encontrava a sessão
+  (registrada sob o username com que o login foi feito, o antigo); a
+  revogação usa sempre o username antigo quando ele mudou.
+  2) troca de **perfil** (role) também revoga a sessão ativa, mesmo que o
+  usuário continue `ativo` — sem isso, um usuário rebaixado (ex.
+  ADMIN → AVALIADOR) continuava operando com as authorities antigas (fixas
+  na `Authentication` desde o login) até o timeout de 30min. Auditoria
+  `SESSAO_REVOGADA_POR_MUDANCA_PERFIL` (distinta de
+  `SESSAO_REVOGADA_POR_INATIVACAO`, mesmo método `revogarSessoesAtivas`,
+  agora recebendo `username`/`acaoAuditoria`/`detalheMotivo` explícitos em
+  vez do `Usuario` inteiro).
 - **Atraso progressivo no login, NÃO bloqueio** (2026-08-07): após 2 falhas
   seguidas do mesmo username numa janela de 15min, cada falha soma atraso
   (teto 5s) — mas login com senha certa **nunca** é atrasado, mesmo logo

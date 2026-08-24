@@ -98,4 +98,76 @@ class EmailSenderServiceTest {
         org.mockito.Mockito.verify(sender).send(captor.capture());
         return new MimeMessage[]{captor.getValue()};
     }
+
+    // ---- CC (emailAdicional) nunca pode bloquear o destinatario principal (2026-08-24) ----
+
+    /**
+     * Simula o cenario real do achado: o dominio do CC (Processo.emailAdicional)
+     * nao existe/rejeita a mensagem inteira - o JavaMailSender falha no envio
+     * (TO+CC sao o mesmo envelope SMTP). O servico deve tentar de novo SEM o
+     * CC e entregar ao destinatario principal mesmo assim.
+     */
+    @Test
+    void falhaNoEnvioComCcTentaNovamenteSemCcEEntregaAoPrincipal() throws Exception {
+        JavaMailSender sender = mailSenderMock();
+        org.mockito.Mockito.doThrow(new org.springframework.mail.MailSendException("dominio do CC nao existe"))
+            .doNothing()
+            .when(sender).send(org.mockito.Mockito.any(MimeMessage.class));
+        EmailSenderService service = new EmailSenderService(sender, "remetente@saur.gov.br", "");
+
+        boolean ok = service.enviar(new String[]{"solicitante@example.com"},
+            new String[]{"copia-invalida@dominio-inexistente-xyz.invalido"}, "Assunto", "corpo");
+
+        assertThat(ok).isTrue();
+        org.mockito.Mockito.verify(sender, org.mockito.Mockito.times(2)).send(org.mockito.Mockito.any(MimeMessage.class));
+    }
+
+    /** Mesma protecao no envio com anexo (usado na resposta final ao solicitante). */
+    @Test
+    void falhaNoEnvioComAnexoECcTentaNovamenteSemCcEEntregaAoPrincipal(
+            @org.junit.jupiter.api.io.TempDir java.nio.file.Path tempDir) throws Exception {
+        JavaMailSender sender = mailSenderMock();
+        org.mockito.Mockito.doThrow(new org.springframework.mail.MailSendException("dominio do CC nao existe"))
+            .doNothing()
+            .when(sender).send(org.mockito.Mockito.any(MimeMessage.class));
+        EmailSenderService service = new EmailSenderService(sender, "remetente@saur.gov.br", "");
+        java.io.File anexo = tempDir.resolve("comprovante.pdf").toFile();
+        java.nio.file.Files.writeString(anexo.toPath(), "conteudo-fake");
+
+        boolean ok = service.enviarComAnexo("solicitante@example.com",
+            new String[]{"copia-invalida@dominio-inexistente-xyz.invalido"},
+            "Deferido", "corpo", anexo, "comprovante.pdf");
+
+        assertThat(ok).isTrue();
+        org.mockito.Mockito.verify(sender, org.mockito.Mockito.times(2)).send(org.mockito.Mockito.any(MimeMessage.class));
+    }
+
+    /** Se nem sem o CC o envio funciona (ex.: TO tambem invalido), o metodo falha de verdade. */
+    @Test
+    void falhaNoEnvioMesmoSemCcRetornaFalse() throws Exception {
+        JavaMailSender sender = mailSenderMock();
+        org.mockito.Mockito.doThrow(new org.springframework.mail.MailSendException("falha persistente"))
+            .when(sender).send(org.mockito.Mockito.any(MimeMessage.class));
+        EmailSenderService service = new EmailSenderService(sender, "remetente@saur.gov.br", "");
+
+        boolean ok = service.enviar(new String[]{"solicitante@example.com"},
+            new String[]{"copia-invalida@dominio-inexistente-xyz.invalido"}, "Assunto", "corpo");
+
+        assertThat(ok).isFalse();
+        org.mockito.Mockito.verify(sender, org.mockito.Mockito.times(2)).send(org.mockito.Mockito.any(MimeMessage.class));
+    }
+
+    /** Sem CC, uma falha no envio nunca tenta uma segunda vez (nada a "tirar" do envelope). */
+    @Test
+    void falhaNoEnvioSemCcNaoTentaNovamente() throws Exception {
+        JavaMailSender sender = mailSenderMock();
+        org.mockito.Mockito.doThrow(new org.springframework.mail.MailSendException("SMTP fora do ar"))
+            .when(sender).send(org.mockito.Mockito.any(MimeMessage.class));
+        EmailSenderService service = new EmailSenderService(sender, "remetente@saur.gov.br", "");
+
+        boolean ok = service.enviar("solicitante@example.com", "Assunto", "corpo");
+
+        assertThat(ok).isFalse();
+        org.mockito.Mockito.verify(sender, org.mockito.Mockito.times(1)).send(org.mockito.Mockito.any(MimeMessage.class));
+    }
 }

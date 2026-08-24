@@ -37,13 +37,15 @@ class UsuarioServiceTest {
     @Mock private SolicitacaoOnlineRepository solicitacaoRepo;
     @Mock private RascunhoSolicitacaoOnlineRepository rascunhoRepo;
     @Mock private PasswordResetTokenRepository passwordResetTokenRepo;
+    @Mock private org.springframework.security.core.session.SessionRegistry sessionRegistry;
+    @Mock private AuditoriaService auditoriaService;
 
     private UsuarioService service;
 
     @BeforeEach
     void setUp() {
         service = new UsuarioService(repo, encoder, membroRepo, solicitacaoRepo, rascunhoRepo,
-            passwordResetTokenRepo);
+            passwordResetTokenRepo, sessionRegistry, auditoriaService);
     }
 
     // ---- Auto-lockout: exclusao/desativacao do ultimo ADMIN ativo ou da propria conta ----
@@ -252,5 +254,98 @@ class UsuarioServiceTest {
 
         assertThat(atualizado.getEquipeSolicitante()).isNull();
         assertThat(atualizado.getMembro()).isNull();
+    }
+
+    // ---- Revogacao de sessao ativa (achados reais de revisao, 2026-08-24) ----
+
+    /** Sessao registrada no SessionRegistry sob um dado username (fake, sem H2/Spring Security real). */
+    private org.springframework.security.core.session.SessionInformation sessaoDe(String username, String sessionId) {
+        org.springframework.security.core.userdetails.UserDetails principal =
+            org.springframework.security.core.userdetails.User.builder()
+                .username(username).password("hash").authorities("ROLE_AVALIADOR").build();
+        return new org.springframework.security.core.session.SessionInformation(
+            principal, sessionId, new java.util.Date());
+    }
+
+    /**
+     * BYPASS CORRIGIDO (achado real de revisao do PR #120, item 2): editar
+     * username E ativo=false na MESMA chamada tem que revogar a sessao
+     * registrada sob o username ANTIGO (o que o login usou de fato), nunca o
+     * novo - buscar pelo novo simplesmente nao acha nada no registry.
+     */
+    @Test
+    void trocarUsernameEInativarNaMesmaEdicaoRevogaSessaoDoUsernameAntigo() {
+        Usuario existente = operador(7L, "usuario-antigo");
+        when(repo.findById(7L)).thenReturn(Optional.of(existente));
+        when(repo.save(any(Usuario.class))).thenAnswer(inv -> inv.getArgument(0));
+        var sessaoAntiga = sessaoDe("usuario-antigo", "sessao-1");
+        when(sessionRegistry.getAllPrincipals()).thenReturn(java.util.List.of(sessaoAntiga.getPrincipal()));
+        when(sessionRegistry.getAllSessions(sessaoAntiga.getPrincipal(), false))
+            .thenReturn(java.util.List.of(sessaoAntiga));
+
+        Usuario form = new Usuario();
+        form.setUsername("usuario-novo");
+        form.setNome("Operador Sete");
+        form.setPerfil(Perfil.OPERADOR);
+        form.setAtivo(false);
+        when(repo.existsByUsername("usuario-novo")).thenReturn(false);
+
+        service.atualizar(7L, form, null, null, null);
+
+        assertThat(sessaoAntiga.isExpired())
+            .as("a sessao registrada sob o username ANTIGO tem que ser expirada")
+            .isTrue();
+        verify(auditoriaService).registrar(eq("SESSAO_REVOGADA_POR_INATIVACAO"), anyString());
+    }
+
+    /**
+     * MUDANCA DE PERFIL revoga sessao mesmo permanecendo ATIVO (achado real
+     * de revisao do PR #120, item 6): sem isso, um usuario rebaixado
+     * continua com as authorities ANTIGAS ate o timeout de 30min.
+     */
+    @Test
+    void trocarPerfilComUsuarioAindaAtivoRevogaSessaoAtiva() {
+        Usuario existente = admin(8L, "usuario8");
+        existente.setAtivo(true);
+        when(repo.findById(8L)).thenReturn(Optional.of(existente));
+        when(repo.save(any(Usuario.class))).thenAnswer(inv -> inv.getArgument(0));
+        var sessaoAtiva = sessaoDe("usuario8", "sessao-8");
+        when(sessionRegistry.getAllPrincipals()).thenReturn(java.util.List.of(sessaoAtiva.getPrincipal()));
+        when(sessionRegistry.getAllSessions(sessaoAtiva.getPrincipal(), false))
+            .thenReturn(java.util.List.of(sessaoAtiva));
+
+        Usuario form = new Usuario();
+        form.setUsername("usuario8");
+        form.setNome("Usuario Oito");
+        form.setPerfil(Perfil.OPERADOR); // ADMIN -> OPERADOR: nem membro nem equipe extra exigidos
+        form.setAtivo(true);
+
+        service.atualizar(8L, form, null, null, null);
+
+        assertThat(sessaoAtiva.isExpired())
+            .as("sessao tem que ser revogada quando o PERFIL muda, mesmo continuando ativo")
+            .isTrue();
+        verify(auditoriaService).registrar(eq("SESSAO_REVOGADA_POR_MUDANCA_PERFIL"), anyString());
+        verify(auditoriaService, never()).registrar(eq("SESSAO_REVOGADA_POR_INATIVACAO"), anyString());
+    }
+
+    /** Sem mudanca de username/ativo/perfil, nenhuma revogacao e sequer tentada. */
+    @Test
+    void semMudancaRelevanteNaoConsultaOSessionRegistry() {
+        Usuario existente = operador(9L, "usuario9");
+        existente.setNome("Nome Antigo");
+        when(repo.findById(9L)).thenReturn(Optional.of(existente));
+        when(repo.save(any(Usuario.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Usuario form = new Usuario();
+        form.setUsername("usuario9");
+        form.setNome("Nome Novo"); // so o nome muda
+        form.setPerfil(Perfil.OPERADOR);
+        form.setAtivo(true);
+
+        service.atualizar(9L, form, null, null, null);
+
+        verifyNoInteractions(sessionRegistry);
+        verifyNoInteractions(auditoriaService);
     }
 }

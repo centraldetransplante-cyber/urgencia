@@ -825,7 +825,21 @@ public class ProcessoDetalheController {
         if (bloqueadoPorEncerrado(processoService.buscar(id), ra)) {
             return "redirect:/processos/" + id;
         }
-        processoService.atualizarDados(id, form);
+        try {
+            processoService.atualizarDados(id, form);
+        } catch (br.gov.saude.sgpur.service.EmailDominioInvalidoException e) {
+            // E-mail adicional com dominio inexistente (EmailDominioValidator) -
+            // ver ProcessoService.atualizarDados. Tipo ESPECIFICO (achado real de
+            // revisao, 2026-08-24) - so este caso aponta o campo emailAdicional;
+            // qualquer OUTRA IllegalArgumentException (abaixo) cai no tratamento
+            // generico, sem apontar um campo que nao tem nada a ver com o erro.
+            result.rejectValue("emailAdicional", "invalido", e.getMessage());
+            model.addAttribute("opcoesSexo", Sexo.values());
+            return "processos/editar";
+        } catch (IllegalArgumentException e) {
+            ra.addFlashAttribute("erro", e.getMessage());
+            return "redirect:/processos/" + id + "/editar";
+        }
         auditoria.registrar("PROCESSO_EDITADO", "Processo id " + id);
         ra.addFlashAttribute("msg", "Processo atualizado.");
         return "redirect:/processos/" + id;
