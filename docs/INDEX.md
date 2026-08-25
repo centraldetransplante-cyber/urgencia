@@ -32,6 +32,20 @@ fonte da verdade sobre o que é comportamento atual; estes arquivos são o
   `ProcessoValidator`/maioria simples, ainda sem caminho no sistema) antes
   de abrir PR de implementação.
 
+## Auditoria Completa de Produção (2026-08-25)
+- `RELATORIO-AUDITORIA-SENIOR-PRODUCAO-2026-08-25.md` — Auditoria sênior do
+  SAUR em 3 rodadas: (1) relatório gerado por Gemini com dezenas de citações
+  arquivo:linha erradas, corrigidas uma a uma; (2) varredura independente do
+  agente `urgencia-renal` em ~20 arquivos críticos (decisão/voto/e-mail/
+  anexo/sessão) — nenhum bug novo encontrado, sistema já bem coberto por
+  vistorias anteriores; (3) segunda opinião do Gemini (modo texto, sem
+  escrita de arquivo — ver achado abaixo sobre isso), verificada achado a
+  achado. Resultado: **1 correção de código aplicada** (javadoc impreciso de
+  `EmailDominioValidator`, achado convergente das rodadas 2 e 3), 2 achados
+  do Gemini descartados por verificação (1 já é decisão de produto
+  documentada, 1 é UI que já tem mitigação no código). Nenhuma vulnerabilidade
+  nova, exploravel e não corrigida foi encontrada.
+
 ## Vistoria de segurança pendente de ação (2026-08-22)
 - `RELATORIO-VISTORIA-CODIGO-2026-08-22.md` — vistoria de código (outra IA,
   revisão pedida pelo usuário). Achados **ainda não corrigidos**: P0
