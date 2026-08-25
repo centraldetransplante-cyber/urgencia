@@ -100,7 +100,17 @@
      foco nao ia a lugar nenhum. Ao criar uma tela nova, o <main id="conteudo">
      e obrigatorio - o teste LayoutAcessibilidadeTest cobre isso. -->
 <a href="#conteudo" class="visually-hidden-focusable">Pular para o conteúdo</a>
-<nav class="navbar navbar-expand-md navbar-dark navbar-sgpur">
+<!-- navbar-expand-lg (nao -md): com marca + ate 9 links + menu do usuario, a
+     faixa 768-991px (breakpoint md) nao cabe tudo numa linha so - quebra em
+     3 linhas desalinhadas, com vao vazio embaixo da marca (mais curta que o
+     bloco de links quebrado). 768px e a largura real de um iPad em retrato
+     (mesma faixa ja documentada como "traicoeira" em app.css, linhas
+     ~1037-1039) - bug real reproduzido e confirmado via Playwright em
+     2026-08-25. Empurrando o breakpoint para lg (992px), a faixa 768-991
+     passa a usar o menu hamburguer (ja testado, funciona bem), e so expande
+     a navbar em linha quando ha espaco de verdade (>=992px, onde cabe em 2
+     linhas arrumadas). -->
+<nav class="navbar navbar-expand-lg navbar-dark navbar-sgpur">
     <div class="container-fluid">
         <!-- sec:authorize fica no wrapper, nao na mesma tag do th:replace: as duas
              sao processadores estruturais e misturar os dois no mesmo elemento
