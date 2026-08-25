@@ -46,6 +46,33 @@ fonte da verdade sobre o que é comportamento atual; estes arquivos são o
   documentada, 1 é UI que já tem mitigação no código). Nenhuma vulnerabilidade
   nova, exploravel e não corrigida foi encontrada.
 
+## Vistorias amplas de IA externa (2026-08-24, não catalogadas até 2026-08-25)
+Lote de 6 relatórios gerados por uma vistoria ampla (auditoria "de fora")
+sobre arquitetura, bugs, UI/responsividade e código morto — nenhum achado
+novo confirmado que já não estivesse coberto por vistorias anteriores.
+**Atenção:** o achado principal de `RELATORIO-BRECHAS-...` (sessão HTTP de
+usuário inativado continuava ativa) já estava **corrigido no mesmo dia**
+(2026-08-24, `revogarSessoesAtivas`, ver CLAUDE.md seção "Segurança e
+sessão") — o relatório descreve o problema como aberto porque foi escrito
+antes da correção entrar; não confiar nele para saber o estado atual, só
+CLAUDE.md.
+- `RELATORIO-ANALISE-TECNICA-SAUR-2026-08-24.md` — panorama de arquitetura/
+  stack, sem achado acionável novo.
+- `RELATORIO-BRECHAS-E-RISCOS-NAO-CATALOGADOS-SAUR-2026-08-24.md` — achado
+  de sessão de usuário inativado (ver aviso acima) já corrigido no mesmo dia.
+- `RELATORIO-DIAGNOSTICO-BUGS-SAUR-2026-08-24.md` — taxonomia de bugs
+  históricos já catalogados em `CATALOGO-BUGS-CONHECIDOS.md`, sem achado novo.
+- `RELATORIO-ANALISE-ESTATICA-E-CODIGO-MORTO-2026-08-24.md` — varredura de
+  compilação/código morto: só 2 warnings cosméticos de `@Deprecated` em
+  records (sem correção viável que valha a pena), nenhum código morto real
+  encontrado — reconfirmado por varredura independente em 2026-08-25.
+- `RELATORIO-RESPONSIVIDADE-PROGRAMATICA-SAUR-2026-08-24.md` — validação via
+  Playwright (`ResponsividadeSolicitanteIT`) de estouro de layout; sem
+  regressão encontrada.
+- `RELATORIO-UI-E-RESPONSIVIDADE-SAUR-2026-08-24.md` — auditoria do design
+  system (`app.css`, tokens `--saur-*`/`--rs-*`); sem achado acionável novo
+  além do que já está documentado no CLAUDE.md.
+
 ## Vistoria de segurança pendente de ação (2026-08-22)
 - `RELATORIO-VISTORIA-CODIGO-2026-08-22.md` — vistoria de código (outra IA,
   revisão pedida pelo usuário). Achados **ainda não corrigidos**: P0

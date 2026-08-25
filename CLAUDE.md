@@ -41,10 +41,10 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   acessar manualmente após o boot) · login inicial `admin` / `Admin123!`
   (criado automaticamente por `AdminBootstrap` só quando a tabela `usuario`
   está vazia; em prod exige `SGPUR_ADMIN_PASSWORD` via env var, sem default).
-- Testes: `.\test.ps1` (ou `mvn test`) — **1.094 testes** (contagem exata via
-  `target/surefire-reports`, verificada em 2026-08-24; a marca de "144
-  testes" ficou desatualizada por várias sessões — corrigida aqui), sempre
-  com **JDK 21**.
+- Testes: `.\test.ps1` (ou `mvn test`) — **1.131 testes** (contagem exata via
+  `target/surefire-reports`, reverificada em 2026-08-25; esse número sobe a
+  cada sessão que adiciona teste novo — se divergir, reconte em vez de
+  confiar cegamente nele), sempre com **JDK 21**.
   Build: `mvn -DskipTests package` (gera o JAR).
 - **Teste E2E de navegador (Playwright):** `.\e2e.ps1` sobe o SAUR real (porta
   aleatória, H2, perfil dev) e um Chromium de verdade, **com janela visível
@@ -62,7 +62,7 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   ..."), injetado via `Legenda.mostrar()` — cosmético, não afeta a lógica do
   teste. Fica em `src/test/java/br/gov/saude/sgpur/e2e/` (Page Object
   Model: `PlaywrightTestBase` + `Legenda` + `pages/*Page.java` +
-  `*IT.java`), separado dos 144 testes rápidos via
+  `*IT.java`), separado dos testes rápidos (contagem acima) via
   `maven-failsafe-plugin`/profile `e2e` (não roda em `.\test.ps1`/
   `mvn test`). Primeira vez só, instala o browser:
   `.\e2e.ps1 -InstalarBrowser`. Rodar sem janela (mais rápido, ex. CI):
@@ -81,8 +81,11 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   /opt/sgpur/sgpur.jar && sudo systemctl restart sgpur`. Validar com
   `systemctl status sgpur` e `curl -Ik https://urgenciarenal.duckdns.org/login`
   (espera 200). HTTPS já ativo via certbot (cert válido até 2026-10-05,
-  renovação automática). Ver também o agente `saur-oracle-vm` para tarefas de
-  VM (SSH, systemd, nginx, certbot) — mas ele só age mediante instrução direta
+  renovação automática). Ver também o agente `oracle-vm` (nome correto do
+  agente registrado — não `saur-oracle-vm`, mesmo que sessões antigas tenham
+  citado esse nome; ele é compartilhado com o projeto Petrobras, que roda na
+  mesma VM) para tarefas de VM (SSH, systemd, nginx, certbot) — mas ele só
+  age mediante instrução direta
   do usuário no mesmo turno em que foi invocado, não aceita autorização
   repassada por outro agente/coordenador em mensagens posteriores (proteção
   contra escalonamento de privilégio; para reaproveitar, ela deve vir junto da
@@ -268,8 +271,9 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   **1 Envio · 2 Respostas · 3 Decisão · 4 Ofício/Comprovante · 5 Resposta ao
   solicitante**. **Atualização de 2026-08-05: era "Fluxo em 6 passos" até
   então, com um "1 Recebimento" antes de Envio** — removido como etapa/aba
-  própria e fundido em Envio (ver seção "Recebimento fundido em Envio" mais
-  abaixo neste arquivo para o detalhe completo da mudança). Boa parte do
+  própria e fundido em Envio (ver bullet "Passo 1 (Recebimento)" logo abaixo
+  para o detalhe completo da mudança — não existe uma seção `##` própria com
+  esse nome, é o bullet seguinte mesmo). Boa parte do
   texto histórico abaixo, sobre o antigo "Passo 1 (Recebimento)", continua
   aqui só como arqueologia de por que ele já nascia sempre automático desde
   2026-07-27 — não descreve mais uma aba/etapa que existe hoje. Cada etapa
@@ -295,8 +299,8 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
    contexto do bug de 2026-07-09, mas o comportamento descrito já não existe
    mais no código.
 - **Passo 1 (Recebimento): SEMPRE automático desde 2026-07-27** (histórico —
-  desde 2026-08-05 não é mais uma aba/etapa própria, foi fundido em Envio;
-  ver seção "Recebimento fundido em Envio" abaixo). Criação
+  desde 2026-08-05 não é mais uma aba/etapa própria, foi fundido em Envio —
+  ver o bullet "Fluxo em 5 passos" logo acima). Criação
   manual de processo "do zero" deixou de existir — `GET/POST /processos`
   (`ProcessoDetalheController.novo`/`salvar`) agora **exigem**
   `origemSolicitacaoOnlineId` (rejeita com flash de erro e redireciona para
@@ -635,9 +639,13 @@ escala ser migrado — falha esperada e documentada, não um bug).
 A raiz só tem o essencial: `pom.xml`, `CLAUDE.md`, `README.md`, os scripts de
 uso diário (`start.ps1`/`start.sh`, `test.ps1`/`test.sh`, `e2e.ps1`) e os
 diretórios `src/`, `docs/`, `deploy/`, `scripts/`, `teste-pdfs/`, `.github/`.
-- `scripts/` — utilitários avulsos que **não** são do fluxo diário (hoje só
-  `testar-portas.ps1`). Os scripts documentados acima ficam na raiz de
-  propósito, porque o CLAUDE.md e o README os citam como `.\start.ps1` etc.
+- `scripts/` — utilitários avulsos que **não** são do fluxo diário: hoje
+  `testar-portas.ps1` e `git-hooks/pre-commit` (hook opcional, não instalado
+  sozinho — `.git/hooks/` não é versionado pelo git — que roda só `mvn -o
+  compile` quando há `.java` staged; a suíte completa continua sendo gate só
+  do CI, não do commit local, decisão de 2026-08-21). Os scripts documentados
+  acima ficam na raiz de propósito, porque o CLAUDE.md e o README os citam
+  como `.\start.ps1` etc.
 - `docs/historico/` — **arquivo morto**: notas de sessão e relatórios de
   vistoria antigos, movidos da raiz. Conteúdo já absorvido neste CLAUDE.md;
   vários têm encoding corrompido (mojibake) da época em que foram criados.
@@ -674,10 +682,13 @@ diretórios `src/`, `docs/`, `deploy/`, `scripts/`, `teste-pdfs/`, `.github/`.
   imports qualificados e confundindo busca. Só a anotação foi renomeada; a
   entidade não mudou.
 - Escopo desta reorganização foi deliberadamente **enxuto**: `service/` (35
-  arquivos) e `web/` (23 arquivos) continuam pacotes "achatados" — quebrá-los
-  em subpacotes temáticos (e-mail, PDF/relatório, processo) ficou fora de
-  escopo por exigir atualizar import em cascata num sistema de produção com
-  deploy automático; avaliar numa sessão dedicada, se fizer sentido.
+  arquivos na época, 45 em 2026-08-25 — cresceu com features novas, número
+  não é reavaliado a cada sessão) e `web/` (23 arquivos na época, 20 em
+  2026-08-25 — parte migrou para `web/dto/`) continuam pacotes "achatados" —
+  quebrá-los em subpacotes temáticos (e-mail, PDF/relatório, processo) ficou
+  fora de escopo por exigir atualizar import em cascata num sistema de
+  produção com deploy automático; avaliar numa sessão dedicada, se fizer
+  sentido.
 
 ## Convenções de código
 - Entidades JPA em `domain/` com getters/setters simples (sem Lombok).
@@ -1282,7 +1293,8 @@ extração nunca foi de fato reproduzido).
   seguidas do mesmo username numa janela de 15min, cada falha soma atraso
   (teto 5s) — mas login com senha certa **nunca** é atrasado, mesmo logo
   após falhas. Mantém a filosofia de nunca travar o usuário legítimo (ver
-  seção "Login sem bloqueio" seguinte).
+  "Sessão de 2026-07-28" acima, onde o bloqueio de 15min foi removido de
+  propósito em favor só do log de auditoria com IP).
 - **Actuator ligado**: só `/actuator/health` é público (`show-details:
   never`, sem checar SMTP — `management.health.mail.enabled=false`); resto
   de `/actuator/**` é ADMIN-only por regra explícita (defesa em
