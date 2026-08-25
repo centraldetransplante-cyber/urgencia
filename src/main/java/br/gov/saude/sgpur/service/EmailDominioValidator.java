@@ -63,6 +63,22 @@ import java.util.concurrent.TimeoutException;
  * externo - so uma resposta RAPIDA e limpa de "host not found" (a consulta
  * terminou dentro do teto e o DNS respondeu negativamente) continua sendo
  * tratada como dominio inexistente.</p>
+ *
+ * <p><b>Limitacao residual conhecida (nao resolvida pela correcao acima,
+ * achado de vistoria 2026-08-25):</b> o timeout agregado protege a thread do
+ * Tomcat, mas NAO resolve completamente o achado 1 original. A API
+ * {@link InetAddress#getAllByName(String)} lanca a MESMA
+ * {@link UnknownHostException} tanto para NXDOMAIN real quanto para um
+ * SERVFAIL/falha de rede que aconteca RAPIDO (dentro do teto de
+ * {@link #TIMEOUT_MS}) - so uma falha LENTA (que estoura o timeout) cai no
+ * fail-open. Uma instabilidade de DNS rapida ainda e' indistinguivel de
+ * "dominio nao existe" e sera rejeitada. Corrigir isso de verdade exigiria
+ * trocar {@code InetAddress} por uma biblioteca de resolucao DNS bruta (ex.
+ * dnsjava) capaz de expor o RCODE real (NXDOMAIN vs SERVFAIL) - decisao
+ * deliberadamente NAO tomada ate agora para manter a classe "so JDK puro,
+ * sem biblioteca nova" (ver topo do javadoc). Risco aceito: e' um cadastro
+ * de {@code emailAdicional} opcional, com fail-open para o caso lento (o
+ * mais comum de instabilidade real de rede).</p>
  */
 @Component
 public class EmailDominioValidator {
