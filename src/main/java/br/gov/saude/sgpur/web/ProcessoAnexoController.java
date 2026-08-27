@@ -8,6 +8,7 @@ import br.gov.saude.sgpur.service.OficioService;
 import br.gov.saude.sgpur.service.ProcessoService;
 import br.gov.saude.sgpur.service.ProcessoValidator;
 import br.gov.saude.sgpur.service.RelatorioService;
+import br.gov.saude.sgpur.service.RotuloProcesso;
 import br.gov.saude.sgpur.web.dto.IaTextoResponse;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -448,7 +449,7 @@ public class ProcessoAnexoController {
         String prompt = "Voce e um assistente administrativo de um orgao publico de saude do Brasil. "
                 + "Resuma em ate 5 frases, em portugues do Brasil, o conteudo clinico/administrativo "
                 + "do documento abaixo, destacando os pontos relevantes para analise de um pedido de "
-                + "urgencia renal. Responda apenas com o resumo, sem introducao.\n\n"
+                + RotuloProcesso.tipoPedido(anexo.getProcesso()) + ". Responda apenas com o resumo, sem introducao.\n\n"
                 + "Documento:\n" + textoLimitado;
         return geminiService.perguntar(prompt)
                 .map(IaTextoResponse::sucesso)

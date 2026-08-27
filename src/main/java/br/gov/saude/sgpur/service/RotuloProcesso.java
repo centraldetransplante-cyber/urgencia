@@ -114,4 +114,16 @@ public final class RotuloProcesso {
     public static String rotuloJustificativa(Processo p) {
         return rotuloJustificativa(p != null && p.isPreemptivo());
     }
+
+    /**
+     * Tipo do pedido para texto corrido / prompt de IA:
+     * "urgência renal" | "inserção em lista de espera renal (preemptivo)".
+     */
+    public static String tipoPedido(boolean preemptivo) {
+        return preemptivo ? "inserção em lista de espera renal (preemptivo)" : "urgência renal";
+    }
+
+    public static String tipoPedido(Processo p) {
+        return tipoPedido(p != null && p.isPreemptivo());
+    }
 }

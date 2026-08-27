@@ -327,7 +327,7 @@ public class ProcessoDetalheController {
             int anoAtual = Year.now().getValue();
             if (ano < anoAtual - 5 || ano > anoAtual + 5) {
                 result.rejectValue("dataSituacaoEspecial", "foraDoIntervalo",
-                    "Data de solicitacao da urgencia renal fora do intervalo esperado (verifique o ano digitado).");
+                    "A data informada esta fora do intervalo esperado (verifique o ano digitado).");
             }
         }
 
