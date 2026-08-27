@@ -1184,8 +1184,12 @@
                     <p class="small text-muted mb-3" th:switch="${processo.status.name()}">
                         <span th:case="'INDEFERIDO'">Anexe o <strong>ofício de indeferimento</strong> e
                             envie a resposta ao solicitante. As datas são registradas pelo sistema.</span>
-                        <span th:case="'DEFERIDO'">Anexe o <strong>comprovante de inserção no SNT</strong> e
-                            envie a resposta ao solicitante. As datas são registradas pelo sistema.</span>
+                        <span th:case="'DEFERIDO'">
+                            <span th:unless="${processo.isPreemptivo()}">Anexe o <strong>comprovante de inserção no SNT</strong> e
+                                envie a resposta ao solicitante.</span>
+                            <span th:if="${processo.isPreemptivo()}">Envie a resposta ao solicitante — paciente preemptivo
+                                não tem comprovante de inserção no SNT a anexar.</span>
+                            As datas são registradas pelo sistema.</span>
                         <span th:case="*">Processo cancelado: não há resposta formal a enviar.</span>
                     </p>
 
@@ -1379,9 +1383,9 @@
                          reusados tanto no estado visual do sub-passo quanto no
                          th:disabled/title do botao - fonte unica, sem duplicar a condicao. -->
                     <section class="subpasso" th:if="${processo.status.name() != 'CANCELADO'}"
-                             th:with="bloqueado=${(processo.status.name() == 'DEFERIDO' and comprovanteSnT == null)
+                             th:with="bloqueado=${(processo.status.name() == 'DEFERIDO' and !processo.isPreemptivo() and comprovanteSnT == null)
                                           or (processo.status.name() == 'INDEFERIDO' and oficioAnexo == null)},
-                                      motivoBloqueio=${processo.status.name() == 'DEFERIDO' and comprovanteSnT == null} ? 'Anexe o comprovante de inserção no SNT acima antes de enviar a resposta.' : (${processo.status.name() == 'INDEFERIDO' and oficioAnexo == null} ? 'Anexe o ofício de indeferimento acima antes de enviar a resposta.' : null)"
+                                      motivoBloqueio=${processo.status.name() == 'DEFERIDO' and !processo.isPreemptivo() and comprovanteSnT == null} ? 'Anexe o comprovante de inserção no SNT acima antes de enviar a resposta.' : (${processo.status.name() == 'INDEFERIDO' and oficioAnexo == null} ? 'Anexe o ofício de indeferimento acima antes de enviar a resposta.' : null)"
                              th:classappend="${processo.emailEnviadoSolicitante} ? 'subpasso-ok' : (${bloqueado} ? 'subpasso-bloqueado' : 'subpasso-atual')">
                         <header class="subpasso-head">
                             <span class="subpasso-num">
