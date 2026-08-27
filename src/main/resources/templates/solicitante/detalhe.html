@@ -213,7 +213,7 @@
                 <dt class="col-sm-4" th:if="${solicitacao.pacienteNomeMae != null and !solicitacao.pacienteNomeMae.isBlank()}">Nome da mãe</dt>
                 <dd class="col-sm-8" th:if="${solicitacao.pacienteNomeMae != null and !solicitacao.pacienteNomeMae.isBlank()}"
                     th:text="${solicitacao.pacienteNomeMae}"></dd>
-                <dt class="col-sm-4">Data de solicitação da urgência renal</dt>
+                <dt class="col-sm-4" th:text="${solicitacao.isPreemptivo()} ? 'Data da solicitação' : 'Data de solicitação da urgência renal'">Data de solicitação da urgência renal</dt>
                 <dd class="col-sm-8"
                     th:text="${#temporals.format(solicitacao.dataSituacaoEspecial, 'dd/MM/yyyy')}"></dd>
                 <dt class="col-sm-4">Enviada em</dt>

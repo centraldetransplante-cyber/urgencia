@@ -60,9 +60,16 @@ public class HomeController {
 
         List<Processo> processos = processoRepository.findByAnoComPareceres(anoCorrente).stream()
             // Pendencias primeiro: processos EM ANDAMENTO vao para o topo; dentro de
-            // cada grupo, "mais recente primeiro" (a query vem em sequencial asc).
+            // cada grupo, "mais recente primeiro" por dataCadastro (a query vem em
+            // sequencial asc). NAO ordenar so por sequencial: o paciente preemptivo
+            // usa uma serie de numeracao SEPARADA (P-NN/AAAA) que reinicia em 1,
+            // entao um preemptivo recem-criado tem sequencial baixo e afundava para
+            // o fim da lista. dataCadastro e a unica chave de recencia valida com as
+            // duas series convivendo; sequencial fica so como desempate.
             .sorted(java.util.Comparator
                 .comparing((Processo p) -> p.getStatus().isEmAndamento() ? 0 : 1)
+                .thenComparing(Processo::getDataCadastro,
+                    java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder()))
                 .thenComparing(Processo::getSequencial,
                     java.util.Comparator.nullsLast(java.util.Comparator.reverseOrder())))
             .toList();

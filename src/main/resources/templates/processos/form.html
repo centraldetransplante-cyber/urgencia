@@ -51,7 +51,8 @@
                     <input type="text" id="numeroAutomaticoInfo" class="form-control" value="Gerado automaticamente" disabled>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label" th:for="dataSituacaoEspecial" id="labelDataSituacaoEspecial">Data de solicitação da urgência renal *</label>
+                    <label class="form-label" th:for="dataSituacaoEspecial" id="labelDataSituacaoEspecial"
+                           th:text="${processo.isPreemptivo()} ? 'Data da solicitação *' : 'Data de solicitação da urgência renal *'">Data de solicitação da urgência renal *</label>
                     <input type="date" th:field="*{dataSituacaoEspecial}" class="form-control" th:classappend="${#fields.hasErrors('dataSituacaoEspecial')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('dataSituacaoEspecial')} ? 'true' : null,aria-describedby=${#fields.hasErrors('dataSituacaoEspecial')} ? 'dataSituacaoEspecialErro' : null">
                     <div class="invalid-feedback d-block" id="dataSituacaoEspecialErro" role="alert" th:errors="*{dataSituacaoEspecial}"></div>
                 </div>
@@ -65,9 +66,9 @@
                     <input type="text" th:field="*{pacienteNome}" class="form-control" maxlength="200" required th:classappend="${#fields.hasErrors('pacienteNome')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteNome')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteNome')} ? 'pacienteNomeErro' : null">
                     <div class="invalid-feedback d-block" id="pacienteNomeErro" role="alert" th:errors="*{pacienteNome}"></div>
                 </div>
-                <div class="col-md-4" id="blocoRgct">
+                <div class="col-md-4" id="blocoRgct" th:style="${processo.isPreemptivo()} ? 'display:none' : ''">
                     <label class="form-label" th:for="pacienteRgct" id="labelPacienteRgct">RGCT / SNT *</label>
-                    <input type="text" th:field="*{pacienteRgct}" class="form-control" placeholder="123456789-12345" maxlength="60" th:classappend="${#fields.hasErrors('pacienteRgct')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteRgct')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteRgct')} ? 'pacienteRgctErro' : null">
+                    <input type="text" th:field="*{pacienteRgct}" class="form-control" placeholder="123456789-12345" maxlength="60" th:required="${!processo.isPreemptivo()}" th:classappend="${#fields.hasErrors('pacienteRgct')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteRgct')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteRgct')} ? 'pacienteRgctErro' : null">
                     <div class="invalid-feedback d-block" id="pacienteRgctErro" role="alert" th:errors="*{pacienteRgct}"></div>
                 </div>
             </div>

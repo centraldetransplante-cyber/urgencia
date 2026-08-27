@@ -306,7 +306,7 @@
                         <dt class="col-sm-4" th:if="${processo.emailAdicional != null and !processo.emailAdicional.isBlank()}">E-mail adicional (cópia)</dt>
                         <dd class="col-sm-8" th:if="${processo.emailAdicional != null and !processo.emailAdicional.isBlank()}"
                             th:text="${processo.emailAdicional}"></dd>
-                        <dt class="col-sm-4">Data de solicitação da urgência renal</dt>
+                        <dt class="col-sm-4" th:text="${processo.isPreemptivo()} ? 'Data da solicitação' : 'Data de solicitação da urgência renal'">Data de solicitação da urgência renal</dt>
                         <dd class="col-sm-8" th:text="${#temporals.format(processo.dataSituacaoEspecial, 'dd/MM/yyyy')}"></dd>
                         <dt class="col-sm-4" th:if="${processo.observacoes}">Observações</dt>
                         <dd class="col-sm-8" th:if="${processo.observacoes}" th:text="${processo.observacoes}"></dd>

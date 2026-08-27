@@ -740,6 +740,9 @@ class PdfRelatorioBuilder {
             case INFO_COMPLEMENTAR_AVALIADOR ->
                 "Resposta à informação complementar revisada pelo operador (liberada aos avaliadores)";
             case OFICIO_INDEFERIMENTO -> "Ofício de indeferimento";
+            // So urgencia renal comum tem esse anexo: paciente preemptivo nunca
+            // tem COMPROVANTE_SNT (ProcessoService/ProcessoAnexoController recusam
+            // o upload), entao este rotulo nunca renderiza num relatorio preemptivo.
             case COMPROVANTE_SNT -> "Comprovante de inserção da urgência renal no SNT";
             case EMAIL_RESPOSTA_SOLICITANTE -> "Cópia do e-mail de resposta ao solicitante";
             case COMPROVANTE_ENVIO_SOLICITANTE ->
