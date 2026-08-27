@@ -101,6 +101,26 @@ class HomeControllerTest {
 
     @Test
     @WithMockUser(roles = "OPERADOR")
+    void painelContaOsProcessosPreemptivosDoAno() throws Exception {
+        int ano = Year.now().getValue();
+        Processo comum = processo(1L, 1, StatusProcesso.DEFERIDO);
+        Processo preempt1 = processo(2L, 2, StatusProcesso.ENVIADO);
+        preempt1.setPreemptivo(true);
+        Processo preempt2 = processo(3L, 3, StatusProcesso.INDEFERIDO);
+        preempt2.setPreemptivo(true);
+        when(processoRepository.findByAnoComPareceres(ano))
+            .thenReturn(List.of(comum, preempt1, preempt2));
+        when(membroService.contarAtivos()).thenReturn(0L);
+        when(tempoRespostaService.calcular()).thenReturn(
+            new TempoRespostaService.ResumoTempo(0, null, 0, 7, Map.of()));
+
+        mvc.perform(get("/"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("preemptivos", 2L));
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
     void painelExpoeAContagemDeDeferidosSemComprovanteSnt() throws Exception {
         // Pendencia que antes nao entrava em contador nenhum: um Deferido sem
         // comprovante SNT bloqueia a resposta oficial ao solicitante.
@@ -378,7 +398,10 @@ class HomeControllerTest {
             .andExpect(status().isOk())
             .andReturn().getResponse().getContentAsString();
 
-        org.assertj.core.api.Assertions.assertThat(html).doesNotContain("Preemptivo");
+        // O badge de tipo na LINHA da tabela renderiza ">Preemptivo</span>";
+        // um processo comum nao deve te-lo. O card de contador "Preemptivos"
+        // (stat-label, sempre presente) usa o plural e nao casa com isso.
+        org.assertj.core.api.Assertions.assertThat(html).doesNotContain(">Preemptivo</span>");
     }
 
     @Test

@@ -40,13 +40,15 @@ public class MembroController {
         var membros = repo.buscar(q);
         model.addAttribute("membros", membros);
         model.addAttribute("q", q);
-        // Estatisticas por membro: [0]=designados, [1]=avaliados, [2]=favoraveis
+        // Estatisticas por membro:
+        // [0]=designados, [1]=avaliados, [2]=favoraveis, [3]=preemptivos avaliados
         Map<Long, long[]> stats = new LinkedHashMap<>();
         for (MembroUrgenciaRenal m : membros) {
             stats.put(m.getId(), new long[]{
                 parecerRepo.countByMembroId(m.getId()),
                 parecerRepo.countByMembroIdAndResultadoNotNull(m.getId()),
-                parecerRepo.countByMembroIdAndResultado(m.getId(), ResultadoParecer.FAVORAVEL)
+                parecerRepo.countByMembroIdAndResultado(m.getId(), ResultadoParecer.FAVORAVEL),
+                parecerRepo.countByMembroIdAndResultadoNotNullAndProcesso_PreemptivoTrue(m.getId())
             });
         }
         model.addAttribute("stats", stats);

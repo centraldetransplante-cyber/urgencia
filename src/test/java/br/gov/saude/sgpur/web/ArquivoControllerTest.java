@@ -23,6 +23,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -74,7 +75,7 @@ class ArquivoControllerTest {
 
     private void devolve(Processo... ps) {
         Page<Processo> pagina = new PageImpl<>(List.of(ps), PageRequest.of(0, 15), ps.length);
-        when(processoRepository.buscarEncerrados(any(), any(), any())).thenReturn(pagina);
+        when(processoRepository.buscarEncerrados(any(), any(), anyBoolean(), anyBoolean(), any())).thenReturn(pagina);
     }
 
     @Test
@@ -101,7 +102,7 @@ class ArquivoControllerTest {
         @SuppressWarnings("unchecked")
         ArgumentCaptor<java.util.Collection<StatusProcesso>> status =
             ArgumentCaptor.forClass(java.util.Collection.class);
-        verify(processoRepository).buscarEncerrados(any(), status.capture(), any());
+        verify(processoRepository).buscarEncerrados(any(), status.capture(), anyBoolean(), anyBoolean(), any());
         assertThat(status.getValue()).containsExactlyInAnyOrder(
             StatusProcesso.DEFERIDO, StatusProcesso.INDEFERIDO, StatusProcesso.CANCELADO);
     }
@@ -135,7 +136,7 @@ class ArquivoControllerTest {
             .andExpect(status().isOk())
             .andReturn().getResponse().getContentAsString();
 
-        assertThat(html).doesNotContain("Preemptivo");
+        assertThat(html).doesNotContain(">Preemptivo</span>");
     }
 
     @Test
@@ -147,7 +148,7 @@ class ArquivoControllerTest {
             .andExpect(status().isOk())
             .andExpect(model().attribute("q", "maria"));
 
-        verify(processoRepository).buscarEncerrados(eq("maria"), any(), any());
+        verify(processoRepository).buscarEncerrados(eq("maria"), any(), anyBoolean(), anyBoolean(), any());
     }
 
     /**
@@ -162,7 +163,7 @@ class ArquivoControllerTest {
         mvc.perform(get("/arquivo").param("page", "2")).andExpect(status().isOk());
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(processoRepository).buscarEncerrados(any(), any(), pageable.capture());
+        verify(processoRepository).buscarEncerrados(any(), any(), anyBoolean(), anyBoolean(), pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isEqualTo(2);
         assertThat(pageable.getValue().getPageSize()).isEqualTo(ArquivoController.TAMANHO_PAGINA);
     }
@@ -176,7 +177,7 @@ class ArquivoControllerTest {
         mvc.perform(get("/arquivo").param("page", "-5")).andExpect(status().isOk());
 
         ArgumentCaptor<Pageable> pageable = ArgumentCaptor.forClass(Pageable.class);
-        verify(processoRepository).buscarEncerrados(any(), any(), pageable.capture());
+        verify(processoRepository).buscarEncerrados(any(), any(), anyBoolean(), anyBoolean(), pageable.capture());
         assertThat(pageable.getValue().getPageNumber()).isZero();
     }
 
@@ -186,7 +187,7 @@ class ArquivoControllerTest {
         Page<Processo> pagina = new PageImpl<>(
             List.of(processo(1L, "01/2026", "Maria Silva", "Equipe A", StatusProcesso.DEFERIDO)),
             PageRequest.of(1, 15), 40);
-        when(processoRepository.buscarEncerrados(any(), any(), any())).thenReturn(pagina);
+        when(processoRepository.buscarEncerrados(any(), any(), anyBoolean(), anyBoolean(), any())).thenReturn(pagina);
 
         mvc.perform(get("/arquivo").param("page", "1"))
             .andExpect(status().isOk())

@@ -39,10 +39,15 @@ public class ProcessoListaController {
     @Transactional(readOnly = true)
     public String listar(@RequestParam(required = false) String q,
                          @RequestParam(required = false) StatusProcesso status,
+                         @RequestParam(required = false) String tipo,
                          @RequestParam(required = false) String filtro,
                          @RequestParam(defaultValue = "0") int page,
                          Model model) {
         boolean sntPendente = FILTRO_SNT_PENDENTE.equals(filtro);
+        // So os 2 valores conhecidos passam adiante; qualquer outro = "todos".
+        String tipoFiltro = (ProcessoService.TIPO_PREEMPTIVO.equalsIgnoreCase(tipo)
+                || ProcessoService.TIPO_URGENCIA.equalsIgnoreCase(tipo))
+            ? tipo.toLowerCase() : null;
         java.util.List<Processo> processos;
         if (sntPendente) {
             // Lista curta por natureza (pendencias abertas): sem paginacao, para
@@ -51,12 +56,13 @@ public class ProcessoListaController {
             model.addAttribute("paginaAtual", 0);
             model.addAttribute("totalPaginas", 1);
         } else {
-            var pagina = processoService.buscar(q, status,
+            var pagina = processoService.buscar(q, status, tipoFiltro,
                 org.springframework.data.domain.PageRequest.of(Math.max(page, 0), 15));
             processos = pagina.getContent();
             model.addAttribute("paginaAtual", pagina.getNumber());
             model.addAttribute("totalPaginas", pagina.getTotalPages());
         }
+        model.addAttribute("tipoSelecionado", tipoFiltro);
         // Evita N+1 no calculo de pendencia por linha logo abaixo (que navega
         // pareceres/membro/anexos processo a processo): carrega as duas
         // colecoes num lote so, dentro da mesma transacao (readOnly acima).

@@ -111,4 +111,27 @@ class RelatorioAnualServiceTest {
             .contains("Dr. Teste");
         reader.close();
     }
+
+    @Test
+    void resumoTemLinhaDePreemptivosComAContagemCerta() throws Exception {
+        Processo comum = processo("01/2026", 1, StatusProcesso.DEFERIDO);
+        Processo preempt1 = processo("P-01/2026", 1, StatusProcesso.DEFERIDO);
+        preempt1.setPreemptivo(true);
+        Processo preempt2 = processo("P-02/2026", 2, StatusProcesso.ENVIADO);
+        preempt2.setPreemptivo(true);
+
+        byte[] pdf = service.gerar(2026, List.of(comum, preempt1, preempt2));
+
+        PdfReader reader = new PdfReader(pdf);
+        // Normaliza a quebra de linha que o extrator de PDF insere no meio das
+        // celulas da tabela (ex.: "... 1\n deferido(s)").
+        String texto = (new PdfTextExtractor(reader).getTextFromPage(1)
+                + " " + new PdfTextExtractor(reader).getTextFromPage(2))
+            .replaceAll("\\s+", " ");
+        assertThat(texto)
+            .contains("Preemptivos (inserção em lista de espera)")
+            .contains("2 (dos quais 1 deferido(s))")
+            .contains("(2 preemptivo(s))"); // capa
+        reader.close();
+    }
 }

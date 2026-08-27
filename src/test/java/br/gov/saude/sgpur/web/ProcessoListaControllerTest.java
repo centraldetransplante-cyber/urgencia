@@ -61,7 +61,7 @@ class ProcessoListaControllerTest {
     @WithMockUser(roles = "OPERADOR")
     void listaSemFiltrosUsaPaginaZeroETamanho15() throws Exception {
         Page<Processo> pagina = new PageImpl<>(List.of(processo), PageRequest.of(0, 15), 1);
-        when(processoService.buscar(isNull(), isNull(), eq(PageRequest.of(0, 15)))).thenReturn(pagina);
+        when(processoService.buscar(isNull(), isNull(), isNull(), eq(PageRequest.of(0, 15)))).thenReturn(pagina);
         br.gov.saude.sgpur.service.dto.EtapaFluxo etapaEnvio = new br.gov.saude.sgpur.service.dto.EtapaFluxo(
             br.gov.saude.sgpur.service.dto.EtapaFluxo.Chave.ENVIO, "Envio aos 3 médicos", "send-fill",
             br.gov.saude.sgpur.service.dto.EstadoEtapa.ATUAL, "Falta o Envio");
@@ -86,7 +86,7 @@ class ProcessoListaControllerTest {
     @WithMockUser(roles = "OPERADOR")
     void colunaOQueFaltaMostraSoOTituloCurtoEAFraseCompletaNoTitle() throws Exception {
         Page<Processo> pagina = new PageImpl<>(List.of(processo), PageRequest.of(0, 15), 1);
-        when(processoService.buscar(isNull(), isNull(), eq(PageRequest.of(0, 15)))).thenReturn(pagina);
+        when(processoService.buscar(isNull(), isNull(), isNull(), eq(PageRequest.of(0, 15)))).thenReturn(pagina);
         when(fluxoService.pendenciaAberta(processo)).thenReturn(java.util.Optional.of(
             new br.gov.saude.sgpur.service.dto.EtapaFluxo(
                 br.gov.saude.sgpur.service.dto.EtapaFluxo.Chave.ENVIO, "Envio aos 3 médicos", "send-fill",
@@ -108,7 +108,7 @@ class ProcessoListaControllerTest {
     @WithMockUser(roles = "OPERADOR")
     void processoSemPendenciaAbertaMostraNadaPendente() throws Exception {
         Page<Processo> pagina = new PageImpl<>(List.of(processo), PageRequest.of(0, 15), 1);
-        when(processoService.buscar(isNull(), isNull(), eq(PageRequest.of(0, 15)))).thenReturn(pagina);
+        when(processoService.buscar(isNull(), isNull(), isNull(), eq(PageRequest.of(0, 15)))).thenReturn(pagina);
         when(fluxoService.pendenciaAberta(processo)).thenReturn(java.util.Optional.empty());
 
         String html = mvc.perform(get("/processos"))
@@ -139,7 +139,7 @@ class ProcessoListaControllerTest {
         encerrado.setEmailEnviadoSolicitante(true);
         Page<Processo> pagina = new PageImpl<>(List.of(decididoIncompleto, encerrado),
             PageRequest.of(0, 15), 2);
-        when(processoService.buscar(isNull(), isNull(), any())).thenReturn(pagina);
+        when(processoService.buscar(isNull(), isNull(), isNull(), any())).thenReturn(pagina);
 
         String html = mvc.perform(get("/processos"))
             .andExpect(status().isOk())
@@ -163,7 +163,7 @@ class ProcessoListaControllerTest {
         peloCoordenador.setNumero("04/2026");
         peloCoordenador.setStatus(StatusProcesso.DEFERIDO);
         Page<Processo> pagina = new PageImpl<>(List.of(processo, peloCoordenador), PageRequest.of(0, 15), 2);
-        when(processoService.buscar(isNull(), isNull(), any())).thenReturn(pagina);
+        when(processoService.buscar(isNull(), isNull(), isNull(), any())).thenReturn(pagina);
         when(processoService.regraAplicada(processo))
             .thenReturn(br.gov.saude.sgpur.service.dto.RegraDecisao.NAO_DECIDIDO);
         when(processoService.regraAplicada(peloCoordenador))
@@ -180,26 +180,52 @@ class ProcessoListaControllerTest {
     @WithMockUser(roles = "OPERADOR")
     void filtraPorTermoDeBuscaEStatus() throws Exception {
         Page<Processo> pagina = new PageImpl<>(List.of(processo), PageRequest.of(0, 15), 1);
-        when(processoService.buscar(eq("Maria"), eq(StatusProcesso.ENVIADO), any())).thenReturn(pagina);
+        when(processoService.buscar(eq("Maria"), eq(StatusProcesso.ENVIADO), isNull(), any())).thenReturn(pagina);
 
         mvc.perform(get("/processos").param("q", "Maria").param("status", "ENVIADO"))
             .andExpect(status().isOk())
             .andExpect(model().attribute("q", "Maria"))
             .andExpect(model().attribute("statusSelecionado", StatusProcesso.ENVIADO));
 
-        verify(processoService).buscar("Maria", StatusProcesso.ENVIADO, PageRequest.of(0, 15));
+        verify(processoService).buscar("Maria", StatusProcesso.ENVIADO, null, PageRequest.of(0, 15));
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void filtroTipoPreemptivoEhRepassadoAoServico() throws Exception {
+        Page<Processo> pagina = new PageImpl<>(List.of(processo), PageRequest.of(0, 15), 1);
+        when(processoService.buscar(isNull(), isNull(), eq("preemptivo"), any())).thenReturn(pagina);
+
+        mvc.perform(get("/processos").param("tipo", "preemptivo"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("tipoSelecionado", "preemptivo"));
+
+        verify(processoService).buscar(null, null, "preemptivo", PageRequest.of(0, 15));
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void filtroTipoDesconhecidoViraNulo() throws Exception {
+        Page<Processo> pagina = new PageImpl<>(List.of(processo), PageRequest.of(0, 15), 1);
+        when(processoService.buscar(isNull(), isNull(), isNull(), any())).thenReturn(pagina);
+
+        mvc.perform(get("/processos").param("tipo", "xpto"))
+            .andExpect(status().isOk())
+            .andExpect(model().attribute("tipoSelecionado", org.hamcrest.Matchers.nullValue()));
+
+        verify(processoService).buscar(null, null, null, PageRequest.of(0, 15));
     }
 
     @Test
     @WithMockUser(roles = "OPERADOR")
     void paginaNegativaEhTratadaComoZero() throws Exception {
         Page<Processo> paginaVazia = new PageImpl<>(List.of(), PageRequest.of(0, 15), 0);
-        when(processoService.buscar(isNull(), isNull(), eq(PageRequest.of(0, 15)))).thenReturn(paginaVazia);
+        when(processoService.buscar(isNull(), isNull(), isNull(), eq(PageRequest.of(0, 15)))).thenReturn(paginaVazia);
 
         mvc.perform(get("/processos").param("page", "-5"))
             .andExpect(status().isOk());
 
-        verify(processoService).buscar(null, null, PageRequest.of(0, 15));
+        verify(processoService).buscar(null, null, null, PageRequest.of(0, 15));
     }
 
     // ----- pendencia de comprovante SNT (badge + filtro) -----
@@ -208,7 +234,7 @@ class ProcessoListaControllerTest {
     @WithMockUser(roles = "OPERADOR")
     void listaExpoeOsIdsDeferidosSemComprovanteSntParaOBadge() throws Exception {
         Page<Processo> pagina = new PageImpl<>(List.of(processo), PageRequest.of(0, 15), 1);
-        when(processoService.buscar(isNull(), isNull(), any())).thenReturn(pagina);
+        when(processoService.buscar(isNull(), isNull(), isNull(), any())).thenReturn(pagina);
         when(processoService.idsDeferidosSemComprovanteSnt()).thenReturn(java.util.Set.of(1L, 9L));
 
         mvc.perform(get("/processos"))
@@ -237,14 +263,14 @@ class ProcessoListaControllerTest {
             .andExpect(model().attribute("totalPaginas", 1));
 
         // O filtro nao passa pela busca paginada normal.
-        verify(processoService, org.mockito.Mockito.never()).buscar(any(), any(), any());
+        verify(processoService, org.mockito.Mockito.never()).buscar(any(), any(), any(), any());
     }
 
     @Test
     @WithMockUser(roles = "OPERADOR")
     void expoeTodosOsValoresDeStatusParaOFiltro() throws Exception {
         Page<Processo> pagina = new PageImpl<>(List.of(), PageRequest.of(0, 15), 0);
-        when(processoService.buscar(isNull(), isNull(), any())).thenReturn(pagina);
+        when(processoService.buscar(isNull(), isNull(), isNull(), any())).thenReturn(pagina);
 
         mvc.perform(get("/processos"))
             .andExpect(status().isOk())

@@ -215,10 +215,16 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
      * cronologica. {@code sequencial} fica so como desempate final. {@code nulls
      * last}: linhas gravadas antes da coluna {@code dataCadastro} existir (todas
      * ja encerradas) vao para o fim do seu ano.</p>
+     *
+     * <p>Filtro por TIPO (paciente preemptivo): {@code filtrarTipo=false}
+     * traz os dois tipos; {@code true} restringe a {@code coalesce(preemptivo,
+     * false) = :preemptivo}. Dois booleanos nao-nulos de proposito - o padrao
+     * {@code :param is null or ...} nao infere tipo no Postgres (ver CLAUDE.md).</p>
      */
     @Query("""
         select p from Processo p
         where (:status is null or p.status = :status)
+          and (:filtrarTipo = false or coalesce(p.preemptivo, false) = :preemptivo)
           and (:q is null or :q = ''
                or lower(p.pacienteNome) like lower(concat('%', :q, '%'))
                or p.numero like concat('%', :q, '%')
@@ -230,7 +236,9 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
             br.gov.saude.sgpur.domain.StatusProcesso.CANCELADO) then 1 else 0 end asc,
           p.ano desc, p.dataCadastro desc nulls last, p.sequencial desc
         """)
-    Page<Processo> buscar(@Param("q") String q, @Param("status") StatusProcesso status, Pageable pageable);
+    Page<Processo> buscar(@Param("q") String q, @Param("status") StatusProcesso status,
+                          @Param("filtrarTipo") boolean filtrarTipo, @Param("preemptivo") boolean preemptivo,
+                          Pageable pageable);
 
     /**
      * Inicializa {@code pareceres}+{@code membro} (fetch join) para um lote de
@@ -284,6 +292,7 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     @Query("""
         select p from Processo p
         where p.status in :status
+          and (:filtrarTipo = false or coalesce(p.preemptivo, false) = :preemptivo)
           and (:q is null or :q = ''
                or lower(p.pacienteNome) like lower(concat('%', :q, '%'))
                or p.numero like concat('%', :q, '%')
@@ -292,5 +301,7 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
         """)
     Page<Processo> buscarEncerrados(@Param("q") String q,
                                     @Param("status") java.util.Collection<StatusProcesso> status,
+                                    @Param("filtrarTipo") boolean filtrarTipo,
+                                    @Param("preemptivo") boolean preemptivo,
                                     Pageable pageable);
 }

@@ -226,6 +226,19 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
     (ex. "Painel da Urgência Renal") continuam sem mudar — decisão de
     produto já fixada, só a LINHA de cada processo/pedido preemptivo ganhou
     o badge.
+  - **Contadores/filtros de "Preemptivos" nos painéis (2026-08-27):**
+    card "Preemptivos" no Painel (`dashboard.html`, contagem do ano →
+    `/processos?tipo=preemptivo`); filtro `?tipo=urgencia|preemptivo` em
+    `/processos` e `/arquivo` (`ProcessoRepository.buscar`/`buscarEncerrados`
+    ganharam 2 booleanos `filtrarTipo`/`preemptivo` — NUNCA `:param is null
+    or` para esse par, o Postgres não infere tipo; `coalesce(preemptivo,
+    false)` inclui os legados NULL como urgência renal); linha "Preemptivos
+    (inserção em lista de espera)" no §1 do Relatório Anual PDF; contador
+    "(N preemptivos)" e card "Preemptivos avaliados" no Portal do Avaliador
+    (`ParecerRepository
+    .countByMembroIdAndResultadoNotNullAndProcesso_PreemptivoTrue`); coluna
+    "preemptivos" na tabela de `/membros`. Classe CSS `stat-card-preemptivo`
+    (azul, = `stat-card-membros`). Títulos gerais seguem sem mudar.
   - **Duplo-submit em `solicitante/nova.html` causava solicitação
     duplicada (bug real relatado, corrigido em 2026-08-27) — causa raiz:
     `data-lock-submit` sem o script correspondente.** O `<form>` desse

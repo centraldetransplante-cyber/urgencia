@@ -317,4 +317,32 @@ class PacientePreemptivoIntegrationTest {
         assertThat(processoRepository.findById(id).orElseThrow().getPacienteNome())
             .isEqualTo("Nome Atualizado");
     }
+
+    // ---------------------------------------------------------------
+    // 8. Filtro por TIPO nas listas (/processos, /arquivo)
+    // ---------------------------------------------------------------
+
+    @Test
+    void buscarFiltraPorTipoIncluindoLegadoNuloComoUrgenciaRenal() {
+        processoRepository.saveAndFlush(novoProcesso(false, "RGCT-1", "10/2026", 2026));
+        Processo legado = novoProcesso(false, "RGCT-2", "11/2026", 2026);
+        legado.setPreemptivo(null); // linha legada = urgencia renal comum
+        processoRepository.saveAndFlush(legado);
+        Processo preempt = novoProcesso(true, null, "P-01/2026", 2026);
+        processoRepository.saveAndFlush(preempt);
+
+        var todos = processoService.buscar(null, null, null,
+            org.springframework.data.domain.PageRequest.of(0, 15));
+        var soPreempt = processoService.buscar(null, null, "preemptivo",
+            org.springframework.data.domain.PageRequest.of(0, 15));
+        var soUrgencia = processoService.buscar(null, null, "urgencia",
+            org.springframework.data.domain.PageRequest.of(0, 15));
+
+        assertThat(todos.getTotalElements()).isEqualTo(3);
+        assertThat(soPreempt.getContent()).extracting(Processo::getNumero)
+            .containsExactly("P-01/2026");
+        // o legado (preemptivo = NULL) conta como urgencia renal, via coalesce
+        assertThat(soUrgencia.getContent()).extracting(Processo::getNumero)
+            .containsExactlyInAnyOrder("10/2026", "11/2026");
+    }
 }

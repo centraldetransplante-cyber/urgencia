@@ -57,10 +57,10 @@
         </div>
     </div>
 
-    <!-- Cards de contadores. row-cols-lg-4 (nao -6): sao 7 cards fixos + 1
-         condicional de SNT pendente - com 6 por linha o card de "Tempo de
-         resposta" (ou o de SNT, quando aparece) ficava sozinho/desbalanceado
-         na 2a linha. Com 4 por linha fecha em 2 linhas de 4 (ou 2+2). -->
+    <!-- Cards de contadores. row-cols-lg-4 (nao -6): sao 8 cards fixos (Total,
+         Em andamento, Deferidos, Indeferidos, Cancelados, Preemptivos, Membros
+         ativos, Tempo de resposta) + 1 condicional de SNT pendente - com 4 por
+         linha fecha em 2 linhas de 4 (ou 2+2+1). -->
     <div class="row row-cols-2 row-cols-sm-3 row-cols-lg-4 g-3 mb-4">
         <div class="col">
             <a th:href="@{/processos}"
@@ -115,6 +115,18 @@
                         <i class="bi bi-slash-circle"></i></span>
                 </div>
                 <div class="stat-label">Cancelados</div>
+            </a>
+        </div>
+        <div class="col">
+            <a th:href="@{/processos(tipo='preemptivo')}"
+               class="stat-card stat-card-portal text-decoration-none d-block stat-card-preemptivo"
+               title="Processos de inserção em lista de espera renal (paciente preemptivo) neste ano.">
+                <div class="d-flex align-items-center justify-content-between">
+                    <span class="stat-number" th:text="${preemptivos}">0</span>
+                    <span class="stat-icon">
+                        <i class="bi bi-clipboard-plus"></i></span>
+                </div>
+                <div class="stat-label">Preemptivos</div>
             </a>
         </div>
         <div class="col">

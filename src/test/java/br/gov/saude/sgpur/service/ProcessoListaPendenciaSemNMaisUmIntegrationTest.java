@@ -139,7 +139,7 @@ class ProcessoListaPendenciaSemNMaisUmIntegrationTest {
         entityManager.flush();
         entityManager.clear();
 
-        var pagina = processoService.buscar(null, null, PageRequest.of(0, 15));
+        var pagina = processoService.buscar(null, null, null, PageRequest.of(0, 15));
         List<Processo> processos = pagina.getContent();
         assertThat(processos).hasSize(total);
 
@@ -186,7 +186,7 @@ class ProcessoListaPendenciaSemNMaisUmIntegrationTest {
         entityManager.flush();
         entityManager.clear();
 
-        var pagina = processoService.buscar(null, null, PageRequest.of(0, 15));
+        var pagina = processoService.buscar(null, null, null, PageRequest.of(0, 15));
         List<Processo> processos = pagina.getContent();
 
         stats.clear();
