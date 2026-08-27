@@ -120,7 +120,8 @@ public class RelatorioService {
             }
             String iniciais = Iniciais.de(p.getPacienteNome());
             return PdfCabecalhoStamper.estampar(merged,
-                PdfCabecalhoStamper.NOME_INSTITUICAO + " - URGÊNCIA RENAL",
+                PdfCabecalhoStamper.NOME_INSTITUICAO + " - "
+                    + (p.isPreemptivo() ? "INSERÇÃO EM LISTA DE ESPERA RENAL" : "URGÊNCIA RENAL"),
                 "Processo CET-RS " + p.getNumero() + " - Paciente " + iniciais,
                 paginasCapa + 1);
 
@@ -165,8 +166,8 @@ public class RelatorioService {
         return new PdfRelatorioBuilder.DadosCapa(
             finalizado ? "RELATÓRIO FINAL" : "RELATÓRIO PARCIAL",
             finalizado
-                ? "Processo de Urgência Renal"
-                : "Processo de Urgência Renal (ainda não decidido)",
+                ? RotuloProcesso.nomeLongo(p)
+                : RotuloProcesso.nomeLongo(p) + " (ainda não decidido)",
             PdfRelatorioBuilder.nvl(p.getNumero()),
             PdfRelatorioBuilder.nvl(p.getPacienteNome()),
             finalizado ? "Resultado" : "Situação",
@@ -207,8 +208,8 @@ public class RelatorioService {
         // legitimo de imprimir o andamento parcial). Simetrico a secao "3."
         // virar "Situação atual" no mesmo caso (B4+A7, ja feito no R1b).
         String rotuloDocumento = p.getStatus().isFinalizado()
-            ? "RELATÓRIO FINAL - PROCESSO DE URGÊNCIA RENAL"
-            : "RELATÓRIO PARCIAL - PROCESSO DE URGÊNCIA RENAL (processo ainda não decidido)";
+            ? "RELATÓRIO FINAL - " + RotuloProcesso.tituloPdfCaixaAlta(p)
+            : "RELATÓRIO PARCIAL - " + RotuloProcesso.tituloPdfCaixaAlta(p) + " (processo ainda não decidido)";
         Paragraph titulo = new Paragraph(rotuloDocumento, fTitulo);
         titulo.setAlignment(Element.ALIGN_CENTER);
         doc.add(titulo);
@@ -238,7 +239,7 @@ public class RelatorioService {
         pdfBuilder.linha(t1, "Nome da mãe", PdfRelatorioBuilder.nvl(p.getPacienteNomeMae()));
         pdfBuilder.linha(t1, "Equipe solicitante", p.getSolicitanteEquipe());
         pdfBuilder.linha(t1, "E-mail do solicitante", PdfRelatorioBuilder.nvl(p.getSolicitanteEmail()));
-        pdfBuilder.linha(t1, "Data de solicitação da urgência renal",
+        pdfBuilder.linha(t1, RotuloProcesso.rotuloDataClinica(p),
             p.getDataSituacaoEspecial() != null ? p.getDataSituacaoEspecial().format(DATA) : "-");
         pdfBuilder.linha(t1, "Data de cadastro",
             p.getDataCadastro() != null ? p.getDataCadastro().format(DATA_HORA) : "-");

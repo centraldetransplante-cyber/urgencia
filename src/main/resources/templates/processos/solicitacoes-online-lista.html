@@ -60,7 +60,12 @@
                 </thead>
                 <tbody>
                     <tr th:each="s : ${solicitacoes}">
-                        <td th:text="${s.pacienteNome}">Paciente</td>
+                        <td>
+                            <span th:text="${s.pacienteNome}">Paciente</span>
+                            <span th:if="${s.isPreemptivo()}" class="badge bg-warning text-dark ms-1"
+                                  th:text="${T(br.gov.saude.sgpur.service.RotuloProcesso).tipoCurto(s)}"
+                                  title="Paciente ainda não está na lista de espera do SNT">Preemptivo</span>
+                        </td>
                         <td th:text="${s.pacienteRgct}">RGCT</td>
                         <td><span class="badge badge-rs-blue fw-normal" th:text="${s.solicitanteEquipe}">Equipe</span></td>
                         <td class="small text-muted">

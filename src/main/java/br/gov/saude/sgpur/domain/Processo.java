@@ -56,11 +56,40 @@ public class Processo {
     @Column(name = "mensagem_resposta", columnDefinition = "TEXT")
     private String mensagemResposta;
 
-    /** Registro RGCT / SNT do paciente. Obrigatorio via @NotBlank (validacao de formulario). */
-    @NotBlank
+    /**
+     * Registro RGCT / SNT do paciente.
+     *
+     * <p><b>2026-08-27 (paciente preemptivo):</b> deixou de ter
+     * {@code @NotBlank} na ENTIDADE - paciente preemptivo ainda nao esta na
+     * lista de espera do SNT, entao nao tem RGCT. Um {@code @NotBlank} aqui
+     * faria QUALQUER escrita (decidir, finalizar, anexar) num processo
+     * preemptivo estourar {@code ConstraintViolationException}/500, mesmo
+     * escala do hotfix ja documentado para {@link #pacienteDataNascimento}.
+     * A obrigatoriedade de verdade, agora CONDICIONAL (so quando
+     * {@code !isPreemptivo()}), fica em
+     * {@code SolicitacaoOnlineService.criar}/{@code ProcessoDetalheController}.</p>
+     */
     @Size(max = 60, message = "Registro RGCT/SNT muito longo (maximo 60 caracteres).")
     @Column(name = "paciente_rgct", length = 60)
     private String pacienteRgct;
+
+    /**
+     * Paciente PREEMPTIVO: ainda nao esta na lista de espera do SNT - o
+     * processo avalia a INSERCAO dele na lista de espera renal, nao uma
+     * urgencia. Nao altera nenhuma regra de votacao/decisao (3 avaliadores,
+     * maioria simples 2/3, excecao do coordenador): muda a NUMERACAO, os
+     * ROTULOS institucionais (ver {@code service.RotuloProcesso}) e a
+     * obrigatoriedade do RGCT.
+     *
+     * <p>Nullable de proposito: processo gravado antes deste campo existir
+     * fica com {@code null} == {@code false} (urgencia renal comum), sem
+     * exigir backfill manual em producao - mesmo padrao ja usado em
+     * {@link #reaberturas}/{@link #ultimoLembreteSntEm}/{@link #numeroOficio}
+     * (ver CLAUDE.md, "ddl-auto: update nao faz backfill em coluna nova").
+     * Sempre ler via {@link #isPreemptivo()}, nunca o getter cru.</p>
+     */
+    @Column(name = "preemptivo")
+    private Boolean preemptivo;
 
     /**
      * Data de nascimento, CPF (so digitos) e sexo do paciente.
@@ -353,6 +382,19 @@ public class Processo {
 
     public void setPacienteRgct(String pacienteRgct) {
         this.pacienteRgct = pacienteRgct;
+    }
+
+    public Boolean getPreemptivo() {
+        return preemptivo;
+    }
+
+    public void setPreemptivo(Boolean preemptivo) {
+        this.preemptivo = preemptivo;
+    }
+
+    /** Null-safe: null (legado) == urgencia renal comum. */
+    public boolean isPreemptivo() {
+        return Boolean.TRUE.equals(preemptivo);
     }
 
     public LocalDate getPacienteDataNascimento() {

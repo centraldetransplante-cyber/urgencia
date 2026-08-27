@@ -387,4 +387,73 @@ class EmailTemplateServiceTest {
         assertThat(convitePortal.corpo()).doesNotContain("15/03/1990");
         assertThat(convitePortal.corpo()).doesNotContain("Joao Paciente Secreto");
     }
+
+    // ===================================================================
+    // Assunto do e-mail conforme o tipo do processo (2026-08-27, correcao de
+    // continuacao do PR #126, "paciente preemptivo") - RotuloProcesso
+    // .prefixoAssunto(Processo) existia mas nunca era chamado por
+    // EmailTemplateService.assunto(): o assunto de TODO e-mail de um
+    // processo preemptivo sempre saia com o prefixo fixo "Urgência Renal -
+    // ...", igual a um processo comum, mesmo o corpo/rotulos internos ja
+    // usando "Lista de Espera Renal" nesse caso. Vale para TODOS os
+    // e-mails de um processo, nao so o de deferido.
+    // ===================================================================
+
+    private Processo processoPreemptivo() {
+        Processo p = processo();
+        p.setPreemptivo(true);
+        return p;
+    }
+
+    @Test
+    void assuntoDeProcessoPreemptivoUsaPrefixoListaDeEsperaRenal() {
+        Processo deferido = processoPreemptivo();
+        deferido.setStatus(StatusProcesso.DEFERIDO);
+        Processo indeferido = processoPreemptivo();
+        indeferido.setStatus(StatusProcesso.INDEFERIDO);
+        Processo info = processoPreemptivo();
+        info.setStatus(StatusProcesso.SOLICITA_INFORMACAO);
+        Processo enviado = processoPreemptivo();
+        enviado.setStatus(StatusProcesso.ENVIADO);
+        enviado.getPareceres().forEach(par -> par.setDataEnvio(LocalDate.now()));
+        MembroUrgenciaRenal membro = new MembroUrgenciaRenal("HCPA", "Dra. Avaliadora", "a@example.com");
+        Processo cancelado = processoPreemptivo();
+
+        java.util.List<EmailTemplate> todos = new java.util.ArrayList<>();
+        todos.addAll(service.gerar(deferido));
+        todos.addAll(service.gerar(indeferido));
+        todos.addAll(service.gerar(info));
+        todos.addAll(service.gerar(enviado));
+        todos.add(service.emailConviteAvaliador(deferido, membro));
+        todos.add(service.emailLembreteAvaliador(deferido, membro));
+        todos.add(service.emailCancelamentoAvaliador(cancelado, membro));
+        todos.add(service.emailInfoComplementarDisponivel(deferido, membro));
+        todos.add(service.emailLembreteComprovanteSnt(deferido, 3));
+
+        assertThat(todos).isNotEmpty();
+        for (EmailTemplate t : todos) {
+            assertThat(t.assunto())
+                .as("assunto do template '%s' de processo preemptivo deveria comecar com "
+                    + "'Lista de Espera Renal - '", t.chave())
+                .startsWith("Lista de Espera Renal - ");
+            assertThat(t.assunto())
+                .as("assunto do template '%s' de processo preemptivo nao deveria usar o "
+                    + "prefixo 'Urgência Renal'", t.chave())
+                .doesNotStartWith("Urgência Renal - ");
+        }
+    }
+
+    /** Processo comum (nao preemptivo) continua com o prefixo configurado (padrao "Urgência Renal"). */
+    @Test
+    void assuntoDeProcessoComumContinuaUsandoPrefixoConfigurado() {
+        Processo deferido = processo();
+        deferido.setStatus(StatusProcesso.DEFERIDO);
+        MembroUrgenciaRenal membro = new MembroUrgenciaRenal("HCPA", "Dra. Avaliadora", "a@example.com");
+
+        EmailTemplate emailDeferido = service.gerar(deferido).get(0);
+        EmailTemplate convite = service.emailConviteAvaliador(deferido, membro);
+
+        assertThat(emailDeferido.assunto()).startsWith("Urgência Renal - ");
+        assertThat(convite.assunto()).startsWith("Urgência Renal - ");
+    }
 }

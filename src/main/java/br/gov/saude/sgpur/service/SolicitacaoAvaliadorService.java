@@ -151,7 +151,7 @@ public class SolicitacaoAvaliadorService {
         if (pdf == null || pdf.length == 0) {
             throw new IllegalArgumentException("PDF vazio para carimbar.");
         }
-        String linha1 = PdfCabecalhoStamper.NOME_INSTITUICAO + " - URGENCIA RENAL";
+        String linha1 = RotuloProcesso.carimboLinha1(p);
         String iniciais = Iniciais.de(p.getPacienteNome());
         if (iniciais.endsWith(".")) {
             iniciais = iniciais.substring(0, iniciais.length() - 1);

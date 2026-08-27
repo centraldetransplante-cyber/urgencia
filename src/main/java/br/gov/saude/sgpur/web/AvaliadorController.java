@@ -180,7 +180,8 @@ public class AvaliadorController {
                 diasDesdeEnvio.put(pid, dias);
                 foraDoPrazoPorProcesso.put(pid, dias > prazoDias);
             }
-            pareceresView.add(new ParecerPendenteView(pid, par.getProcesso().getNumero(), par.getDataEnvio()));
+            pareceresView.add(new ParecerPendenteView(pid, par.getProcesso().getNumero(), par.getDataEnvio(),
+                par.getProcesso().isPreemptivo()));
         }
 
         // Particiona server-side (nao na view) os atrasados dos demais: evita
@@ -214,7 +215,8 @@ public class AvaliadorController {
                 Iniciais.de(par.getProcesso().getPacienteNome()));
             historico.add(new ParecerHistoricoView(par.getId(), par.getProcesso().getId(),
                 par.getProcesso().getNumero(),
-                par.getResultado(), par.getDataHoraVoto(), par.getDataResposta()));
+                par.getResultado(), par.getDataHoraVoto(), par.getDataResposta(),
+                par.getProcesso().isPreemptivo()));
         }
 
         // Achado 10 do relatorio de vistoria de brechas (2026-08-10):
@@ -233,7 +235,7 @@ public class AvaliadorController {
         for (Parecer par : dispensadosEntidades) {
             iniciaisDispensados.put(par.getId(), Iniciais.de(par.getProcesso().getPacienteNome()));
             dispensados.add(new ParecerDispensadoView(par.getId(), par.getProcesso().getId(),
-                par.getProcesso().getNumero()));
+                par.getProcesso().getNumero(), par.getProcesso().isPreemptivo()));
         }
 
         // Mensagens do operador ainda nao lidas, agrupadas por processo (UMA
@@ -372,7 +374,7 @@ public class AvaliadorController {
         model.addAttribute("parecer", new ParecerVotoView(parecer.getDataEnvio(),
             parecer.getResultado() == null ? null : parecer.getResultado().name(),
             parecer.getDataHoraVoto(), parecer.getDataResposta()));
-        model.addAttribute("processo", new ProcessoVotoView(processo.getId()));
+        model.addAttribute("processo", new ProcessoVotoView(processo.getId(), processo.isPreemptivo()));
         model.addAttribute("pdfsAvaliador", pdfsAvaliador);
         model.addAttribute("algumPdfIndisponivel", algumPdfIndisponivel);
 
@@ -919,8 +921,14 @@ public class AvaliadorController {
         return parecer;
     }
 
-    /** Projecao de Processo para a tela de voto: so o id, usado pelas actions dos forms/links. */
-    private record ProcessoVotoView(Long id) {}
+    /**
+     * Projecao de Processo para a tela de voto: so o id (usado pelas actions
+     * dos forms/links) e {@code preemptivo} - o avaliador PRECISA saber
+     * claramente que esta julgando uma inserção em lista de espera renal
+     * (paciente preemptivo, nao uma urgência), sem violar a imparcialidade
+     * (continua sem nome/equipe do paciente).
+     */
+    private record ProcessoVotoView(Long id, boolean preemptivo) {}
 
     /**
      * Projecao de Parecer para a tela de voto. Alem da data de envio, carrega
@@ -931,8 +939,14 @@ public class AvaliadorController {
     private record ParecerVotoView(LocalDate dataEnvio, String resultado,
                                    LocalDateTime dataHoraVoto, LocalDate dataResposta) {}
 
-    /** Projecao para a lista de pendentes (aba "Pendentes de voto" do painel). */
-    private record ParecerPendenteView(Long processoId, String processoNumero, LocalDate dataEnvio) {}
+    /**
+     * Projecao para a lista de pendentes (aba "Pendentes de voto" do painel).
+     * {@code preemptivo}: badge de tipo (paciente preemptivo, 2026-08-27) -
+     * o avaliador precisa saber que e uma avaliacao de inserção em lista de
+     * espera renal, nao uma urgência, ja na listagem.
+     */
+    private record ParecerPendenteView(Long processoId, String processoNumero, LocalDate dataEnvio,
+                                       boolean preemptivo) {}
 
     /**
      * Projecao para o historico de votos do proprio avaliador. {@code processoId}
@@ -941,7 +955,7 @@ public class AvaliadorController {
      * iniciais/nao-lidas montados pelo controller.
      */
     private record ParecerHistoricoView(Long id, Long processoId, String processoNumero, ResultadoParecer resultado,
-                                        LocalDateTime dataHoraVoto, LocalDate dataResposta) {}
+                                        LocalDateTime dataHoraVoto, LocalDate dataResposta, boolean preemptivo) {}
 
     /**
      * Projecao para processos DISPENSADOS antes do avaliador conseguir votar
@@ -950,7 +964,7 @@ public class AvaliadorController {
      * DELIBERADAMENTE sem resultado da decisao nem qualquer dado de outro
      * avaliador (imparcialidade).
      */
-    private record ParecerDispensadoView(Long id, Long processoId, String processoNumero) {}
+    private record ParecerDispensadoView(Long id, Long processoId, String processoNumero, boolean preemptivo) {}
 
     /**
      * Projecao do material de informacao complementar liberado ao avaliador.

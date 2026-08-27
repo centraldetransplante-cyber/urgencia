@@ -172,6 +172,27 @@
                   da mae (opcional) numa terceira row, deliberadamente
                   separada da anterior.
              Nenhum name/id/required de campo mudou - so a disposicao. -->
+        <div class="secao-rotulo">Tipo de pedido</div>
+        <h2 class="secao-titulo">O paciente já está na lista de espera do SNT?</h2>
+        <div class="superficie-apoio p-3 mb-3">
+            <div class="row g-3">
+                <div class="col-12">
+                    <div class="btn-group" role="group" aria-label="Tipo de pedido">
+                        <input type="radio" class="btn-check" name="preemptivo" id="tipoUrgencia" value="false"
+                               th:checked="${!solicitacao.isPreemptivo()}" onchange="atualizarTipoSolicitacao(false)">
+                        <label class="btn btn-outline-primary" for="tipoUrgencia">Sim — é uma urgência renal</label>
+                        <input type="radio" class="btn-check" name="preemptivo" id="tipoPreemptivo" value="true"
+                               th:checked="${solicitacao.isPreemptivo() == true}" onchange="atualizarTipoSolicitacao(true)">
+                        <label class="btn btn-outline-warning" for="tipoPreemptivo">Não — é um pedido de inserção preemptiva</label>
+                    </div>
+                    <div class="form-text text-muted text-detail-xs">
+                        Preemptivo: o paciente ainda não está na lista de espera do SNT e este pedido é para
+                        avaliar a inserção dele na lista de espera renal (não é uma urgência).
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="secao-rotulo">Dados do paciente</div>
         <h2 class="secao-titulo">Paciente</h2>
         <div class="superficie-apoio p-3 mb-3">
@@ -182,12 +203,14 @@
                 </div>
             </div>
             <div class="row g-3 mt-0">
-                <div class="col-md-3">
-                    <label class="form-label" th:for="pacienteRgct">RGCT / SNT *</label>
-                    <input type="text" th:field="*{pacienteRgct}" class="form-control" placeholder="123456789-12345" required maxlength="60">
+                <div class="col-md-3" id="blocoPacienteRgct" th:style="${solicitacao.isPreemptivo()} ? 'display:none' : ''">
+                    <label class="form-label" th:for="pacienteRgct" id="labelPacienteRgct">RGCT / SNT *</label>
+                    <input type="text" th:field="*{pacienteRgct}" class="form-control" placeholder="123456789-12345" maxlength="60"
+                           th:classappend="${campoComErro == 'pacienteRgct'} ? 'is-invalid' : ''">
                     <div class="form-text text-muted text-detail-xs">
                         Registro no Sistema Nacional de Transplantes (SNT).
                     </div>
+                    <div class="invalid-feedback" th:if="${campoComErro == 'pacienteRgct'}" th:text="${erro}">Erro.</div>
                 </div>
                 <!-- Identificacao do paciente (2026-08-20): data de nascimento, CPF e
                      sexo obrigatorios; nome da mae opcional. Ver
@@ -218,9 +241,11 @@
             </div>
             <div class="row g-3 mt-0">
                 <div class="col-md-4">
-                    <label class="form-label" th:for="dataSituacaoEspecial">Data da urgência *</label>
+                    <label class="form-label" th:for="dataSituacaoEspecial" id="labelDataSituacaoEspecial"
+                           th:text="${solicitacao.isPreemptivo()} ? 'Data da solicitação *' : 'Data da urgência *'">Data da urgência *</label>
                     <input type="date" th:field="*{dataSituacaoEspecial}" class="form-control" required>
-                    <div class="form-text text-muted text-detail-xs">
+                    <div class="form-text text-muted text-detail-xs" id="textoAjudaData"
+                         th:text="${solicitacao.isPreemptivo()} ? 'Data do pedido de inserção na lista de espera.' : 'Quando a equipe constatou a urgência (não pode ser futura).'">
                         Quando a equipe constatou a urgência (não pode ser futura).
                     </div>
                 </div>
@@ -231,7 +256,8 @@
             </div>
         </div>
 
-        <div class="secao-rotulo">Por que a urgência se aplica</div>
+        <div class="secao-rotulo" id="labelJustificativa"
+             th:text="${T(br.gov.saude.sgpur.service.RotuloProcesso).rotuloJustificativa(solicitacao.preemptivo)}">Por que a urgência se aplica</div>
         <h2 class="secao-titulo">Justificativa clínica</h2>
         <div class="superficie-apoio p-3 mb-3">
             <label class="form-label" th:for="justificativaClinica">Descrição *</label>

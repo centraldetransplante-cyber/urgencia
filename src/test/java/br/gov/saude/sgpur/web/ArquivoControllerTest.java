@@ -106,6 +106,38 @@ class ArquivoControllerTest {
             StatusProcesso.DEFERIDO, StatusProcesso.INDEFERIDO, StatusProcesso.CANCELADO);
     }
 
+    /**
+     * RotuloProcesso.tipoCurto(Processo) - correcao de continuacao do PR
+     * #126 ("paciente preemptivo"): o Arquivo (processos encerrados) nao
+     * mostrava se o processo era preemptivo, mesmo padrao visual do badge
+     * ja usado em processos/lista.html.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void listaMostraBadgeDePreemptivoQuandoOProcessoForPreemptivo() throws Exception {
+        Processo preemptivo = processo(2L, "P-01/2026", "Fulano", "Equipe B", StatusProcesso.DEFERIDO);
+        preemptivo.setPreemptivo(true);
+        devolve(preemptivo);
+
+        mvc.perform(get("/arquivo"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Preemptivo")));
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void listaNaoMostraBadgeDePreemptivoParaProcessoComum() throws Exception {
+        Processo comum = processo(3L, "01/2026", "Ciclano", "Equipe C", StatusProcesso.INDEFERIDO);
+        comum.setPreemptivo(false);
+        devolve(comum);
+
+        String html = mvc.perform(get("/arquivo"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        assertThat(html).doesNotContain("Preemptivo");
+    }
+
     @Test
     @WithMockUser(roles = "OPERADOR")
     void repassaOTermoDeBuscaAoRepositorio() throws Exception {

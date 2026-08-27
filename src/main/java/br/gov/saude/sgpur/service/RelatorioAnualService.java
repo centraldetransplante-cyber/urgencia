@@ -286,17 +286,20 @@ public class RelatorioAnualService {
     // -----------------------------------------------------------------------
 
     private PdfPTable tabelaLista(List<Processo> processos) {
-        PdfPTable t = new PdfPTable(new float[]{1.4f, 2.6f, 1.6f, 1.6f, 3, 3, 3, 1.6f, 1.6f});
+        // Coluna "Tipo" (paciente preemptivo, 2026-08-27): UM relatorio unico
+        // cobrindo os dois tipos (Urgencia Renal / Preemptivo), decisao de
+        // produto - nunca duas secoes nem dois PDFs (ver §9.5 do plano).
+        PdfPTable t = new PdfPTable(new float[]{1.4f, 2.6f, 1.6f, 1.4f, 1.6f, 3, 3, 3, 1.6f, 1.6f});
         t.setWidthPercentage(100);
         t.setSpacingBefore(6);
         t.setHeaderRows(1);
-        cabecalho(t, "Nº/Ano", "Paciente", "RGCT", "Status",
+        cabecalho(t, "Nº/Ano", "Paciente", "RGCT", "Tipo", "Status",
             "Médico 1", "Médico 2", "Médico 3", "Cadastro", "Decisão");
 
         if (processos.isEmpty()) {
             PdfPCell vazio = new PdfPCell(new Phrase("Nenhum processo neste ano.",
                 FontFactory.getFont(FontFactory.HELVETICA_OBLIQUE, 9, CINZA)));
-            vazio.setColspan(9);
+            vazio.setColspan(10);
             vazio.setPadding(8);
             vazio.setHorizontalAlignment(Element.ALIGN_CENTER);
             vazio.setBorderColor(BORDA);
@@ -307,7 +310,9 @@ public class RelatorioAnualService {
         for (Processo p : processos) {
             celula(t, nvl(p.getNumero()));
             celula(t, nvl(p.getPacienteNome()));
-            celula(t, nvl(p.getPacienteRgct()));
+            // RGCT fica vazio no preemptivo (nunca tem, ver Processo.pacienteRgct).
+            celula(t, p.isPreemptivo() ? "-" : nvl(p.getPacienteRgct()));
+            celula(t, RotuloProcesso.tipoCurto(p));
             celula(t, PdfRelatorioBuilder.descricaoStatus(p.getStatus()));
 
             List<Parecer> pareceres = p.getPareceres();

@@ -141,7 +141,7 @@ public class SolicitanteController {
     public void initBinderSolicitacao(WebDataBinder binder) {
         binder.setAllowedFields(
             "pacienteNome", "pacienteRgct", "pacienteDataNascimento", "pacienteCpf", "pacienteSexo",
-            "pacienteNomeMae", "dataSituacaoEspecial", "justificativaClinica", "emailAdicional");
+            "pacienteNomeMae", "dataSituacaoEspecial", "justificativaClinica", "emailAdicional", "preemptivo");
     }
 
     @GetMapping
@@ -203,6 +203,7 @@ public class SolicitanteController {
             s.setPacienteSexo(r.getPacienteSexo());
             s.setPacienteNomeMae(r.getPacienteNomeMae());
             s.setEmailAdicional(r.getEmailAdicional());
+            s.setPreemptivo(r.getPreemptivo());
             s.setDataSituacaoEspecial(
                 r.getDataSituacaoEspecial() != null ? r.getDataSituacaoEspecial() : LocalDate.now());
             s.setJustificativaClinica(r.getJustificativaClinica());
@@ -240,11 +241,12 @@ public class SolicitanteController {
             @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dataSituacaoEspecial,
             @RequestParam(value = "justificativaClinica", required = false) String justificativaClinica,
             @RequestParam(value = "emailAdicional", required = false) String emailAdicional,
+            @RequestParam(value = "preemptivo", required = false) Boolean preemptivo,
             Principal principal) {
         Usuario usuario = resolverUsuario(principal);
         RascunhoSolicitacaoOnline r = rascunhoService.salvar(
             usuario.getId(), pacienteNome, pacienteRgct, pacienteDataNascimento, pacienteCpf, pacienteSexo,
-            pacienteNomeMae, dataSituacaoEspecial, justificativaClinica, emailAdicional);
+            pacienteNomeMae, dataSituacaoEspecial, justificativaClinica, emailAdicional, preemptivo);
         return Map.of("ok", true, "salvoEm", r.getAtualizadoEm().toString());
     }
 
@@ -339,6 +341,7 @@ public class SolicitanteController {
             case "Informe o CPF do paciente.",
                  "CPF do paciente invalido. Confira os digitos informados." -> "pacienteCpf";
             case "E-mail adicional invalido. Confira o endereco informado." -> "emailAdicional";
+            case "Informe o RGCT/SNT do paciente." -> "pacienteRgct";
             default -> null;
         };
     }

@@ -17,6 +17,8 @@
                 <h1 class="h4 mb-0">
                     <span th:text="${processo.identificacao()}">00/0000 - Paciente - RGCT</span>
                 </h1>
+                <span th:if="${processo.isPreemptivo()}" class="badge align-middle bg-warning text-dark fs-6 px-3 py-1 rounded-pill"
+                      title="Paciente ainda não está na lista de espera do SNT">Preemptivo</span>
                 <span class="badge align-middle fs-6 px-3 py-1 rounded-pill"
                       th:classappend="${processo.status.bootstrapBadge}">
                     <span th:replace="~{layout :: statusProcessoTexto(${processo.status}, ${deferidoPeloCoordenador})}">status</span>
@@ -1278,8 +1280,24 @@
                         </form>
                     </section>
 
-                    <!-- Comprovante SNT (apenas DEFERIDO) -->
-                    <section th:if="${processo.status.name() == 'DEFERIDO'}" class="subpasso"
+                    <!-- Paciente PREEMPTIVO (2026-08-27): nao tem comprovante SNT nenhum
+                         (ainda nao esta na lista de espera do SNT) - esta etapa NAO EXISTE
+                         nesse caso, nunca bloqueia a conclusao. -->
+                    <section th:if="${processo.status.name() == 'DEFERIDO' and processo.isPreemptivo()}"
+                             class="subpasso subpasso-ok">
+                        <header class="subpasso-head">
+                            <span class="subpasso-num"><i class="bi bi-check-lg"></i></span>
+                            <h3 class="h6 mb-0">Comprovante SNT</h3>
+                        </header>
+                        <p class="small text-muted mb-0">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Não se aplica: paciente preemptivo ainda não está na lista de espera
+                            do SNT, portanto não há comprovante de inserção a anexar.
+                        </p>
+                    </section>
+
+                    <!-- Comprovante SNT (apenas DEFERIDO e NAO preemptivo) -->
+                    <section th:if="${processo.status.name() == 'DEFERIDO' and !processo.isPreemptivo()}" class="subpasso"
                              th:classappend="${comprovanteSnT != null} ? 'subpasso-ok' : 'subpasso-atual'">
                         <header class="subpasso-head">
                             <span class="subpasso-num">

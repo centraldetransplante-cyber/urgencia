@@ -42,10 +42,26 @@ public class SolicitacaoOnline {
     @Column(name = "paciente_nome", nullable = false, length = 200)
     private String pacienteNome;
 
-    @NotBlank
+    /**
+     * Registro RGCT / SNT do paciente.
+     *
+     * <p><b>2026-08-27 (paciente preemptivo):</b> deixou de ter
+     * {@code @NotBlank} na ENTIDADE - ver o javadoc completo em
+     * {@link Processo#getPacienteRgct()}. Obrigatoriedade condicional
+     * ({@code !isPreemptivo()}) validada em
+     * {@code SolicitacaoOnlineService.criar}.</p>
+     */
     @Size(max = 60, message = "Registro RGCT/SNT muito longo (maximo 60 caracteres).")
     @Column(name = "paciente_rgct", length = 60)
     private String pacienteRgct;
+
+    /**
+     * Paciente PREEMPTIVO: ver javadoc completo em
+     * {@link Processo#getPreemptivo()}. Espelhado no {@code Processo} na
+     * conversao ({@code ProcessoDetalheController.novo}).
+     */
+    @Column(name = "preemptivo")
+    private Boolean preemptivo;
 
     /**
      * Data de nascimento, CPF (so digitos) e sexo do paciente.
@@ -207,6 +223,19 @@ public class SolicitacaoOnline {
 
     public void setPacienteRgct(String pacienteRgct) {
         this.pacienteRgct = pacienteRgct;
+    }
+
+    public Boolean getPreemptivo() {
+        return preemptivo;
+    }
+
+    public void setPreemptivo(Boolean preemptivo) {
+        this.preemptivo = preemptivo;
+    }
+
+    /** Null-safe: null (legado) == urgencia renal comum. */
+    public boolean isPreemptivo() {
+        return Boolean.TRUE.equals(preemptivo);
     }
 
     public LocalDate getPacienteDataNascimento() {

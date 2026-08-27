@@ -1,9 +1,55 @@
+// === SAUR - paciente preemptivo (2026-08-27): alterna a obrigatoriedade/
+// visibilidade do RGCT e o rotulo da data conforme o tipo de pedido
+// escolhido. So UX/apresentacao - a regra de verdade (RGCT obrigatorio so
+// para urgencia renal comum) mora sempre no backend
+// (SolicitacaoOnlineService.criar), nunca so aqui. ===
+function atualizarTipoSolicitacao(preemptivo) {
+    var campoRgct = document.getElementById('pacienteRgct');
+    var blocoRgct = document.getElementById('blocoPacienteRgct');
+    var labelData = document.getElementById('labelDataSituacaoEspecial');
+    var textoAjudaData = document.getElementById('textoAjudaData');
+    var labelJustificativa = document.getElementById('labelJustificativa');
+
+    if (campoRgct) {
+        campoRgct.required = !preemptivo;
+        if (preemptivo) {
+            campoRgct.value = '';
+        }
+    }
+    if (blocoRgct) {
+        blocoRgct.style.display = preemptivo ? 'none' : '';
+    }
+    if (labelData) {
+        labelData.textContent = preemptivo ? 'Data da solicitação *' : 'Data da urgência *';
+    }
+    if (textoAjudaData) {
+        textoAjudaData.textContent = preemptivo
+            ? 'Data do pedido de inserção na lista de espera.'
+            : 'Quando a equipe constatou a urgência (não pode ser futura).';
+    }
+    // Rotulo "Por que a urgencia se aplica" | "Por que a insercao preemptiva
+    // se aplica" - mesmo vocabulario de RotuloProcesso.rotuloJustificativa
+    // (Java), aqui so espelhado em JS para nao exigir round-trip ao servidor
+    // ao trocar o radio de tipo.
+    if (labelJustificativa) {
+        labelJustificativa.textContent = preemptivo
+            ? 'Por que a inserção preemptiva se aplica'
+            : 'Por que a urgência se aplica';
+    }
+}
+
 // Feedback do formulario de Nova solicitacao (Portal do Solicitante):
 // contador de caracteres da justificativa clinica e lista de arquivos
 // selecionados com opcao de remover um por um. Nao valida tipo/tamanho real
 // dos arquivos (isso e feito no servidor) - so ajuda o solicitante a ver e
 // corrigir o que escolheu antes de enviar.
 document.addEventListener('DOMContentLoaded', function () {
+    // Sincroniza o estado inicial (obrigatoriedade do RGCT/rotulo da data)
+    // com o radio de tipo ja marcado pelo servidor (rascunho salvo ou
+    // reexibicao apos erro de validacao).
+    var radioPreemptivoInicial = document.getElementById('tipoPreemptivo');
+    atualizarTipoSolicitacao(!!(radioPreemptivoInicial && radioPreemptivoInicial.checked));
+
     // Bloqueia data futura no campo "Data em que a urgencia foi identificada".
     // Calculado em JS (nao via Thymeleaf/SpringEL no atributo "max") porque
     // T(java.time.LocalDate) e instanciacao de objeto sao bloqueados nesse
@@ -85,6 +131,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var campoData = document.getElementById('dataSituacaoEspecial');
             var campoJustificativa = document.getElementById('justificativaClinica');
             var campoEmailAdicional = document.getElementById('emailAdicional');
+            var radioPreemptivo = document.getElementById('tipoPreemptivo');
 
             var params = new URLSearchParams();
             params.set('pacienteNome', (campoNome && campoNome.value) || '');
@@ -92,6 +139,7 @@ document.addEventListener('DOMContentLoaded', function () {
             params.set('dataSituacaoEspecial', (campoData && campoData.value) || '');
             params.set('justificativaClinica', (campoJustificativa && campoJustificativa.value) || '');
             params.set('emailAdicional', (campoEmailAdicional && campoEmailAdicional.value) || '');
+            params.set('preemptivo', String(!!(radioPreemptivo && radioPreemptivo.checked)));
 
             var headers = {'Content-Type': 'application/x-www-form-urlencoded'};
             if (csrfHeader && csrfToken) {
