@@ -1,8 +1,11 @@
-// === SAUR - paciente preemptivo (2026-08-27): alterna a obrigatoriedade/
-// visibilidade do RGCT e o rotulo da data conforme o tipo de pedido
-// escolhido. So UX/apresentacao - a regra de verdade (RGCT obrigatorio so
-// para urgencia renal comum) mora sempre no backend
-// (SolicitacaoOnlineService.criar), nunca so aqui. ===
+// === SAUR - paciente preemptivo (2026-08-27, ajustado no mesmo dia para
+// checkbox unico opcional): alterna a obrigatoriedade/visibilidade do RGCT
+// e o rotulo da data conforme o tipo de pedido escolhido. So UX/apresentacao
+// - a regra de verdade (RGCT obrigatorio so para urgencia renal comum) mora
+// sempre no backend (SolicitacaoOnlineService.criar), nunca so aqui.
+// "preemptivo" aqui e so um boolean (o estado .checked do checkbox
+// #tipoPreemptivo) - desmarcado = urgencia renal (caso padrao, sem exigir
+// nenhum clique do solicitante), marcado = preemptivo. ===
 function atualizarTipoSolicitacao(preemptivo) {
     var campoRgct = document.getElementById('pacienteRgct');
     var blocoRgct = document.getElementById('blocoPacienteRgct');
@@ -45,10 +48,10 @@ function atualizarTipoSolicitacao(preemptivo) {
 // corrigir o que escolheu antes de enviar.
 document.addEventListener('DOMContentLoaded', function () {
     // Sincroniza o estado inicial (obrigatoriedade do RGCT/rotulo da data)
-    // com o radio de tipo ja marcado pelo servidor (rascunho salvo ou
-    // reexibicao apos erro de validacao).
-    var radioPreemptivoInicial = document.getElementById('tipoPreemptivo');
-    atualizarTipoSolicitacao(!!(radioPreemptivoInicial && radioPreemptivoInicial.checked));
+    // com o checkbox de tipo ja marcado/desmarcado pelo servidor (rascunho
+    // salvo ou reexibicao apos erro de validacao).
+    var checkboxPreemptivoInicial = document.getElementById('tipoPreemptivo');
+    atualizarTipoSolicitacao(!!(checkboxPreemptivoInicial && checkboxPreemptivoInicial.checked));
 
     // Bloqueia data futura no campo "Data em que a urgencia foi identificada".
     // Calculado em JS (nao via Thymeleaf/SpringEL no atributo "max") porque
@@ -131,7 +134,7 @@ document.addEventListener('DOMContentLoaded', function () {
             var campoData = document.getElementById('dataSituacaoEspecial');
             var campoJustificativa = document.getElementById('justificativaClinica');
             var campoEmailAdicional = document.getElementById('emailAdicional');
-            var radioPreemptivo = document.getElementById('tipoPreemptivo');
+            var checkboxPreemptivo = document.getElementById('tipoPreemptivo');
 
             var params = new URLSearchParams();
             params.set('pacienteNome', (campoNome && campoNome.value) || '');
@@ -139,7 +142,7 @@ document.addEventListener('DOMContentLoaded', function () {
             params.set('dataSituacaoEspecial', (campoData && campoData.value) || '');
             params.set('justificativaClinica', (campoJustificativa && campoJustificativa.value) || '');
             params.set('emailAdicional', (campoEmailAdicional && campoEmailAdicional.value) || '');
-            params.set('preemptivo', String(!!(radioPreemptivo && radioPreemptivo.checked)));
+            params.set('preemptivo', String(!!(checkboxPreemptivo && checkboxPreemptivo.checked)));
 
             var headers = {'Content-Type': 'application/x-www-form-urlencoded'};
             if (csrfHeader && csrfToken) {

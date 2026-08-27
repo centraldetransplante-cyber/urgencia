@@ -172,22 +172,29 @@
                   da mae (opcional) numa terceira row, deliberadamente
                   separada da anterior.
              Nenhum name/id/required de campo mudou - so a disposicao. -->
+        <!-- 2026-08-27 (feedback direto do usuario): o caso padrao/mais comum
+             (urgencia renal) nao deve exigir nenhum clique do solicitante -
+             trocado de "2 radios obrigatorios" para 1 checkbox OPCIONAL,
+             desmarcado por padrao. Desmarcado = urgencia renal (comportamento
+             de sempre); marcado = preemptivo. th:field num campo Boolean
+             cuida do checked inicial E gera sozinho o hidden "_preemptivo"
+             que faz o Spring tratar "nao marcado" como false (padrao
+             Thymeleaf/Spring para checkbox, sem input extra). -->
         <div class="secao-rotulo">Tipo de pedido</div>
-        <h2 class="secao-titulo">O paciente já está na lista de espera do SNT?</h2>
+        <h2 class="secao-titulo">Este pedido é de inserção preemptiva?</h2>
         <div class="superficie-apoio p-3 mb-3">
             <div class="row g-3">
                 <div class="col-12">
-                    <div class="btn-group" role="group" aria-label="Tipo de pedido">
-                        <input type="radio" class="btn-check" name="preemptivo" id="tipoUrgencia" value="false"
-                               th:checked="${!solicitacao.isPreemptivo()}" onchange="atualizarTipoSolicitacao(false)">
-                        <label class="btn btn-outline-primary" for="tipoUrgencia">Sim — é uma urgência renal</label>
-                        <input type="radio" class="btn-check" name="preemptivo" id="tipoPreemptivo" value="true"
-                               th:checked="${solicitacao.isPreemptivo() == true}" onchange="atualizarTipoSolicitacao(true)">
-                        <label class="btn btn-outline-warning" for="tipoPreemptivo">Não — é um pedido de inserção preemptiva</label>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="tipoPreemptivo"
+                               th:field="*{preemptivo}" onchange="atualizarTipoSolicitacao(this.checked)">
+                        <label class="form-check-label" for="tipoPreemptivo">
+                            Este é um pedido de inserção preemptiva (paciente ainda não está na lista de espera do SNT)
+                        </label>
                     </div>
                     <div class="form-text text-muted text-detail-xs">
-                        Preemptivo: o paciente ainda não está na lista de espera do SNT e este pedido é para
-                        avaliar a inserção dele na lista de espera renal (não é uma urgência).
+                        Deixe desmarcado se for uma urgência renal (caso mais comum). Marque apenas quando o
+                        pedido for para avaliar a inserção do paciente na lista de espera renal — não é uma urgência.
                     </div>
                 </div>
             </div>
