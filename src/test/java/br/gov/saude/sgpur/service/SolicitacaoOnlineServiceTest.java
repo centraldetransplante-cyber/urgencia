@@ -119,6 +119,42 @@ class SolicitacaoOnlineServiceTest {
         assertThat(salva.getDataEnvio()).isBetween(antes, depois);
     }
 
+    /**
+     * Defesa em profundidade contra duplo-submit (2026-08-27): a checagem no
+     * repository consultada por criar() - ver
+     * SolicitacaoOnlineDuplicidadeIntegrationTest para o teste de integracao
+     * real (contexto Spring + H2) que confirma a gravacao unica ponta a
+     * ponta; aqui so o comportamento unitario do IllegalStateException.
+     */
+    @Test
+    void criarComDuplicataRecenteDoMesmoUsuarioEPacienteLancaExcecaoENaoSalva() {
+        when(repository.existsByUsuarioSolicitanteIdAndPacienteCpfAndDataEnvioAfter(
+                any(), any(), any())).thenReturn(true);
+        Usuario usuario = usuarioSolicitante(1L);
+
+        assertThatThrownBy(() -> service.criar(solicitacaoPedido(), usuario, null))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Ja recebemos uma solicitacao");
+
+        org.mockito.Mockito.verify(repository, org.mockito.Mockito.never()).save(any());
+    }
+
+    /**
+     * Sem duplicata recente (o caso comum), criar() continua funcionando
+     * normalmente - a guarda nunca deve atrapalhar o caminho feliz.
+     */
+    @Test
+    void criarSemDuplicataRecenteContinuaFuncionandoNormalmente() {
+        when(repository.existsByUsuarioSolicitanteIdAndPacienteCpfAndDataEnvioAfter(
+                any(), any(), any())).thenReturn(false);
+        when(repository.save(any(SolicitacaoOnline.class))).thenAnswer(inv -> inv.getArgument(0));
+        Usuario usuario = usuarioSolicitante(1L);
+
+        SolicitacaoOnline salva = service.criar(solicitacaoPedido(), usuario, null);
+
+        assertThat(salva.getStatus()).isEqualTo(StatusSolicitacaoOnline.ENVIADA);
+    }
+
     @Test
     void criarComUsuarioSemEquipeVinculadaLancaExcecao() {
         Usuario usuario = usuarioSolicitante(1L);

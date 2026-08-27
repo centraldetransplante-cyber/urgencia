@@ -231,6 +231,8 @@
                             <div class="fw-medium text-wrap"
                                  th:text="${l.processo.pacienteNome}"
                                  th:title="${l.processo.pacienteNome}">Paciente</div>
+                            <span th:if="${l.processo.isPreemptivo()}" class="badge bg-warning text-dark"
+                                  th:text="${T(br.gov.saude.sgpur.service.RotuloProcesso).tipoCurto(l.processo)}">Preemptivo</span>
                             <div class="text-muted text-wrap text-detail-xs"
                                  th:text="${l.processo.solicitanteEquipe}"
                                  th:title="${l.processo.solicitanteEquipe}">Solicitante</div>

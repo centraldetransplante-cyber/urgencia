@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -146,4 +147,17 @@ public interface SolicitacaoOnlineRepository extends JpaRepository<SolicitacaoOn
         where s.id = :id
         """)
     Optional<String> findNomeSolicitanteById(@Param("id") Long id);
+
+    /**
+     * Defesa em profundidade contra duplo-submit (2026-08-27): detecta se o
+     * MESMO usuario solicitante ja enviou uma solicitacao para o MESMO CPF de
+     * paciente depois de {@code desde} (chamado com "agora - 15s" por
+     * {@code SolicitacaoOnlineService#criar}). Nao depende de nenhum estado
+     * client-side (token, sessao) - cobre tambem reenvio manual (F5 num POST,
+     * reabrir aba antiga), nao so o duplo clique que a trava de front-end
+     * (`lockSubmitScript`) ja evita na maioria dos casos. Ver causa raiz em
+     * docs/RELATORIO-BUG-DUPLICACAO-E-COBERTURA-BADGE-PREEMPTIVO-2026-08-27.md.
+     */
+    boolean existsByUsuarioSolicitanteIdAndPacienteCpfAndDataEnvioAfter(
+        Long usuarioSolicitanteId, String pacienteCpf, LocalDateTime desde);
 }

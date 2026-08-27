@@ -214,6 +214,46 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   - Ver o bullet "Deferido exige anexar o comprovante..." abaixo para a
     exceção do Comprovante SNT (paciente preemptivo não tem, a decisão só
     AUTORIZA a equipe a inscrever depois, fora do sistema).
+  - **Badge de tipo cobre também o lado do Solicitante e o Painel do
+    operador (2026-08-27, continuação do PR #126/#127):**
+    `RotuloProcesso.tipoCurto` (mesmo badge visual já usado em
+    `processos/lista.html`/`avaliador/lista.html`) foi adicionado em
+    `solicitante/lista.html` ("Minhas solicitações", tabela desktop E card
+    mobile), `solicitante/detalhe.html` (no `<h1>`, ao lado do nome do
+    paciente) e `dashboard.html` (na célula de paciente de cada linha da
+    tabela do Painel) — os 3 pontos que ainda faltavam num levantamento
+    completo de `templates/**/*.html`. Os TÍTULOS gerais/compartilhados
+    (ex. "Painel da Urgência Renal") continuam sem mudar — decisão de
+    produto já fixada, só a LINHA de cada processo/pedido preemptivo ganhou
+    o badge.
+  - **Duplo-submit em `solicitante/nova.html` causava solicitação
+    duplicada (bug real relatado, corrigido em 2026-08-27) — causa raiz:
+    `data-lock-submit` sem o script correspondente.** O `<form>` desse
+    template marcava `data-lock-submit` mas nunca incluía
+    `<script th:replace="~{layout :: lockSubmitScript}"></script>` (o
+    script que lê esse atributo e desabilita o botão) — único template dos
+    5 que usam `data-lock-submit` com essa lacuna. Sem o script, o
+    atributo `data-*` é ignorado pelo navegador: o botão "Enviar
+    solicitação" nunca ficava desabilitado, e como é um POST clássico
+    (não-AJAX) com upload de anexos, a página ficava interativa por vários
+    segundos — janela real para um segundo clique disparar um segundo POST
+    idêntico. Corrigido em duas camadas: (1) o `<script>` foi incluído no
+    template (mesma convenção de `processos/detalhe.html`/`editar.html`/
+    `form.html`/`solicitante/detalhe.html`); (2) defesa em profundidade no
+    backend — `SolicitacaoOnlineService.criar` rejeita (`IllegalStateException`,
+    mesmo caminho gracioso das demais validações) uma nova solicitação do
+    MESMO usuário + MESMO CPF de paciente enviada nos últimos 15s
+    (`SolicitacaoOnlineRepository
+    .existsByUsuarioSolicitanteIdAndPacienteCpfAndDataEnvioAfter`), cobrindo
+    também reenvio manual (F5, aba antiga reaberta) que não depende de
+    nenhum estado client-side. Janela curta de propósito — nunca bloqueia
+    um reenvio legítimo depois dela nem um segundo paciente diferente do
+    mesmo usuário. Ver
+    `docs/RELATORIO-BUG-DUPLICACAO-E-COBERTURA-BADGE-PREEMPTIVO-2026-08-27.md`
+    para o diagnóstico completo (mesma classe de bug já documentada no
+    CLAUDE.md para `/*[[expr]]*/` sem `th:inline="javascript"`: um wiring
+    de duas partes onde só metade foi feita, sem erro visível no caminho
+    feliz).
   - Desenho completo e decisões fechadas em
     `docs/PLANO-PACIENTE-PREEMPTIVO-2026-08-27.md`.
 - **Exceção — coordenador CET-RS defere sozinho:** se o médico marcado como

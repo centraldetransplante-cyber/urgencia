@@ -463,6 +463,25 @@ public class SolicitacaoOnlineService {
             throw new IllegalArgumentException("CPF do paciente invalido. Confira os digitos informados.");
         }
         solicitacao.setPacienteCpf(cpfDigits);
+        // Defesa em profundidade contra duplo-submit (2026-08-27): a causa raiz
+        // real era o formulario solicitante/nova.html marcar data-lock-submit
+        // sem incluir o script que le esse atributo (lockSubmitScript), entao o
+        // botao "Enviar solicitacao" nunca era desabilitado apos o clique - um
+        // POST classico (nao-AJAX) com upload de anexos deixa a pagina
+        // interativa por varios segundos, o suficiente para um segundo clique
+        // disparar um segundo POST identico. Corrigido no template, mas essa
+        // checagem cobre tambem reenvio manual (F5, aba antiga reaberta) que
+        // nao depende de nenhum estado client-side. Duas solicitacoes
+        // genuinamente distintas para o MESMO paciente enviadas pelo MESMO
+        // usuario em menos de 15s seriam uma coincidencia extrema, nao um caso
+        // de uso real - ver
+        // docs/RELATORIO-BUG-DUPLICACAO-E-COBERTURA-BADGE-PREEMPTIVO-2026-08-27.md.
+        if (repository.existsByUsuarioSolicitanteIdAndPacienteCpfAndDataEnvioAfter(
+                usuarioLogado.getId(), cpfDigits, LocalDateTime.now().minusSeconds(15))) {
+            throw new IllegalStateException(
+                "Ja recebemos uma solicitacao para este paciente ha poucos segundos. "
+                + "Aguarde um instante e confira em \"Minhas solicitacoes\" antes de enviar novamente.");
+        }
         // RGCT condicionalmente obrigatorio (paciente preemptivo, 2026-08-27):
         // ainda nao esta na lista de espera do SNT, entao nao tem RGCT - ver
         // javadoc de SolicitacaoOnline.pacienteRgct/Processo.pacienteRgct.
