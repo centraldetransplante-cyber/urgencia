@@ -143,6 +143,27 @@ class SolicitanteControllerTest {
             .andExpect(view().name("solicitante/detalhe"));
     }
 
+    /**
+     * Cobertura do badge de tipo (RotuloProcesso.tipoCurto) - correcao de
+     * 2026-08-27 (continuacao do PR #126/#127): o detalhe de UMA solicitacao
+     * do Portal do Solicitante mostrava nome do paciente + numero do
+     * processo, mas nao o tipo do pedido.
+     */
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void detalheMostraBadgeDePreemptivoQuandoASolicitacaoForPreemptiva() throws Exception {
+        solicitacaoDoDono.setPreemptivo(true);
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.buscarParaDetalhe(50L)).thenReturn(solicitacaoDoDono);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(0, "bg-secondary"));
+        when(mensagemService.listarPorSolicitacao(50L)).thenReturn(java.util.List.of());
+
+        mvc.perform(get("/solicitante/50"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Preemptivo")));
+    }
+
     // O retorno da equipe NUNCA e "so por e-mail": o proprio Portal mostra a
     // situacao e a decisao a qualquer momento. O cartao de "Aguardando triagem"
     // dizia que o solicitante "sera avisado por e-mail", sugerindo que ele
@@ -306,6 +327,48 @@ class SolicitanteControllerTest {
             .andExpect(view().name("solicitante/lista"))
             .andExpect(model().attributeExists("resumo"))
             .andExpect(model().attributeExists("diasEspera"));
+    }
+
+    /**
+     * Cobertura do badge de tipo (RotuloProcesso.tipoCurto) - correcao de
+     * 2026-08-27 (continuacao do PR #126/#127): "Minhas solicitacoes" nao
+     * mostrava se o pedido era preemptivo, mesmo padrao visual ja usado em
+     * processos/lista.html e avaliador/lista.html.
+     */
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void listaMostraBadgeDePreemptivoQuandoASolicitacaoForPreemptiva() throws Exception {
+        solicitacaoDoDono.setPreemptivo(true);
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.listarMinhas(1L)).thenReturn(java.util.List.of(solicitacaoDoDono));
+        when(solicitacaoService.resumir(java.util.List.of(solicitacaoDoDono)))
+            .thenReturn(new br.gov.saude.sgpur.service.SolicitacaoOnlineService.Resumo(1, 1, 0, 0, 0));
+        when(mensagemService.contarNaoLidasSolicitantePorSolicitacao(any(), any())).thenReturn(0L);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(2, "bg-secondary"));
+
+        mvc.perform(get("/solicitante"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Preemptivo")));
+    }
+
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void listaNaoMostraBadgeDePreemptivoParaSolicitacaoComum() throws Exception {
+        solicitacaoDoDono.setPreemptivo(false);
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.listarMinhas(1L)).thenReturn(java.util.List.of(solicitacaoDoDono));
+        when(solicitacaoService.resumir(java.util.List.of(solicitacaoDoDono)))
+            .thenReturn(new br.gov.saude.sgpur.service.SolicitacaoOnlineService.Resumo(1, 1, 0, 0, 0));
+        when(mensagemService.contarNaoLidasSolicitantePorSolicitacao(any(), any())).thenReturn(0L);
+        when(solicitacaoService.diasEspera(solicitacaoDoDono))
+            .thenReturn(new SolicitacaoOnlineService.DiasEspera(2, "bg-secondary"));
+
+        String html = mvc.perform(get("/solicitante"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html).doesNotContain("Preemptivo");
     }
 
     @Test
@@ -560,6 +623,33 @@ class SolicitanteControllerTest {
             // Regressao (2026-08): sem isso o <select> de Sexo reexibido ficava
             // so com a opcao "Selecione", sem NENHUM valor disponivel - o GET
             // populava opcoesSexo, mas o catch do POST nao.
+            .andExpect(model().attributeExists("opcoesSexo"));
+    }
+
+    /**
+     * Defesa em profundidade contra duplo-submit (2026-08-27): a rejeicao de
+     * SolicitacaoOnlineService.criar (IllegalStateException) devolve o
+     * formulario com flash de erro, nunca 500 - mesmo caminho gracioso do
+     * catch (IllegalArgumentException | IllegalStateException) ja coberto
+     * acima para outras validacoes de negocio.
+     */
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void criarComDuplicataRecenteVoltaParaOFormularioComMensagemDeErro() throws Exception {
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(solicitacaoService.criar(any(SolicitacaoOnline.class), eq(dono), any()))
+            .thenThrow(new IllegalStateException(
+                "Ja recebemos uma solicitacao para este paciente ha poucos segundos."));
+
+        mvc.perform(multipart("/solicitante/nova")
+                .param("pacienteNome", "Ciclano da Silva")
+                .param("pacienteRgct", "987654321-12345")
+                .param("dataSituacaoEspecial", LocalDate.now().toString())
+                .param("justificativaClinica", "Quadro clinico grave.")
+                .with(csrf()))
+            .andExpect(status().isOk())
+            .andExpect(view().name("solicitante/nova"))
+            .andExpect(model().attributeExists("erro"))
             .andExpect(model().attributeExists("opcoesSexo"));
     }
 

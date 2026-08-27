@@ -336,6 +336,51 @@ class HomeControllerTest {
      * Guarda barata: falha se o `<thead>` do Painel ganhar `sticky-top` de
      * novo (nenhuma outra tela do sistema usa esse padrão).
      */
+    /**
+     * Cobertura do badge de tipo (RotuloProcesso.tipoCurto) - correcao de
+     * 2026-08-27 (continuacao do PR #126/#127): a linha de cada processo na
+     * tabela do Painel nao mostrava se era preemptivo (so existia em
+     * processos/lista.html, uma tela diferente). O titulo GERAL "Painel da
+     * Urgência Renal" continua o mesmo - decisao de produto ja fixada, nao
+     * mexida aqui.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void linhaDaTabelaMostraBadgeDePreemptivoQuandoOProcessoForPreemptivo() throws Exception {
+        int ano = Year.now().getValue();
+        Processo preemptivo = processo(1L, 1, StatusProcesso.SOLICITADO);
+        preemptivo.setPreemptivo(true);
+        when(processoRepository.findByAnoComPareceres(ano)).thenReturn(List.of(preemptivo));
+        when(membroService.contarAtivos()).thenReturn(0L);
+        when(tempoRespostaService.calcular()).thenReturn(
+            new TempoRespostaService.ResumoTempo(0, null, 0, 7, Map.of()));
+
+        String html = mvc.perform(get("/"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html).contains("Preemptivo");
+        org.assertj.core.api.Assertions.assertThat(html).contains("Painel da Urgência Renal");
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void linhaDaTabelaNaoMostraBadgeDePreemptivoParaProcessoComum() throws Exception {
+        int ano = Year.now().getValue();
+        Processo comum = processo(1L, 1, StatusProcesso.SOLICITADO);
+        comum.setPreemptivo(false);
+        when(processoRepository.findByAnoComPareceres(ano)).thenReturn(List.of(comum));
+        when(membroService.contarAtivos()).thenReturn(0L);
+        when(tempoRespostaService.calcular()).thenReturn(
+            new TempoRespostaService.ResumoTempo(0, null, 0, 7, Map.of()));
+
+        String html = mvc.perform(get("/"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html).doesNotContain("Preemptivo");
+    }
+
     @Test
     @WithMockUser(roles = "OPERADOR")
     void cabecalhoDaTabelaDoPainelNaoUsaStickyTop() throws Exception {

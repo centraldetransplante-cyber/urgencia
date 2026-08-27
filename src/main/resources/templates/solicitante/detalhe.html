@@ -22,6 +22,8 @@
             </a>
             <h1 class="pagina-titulo mt-2">
                 <span th:text="${solicitacao.pacienteNome}">Paciente</span>
+                <span th:if="${solicitacao.isPreemptivo()}" class="badge bg-warning text-dark"
+                      th:text="${T(br.gov.saude.sgpur.service.RotuloProcesso).tipoCurto(solicitacao)}">Preemptivo</span>
                 <span th:if="${situacao.numeroProcesso != null}" class="chip-protocolo"
                       th:text="'Processo ' + ${situacao.numeroProcesso}">Processo 00/0000</span>
             </h1>

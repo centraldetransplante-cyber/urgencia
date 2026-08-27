@@ -167,7 +167,11 @@
                         th:attr="data-categoria=${categoria},
                                  data-nome=${#strings.toLowerCase(s.pacienteNome)},
                                  data-rgct=${#strings.toLowerCase(s.pacienteRgct)}">
-                        <td th:text="${s.pacienteNome}">Paciente</td>
+                        <td>
+                            <span th:text="${s.pacienteNome}">Paciente</span>
+                            <span th:if="${s.isPreemptivo()}" class="badge bg-warning text-dark ms-1"
+                                  th:text="${T(br.gov.saude.sgpur.service.RotuloProcesso).tipoCurto(s)}">Preemptivo</span>
+                        </td>
                         <td th:text="${s.pacienteRgct}">RGCT</td>
                         <td class="small font-monospace"
                             th:text="${s.processoGerado != null} ? ('#' + ${s.processoGerado.numero}) : '-'">-</td>
@@ -257,7 +261,11 @@
                     data-rgct=${#strings.toLowerCase(s.pacienteRgct)}">
             <div class="card-body py-3">
                 <div class="d-flex justify-content-between align-items-start gap-2 mb-1">
-                    <span class="fw-semibold" th:text="${s.pacienteNome}">Paciente</span>
+                    <span>
+                        <span class="fw-semibold" th:text="${s.pacienteNome}">Paciente</span>
+                        <span th:if="${s.isPreemptivo()}" class="badge bg-warning text-dark ms-1"
+                              th:text="${T(br.gov.saude.sgpur.service.RotuloProcesso).tipoCurto(s)}">Preemptivo</span>
+                    </span>
                     <span class="d-flex align-items-center gap-1 flex-shrink-0">
                         <span th:if="${mensagensNaoLidas.get(s.id)}"
                               class="badge bg-warning text-dark" title="Nova resposta da equipe">
