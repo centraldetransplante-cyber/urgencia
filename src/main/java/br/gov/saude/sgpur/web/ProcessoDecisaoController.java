@@ -10,6 +10,7 @@ import br.gov.saude.sgpur.service.GeminiService;
 import br.gov.saude.sgpur.service.ProcessoService;
 import br.gov.saude.sgpur.service.ProcessoValidator;
 import br.gov.saude.sgpur.service.RegistroEnvioService;
+import br.gov.saude.sgpur.service.RotuloProcesso;
 import br.gov.saude.sgpur.service.dto.EmailTemplate;
 import br.gov.saude.sgpur.web.dto.AcaoResponse;
 import br.gov.saude.sgpur.web.dto.EmailPreviewResponse;
@@ -408,7 +409,7 @@ public class ProcessoDecisaoController {
         }
         String prompt = "Voce e um assistente administrativo de um orgao publico de saude do Brasil. "
             + "Com base nas justificativas tecnicas abaixo, dadas por medicos avaliadores que "
-            + "consideraram um pedido de urgencia renal desfavoravel, redija um texto formal, "
+            + "consideraram um pedido de " + RotuloProcesso.tipoPedido(p) + " desfavoravel, redija um texto formal, "
             + "objetivo e em portugues do Brasil para o campo \"motivo do indeferimento\" de um "
             + "oficio administrativo. Nao invente informacoes que nao estejam nas justificativas. "
             + "Responda apenas com o texto do motivo, sem introducao nem explicacoes.\n\n"
