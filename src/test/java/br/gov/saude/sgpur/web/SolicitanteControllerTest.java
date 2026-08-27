@@ -705,6 +705,49 @@ class SolicitanteControllerTest {
             .andExpect(content().string(org.hamcrest.Matchers.containsString("Rascunho da justificativa.")));
     }
 
+    /**
+     * RotuloProcesso.rotuloJustificativa (correcao de continuacao do PR #126,
+     * "paciente preemptivo") - o rotulo do campo "Justificativa clinica" no
+     * formulario do Portal do Solicitante precisa trocar conforme o tipo do
+     * pedido: "Por que a urgencia se aplica" (comum) ou "Por que a insercao
+     * preemptiva se aplica" (preemptivo). O metodo existia mas nunca era
+     * chamado - o rotulo ficava sempre fixo no primeiro texto.
+     */
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void novaComRascunhoPreemptivoUsaRotuloDeJustificativaPreemptiva() throws Exception {
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        br.gov.saude.sgpur.domain.RascunhoSolicitacaoOnline rascunho =
+            new br.gov.saude.sgpur.domain.RascunhoSolicitacaoOnline();
+        rascunho.setId(20L);
+        rascunho.setUsuarioSolicitante(dono);
+        rascunho.setPreemptivo(true);
+        rascunho.setAtualizadoEm(java.time.LocalDateTime.of(2026, 8, 27, 9, 0));
+        when(rascunhoService.buscarPorUsuario(1L)).thenReturn(Optional.of(rascunho));
+
+        // Assercao NEGATIVA restrita ao rotulo da secao (id="labelJustificativa"),
+        // nao ao texto inteiro da pagina: o checklist de ajuda ("O que a
+        // equipe precisa saber") sempre lista o item estatico "Por que a
+        // urgência se aplica agora" mesmo num pedido preemptivo - so o
+        // ROTULO da secao e dinamico.
+        mvc.perform(get("/solicitante/nova"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "id=\"labelJustificativa\">Por que a inserção preemptiva se aplica")));
+    }
+
+    @Test
+    @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
+    void novaSemRascunhoUsaRotuloDeJustificativaDeUrgenciaComum() throws Exception {
+        when(usuarioRepo.findByUsername("solicitante1")).thenReturn(Optional.of(dono));
+        when(rascunhoService.buscarPorUsuario(1L)).thenReturn(Optional.empty());
+
+        mvc.perform(get("/solicitante/nova"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "Por que a urgência se aplica")));
+    }
+
     @Test
     @WithMockUser(username = "solicitante1", roles = "SOLICITANTE")
     void salvarRascunhoAceitaCamposParciaisEDevolveHorarioDeSalvamento() throws Exception {

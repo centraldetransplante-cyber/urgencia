@@ -143,7 +143,9 @@
             <div>
                 <label class="form-label" th:for="observacoes">Observações</label>
                 <textarea th:field="*{observacoes}" class="form-control" rows="8"></textarea>
-                <div class="form-text">Pré-preenchido com a justificativa clínica enviada pelo solicitante — revise
+                <div class="form-text" id="textoAjudaObservacoes"
+                     th:text="'Pré-preenchido com \'' + ${T(br.gov.saude.sgpur.service.RotuloProcesso).rotuloJustificativa(processo.preemptivo)} + '\' enviado(a) pelo solicitante — revise com atenção antes de cadastrar.'">
+                    Pré-preenchido com a justificativa clínica enviada pelo solicitante — revise
                     com atenção antes de cadastrar.</div>
             </div>
         </div>

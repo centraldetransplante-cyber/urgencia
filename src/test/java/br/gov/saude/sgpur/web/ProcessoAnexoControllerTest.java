@@ -217,6 +217,29 @@ class ProcessoAnexoControllerTest {
         verify(anexoStorage, never()).salvar(any(), any(), any(), any());
     }
 
+    /**
+     * Correcao de continuacao do PR #126 ("paciente preemptivo"): a tela ja
+     * escondia este formulario para processo preemptivo (processos/
+     * detalhe.html), mas o endpoint em si nao recusava um POST direto -
+     * paciente preemptivo NAO TEM comprovante SNT (a decisao ja autoriza a
+     * inscricao na lista de espera, sem anexo).
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void uploadComprovanteSntBloqueadoSeProcessoPreemptivo() throws Exception {
+        processo.setStatus(StatusProcesso.DEFERIDO);
+        processo.setPreemptivo(true);
+        MockMultipartFile arquivo = new MockMultipartFile("arquivo", "snt.pdf",
+            "application/pdf", "conteudo".getBytes());
+
+        mvc.perform(multipart("/processos/1/comprovante-snt").file(arquivo).with(csrf()))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(flash().attribute("erro", org.hamcrest.Matchers.containsString("preemptivo")));
+
+        verify(anexoStorage, never()).salvar(any(), any(), any(), any());
+        verify(processoService, never()).registrarDataEnvioSnt(anyLong());
+    }
+
     @Test
     @WithMockUser(roles = "OPERADOR")
     void uploadComprovanteSntComSucesso() throws Exception {

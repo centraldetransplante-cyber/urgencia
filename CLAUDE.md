@@ -125,6 +125,43 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
     processo) — fonte única em `service/RotuloProcesso.java`. Títulos
     GERAIS/compartilhados do operador (Painel, rodapé, navbar, título do
     Relatório Anual) **não mudam**, continuam "Urgência Renal" sempre.
+    **O ASSUNTO do e-mail também segue essa fonte única**
+    (`EmailTemplateService.assunto(Processo, String)` usa
+    `RotuloProcesso.prefixoAssunto(Processo)` — "Lista de Espera Renal - ..."
+    em vez do prefixo configurável padrão "Urgência Renal - ..." — para
+    TODOS os e-mails de um processo preemptivo: deferido, indeferido,
+    convite/lembrete ao avaliador, solicita-info, cancelamento, lembrete de
+    comprovante SNT. Corrigido em 2026-08-27 (continuação do PR #126): o
+    método existia desde a leva original mas nunca era chamado, então o
+    assunto de todo e-mail de processo preemptivo saía com o prefixo fixo,
+    só o corpo/rótulos internos usavam a nomenclatura certa.
+    **A fila de triagem do operador também mostra o tipo** — badge
+    "Preemptivo" (mesmo padrão visual usado em `processos/lista.html`/
+    `processos/detalhe.html`) em `processos/solicitacoes-online-lista.html`,
+    `processos/solicitacoes-online-detalhe.html` e `arquivo/lista.html`
+    (`RotuloProcesso.tipoCurto`, corrigido na mesma leva — existia mas não
+    era chamado por nenhum desses 3 templates).
+  - **Rótulo do campo "Justificativa clínica" também é condicional**
+    (`RotuloProcesso.rotuloJustificativa`): "Por que a urgência se aplica"
+    (comum) vs. "Por que a inserção preemptiva se aplica" (preemptivo) — no
+    Portal do Solicitante (`solicitante/nova.html`, dinâmico via
+    `solicitante-nova.js`/`atualizarTipoSolicitacao`, e no `th:text`
+    server-side), na tela de detalhe da triagem do operador
+    (`solicitacoes-online-detalhe.html`) e no texto de ajuda de
+    "Observações" do formulário de conversão (`processos/form.html`,
+    dinâmico via `processo-form.js`/`atualizarTipoProcesso`). Corrigido em
+    2026-08-27: o método existia mas nunca era chamado.
+  - **`processos/editar.html` reusa o mesmo script `processo-form.js` do
+    formulário de criação** (corrigido em 2026-08-27) — antes, o rádio
+    Urgência Renal/Preemptivo do formulário de EDIÇÃO não tinha nenhum
+    `onchange`, então trocar o tipo só surtia efeito depois de salvar
+    (round-trip ao servidor com erro de validação), diferente do formulário
+    de criação (`processos/form.html`), que já alternava a visibilidade/
+    obrigatoriedade do RGCT na hora. O bloco do RGCT em `editar.html`
+    também passou a ser sempre renderizado (como em `form.html`, alternando
+    só via `display:none`/`th:required`), em vez de sumir do DOM por
+    completo quando o processo já era preemptivo — sem isso o JS não
+    conseguia reexibi-lo ao trocar de volta para Urgência Renal.
   - **RGCT deixou de ser `@NotBlank` na entidade** (`Processo`/
     `SolicitacaoOnline.pacienteRgct`) — paciente preemptivo não tem RGCT.
     Obrigatoriedade agora é **condicional** (`!isPreemptivo()`), validada em
@@ -225,6 +262,15 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   Deferido **sem anexo** (texto ajustado: "autoriza a equipe a proceder com a
   inscrição", nunca afirma que a inscrição já ocorreu). Só urgência renal
   comum (`preemptivo` nulo/false) continua exigindo o anexo como sempre.
+  **`POST /processos/{id}/comprovante-snt` também recusa o upload quando o
+  processo é preemptivo** (corrigido em 2026-08-27, continuação do PR #126)
+  — antes só a TELA escondia o formulário nesse caso
+  (`processos/detalhe.html`), mas o endpoint em si não checava
+  `isPreemptivo()`, então um POST direto (ex. requisição manual, aba antiga
+  aberta) ainda conseguia anexar um `COMPROVANTE_SNT` com a descrição
+  "Comprovante de inserção da urgência renal no SNT" a um processo que não
+  deveria ter esse anexo. Devolve flash `erro` explicando que o processo
+  preemptivo não tem comprovante SNT, sem chamar `registrarDataEnvioSnt`.
   **Desde 2026-07-27, o Portal do Solicitante também exibe o resultado final**
   (`/solicitante/{id}`): quando o `Processo` gerado está Deferido/Indeferido/
   Cancelado, a tela mostra a decisão e, se o anexo já existir, um botão de

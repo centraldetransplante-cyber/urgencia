@@ -110,7 +110,7 @@ public class OficioService {
                 Motivo do indeferimento: %s
 
                 Permanecemos à disposição para os esclarecimentos que se fizerem necessários.
-                """.formatted(br.gov.saude.sgpur.service.RotuloProcesso.nomeLongo(p),
+                """.formatted(RotuloProcesso.nomeLongo(p),
                     p.getNumero(), p.getPacienteNome(), motivo);
             Paragraph corpo = new Paragraph(texto, fCorpo);
             corpo.setAlignment(Element.ALIGN_JUSTIFIED);
@@ -181,7 +181,7 @@ public class OficioService {
         linha(rtf, "");
         linha(rtf, "Prezado(a) Senhor(a),");
         linha(rtf, "");
-        linha(rtf, "Em referência ao " + br.gov.saude.sgpur.service.RotuloProcesso.nomeLongo(p) + " n. " + p.getNumero()
+        linha(rtf, "Em referência ao " + RotuloProcesso.nomeLongo(p) + " n. " + p.getNumero()
             + ", referente ao(à) paciente " + p.getPacienteNome() + ", comunicamos que, após "
             + "análise dos pareceres da equipe de Urgência Renal, o pedido foi INDEFERIDO.");
         linha(rtf, "");

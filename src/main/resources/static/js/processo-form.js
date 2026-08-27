@@ -111,6 +111,7 @@ function atualizarTipoProcesso(preemptivo) {
     var campoNumero = document.getElementById('numero');
     var sugestaoUrgencia = document.getElementById('sugestaoNumeroUrgencia');
     var sugestaoPreemptivo = document.getElementById('sugestaoNumeroPreemptivo');
+    var textoAjudaObservacoes = document.getElementById('textoAjudaObservacoes');
 
     if (campoRgct) {
         campoRgct.required = !preemptivo;
@@ -126,6 +127,16 @@ function atualizarTipoProcesso(preemptivo) {
     }
     if (labelData) {
         labelData.textContent = preemptivo ? 'Data da solicitação *' : 'Data de solicitação da urgência renal *';
+    }
+    // Rotulo do texto de ajuda de "Observacoes" - mesmo vocabulario de
+    // RotuloProcesso.rotuloJustificativa (Java), so espelhado em JS para nao
+    // exigir round-trip ao servidor ao trocar o radio de tipo.
+    if (textoAjudaObservacoes) {
+        var rotuloJustificativa = preemptivo
+            ? 'Por que a inserção preemptiva se aplica'
+            : 'Por que a urgência se aplica';
+        textoAjudaObservacoes.textContent = "Pré-preenchido com '" + rotuloJustificativa
+            + "' enviado(a) pelo solicitante — revise com atenção antes de cadastrar.";
     }
     // Sugestao de numero: so preenche se o campo ainda estiver vazio (nunca
     // sobrescreve algo ja digitado pelo operador - §5.7/§9.2 do plano).

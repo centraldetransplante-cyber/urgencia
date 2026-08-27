@@ -8,6 +8,7 @@ function atualizarTipoSolicitacao(preemptivo) {
     var blocoRgct = document.getElementById('blocoPacienteRgct');
     var labelData = document.getElementById('labelDataSituacaoEspecial');
     var textoAjudaData = document.getElementById('textoAjudaData');
+    var labelJustificativa = document.getElementById('labelJustificativa');
 
     if (campoRgct) {
         campoRgct.required = !preemptivo;
@@ -25,6 +26,15 @@ function atualizarTipoSolicitacao(preemptivo) {
         textoAjudaData.textContent = preemptivo
             ? 'Data do pedido de inserção na lista de espera.'
             : 'Quando a equipe constatou a urgência (não pode ser futura).';
+    }
+    // Rotulo "Por que a urgencia se aplica" | "Por que a insercao preemptiva
+    // se aplica" - mesmo vocabulario de RotuloProcesso.rotuloJustificativa
+    // (Java), aqui so espelhado em JS para nao exigir round-trip ao servidor
+    // ao trocar o radio de tipo.
+    if (labelJustificativa) {
+        labelJustificativa.textContent = preemptivo
+            ? 'Por que a inserção preemptiva se aplica'
+            : 'Por que a urgência se aplica';
     }
 }
 

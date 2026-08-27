@@ -207,6 +207,19 @@ public class ProcessoAnexoController {
             ra.addFlashAttribute("erro", "Upload do comprovante SNT so e permitido para processos Deferidos.");
             return "redirect:/processos/" + id + "#finalizacao";
         }
+        // Paciente PREEMPTIVO (2026-08-27): nao existe comprovante SNT nenhum
+        // (ainda nao esta na lista de espera do SNT) - a tela ja esconde este
+        // formulario para preemptivo (processos/detalhe.html), mas o endpoint
+        // tambem precisa recusar um POST direto, senao um anexo com a
+        // descricao "Comprovante de insercao da urgencia renal no SNT"
+        // (redacao que so faz sentido para urgencia renal comum) poderia
+        // acabar preso a um processo preemptivo.
+        if (p.isPreemptivo()) {
+            ra.addFlashAttribute("erro",
+                    "Processo preemptivo nao possui comprovante SNT - a decisao ja autoriza a "
+                            + "inscricao na lista de espera, sem anexo de comprovante.");
+            return "redirect:/processos/" + id + "#finalizacao";
+        }
         try {
             substituirAnexo(p, TipoAnexo.COMPROVANTE_SNT,
                     "Comprovante de insercao da urgencia renal no SNT", arquivo);

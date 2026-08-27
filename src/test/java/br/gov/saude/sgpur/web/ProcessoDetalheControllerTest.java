@@ -230,6 +230,45 @@ class ProcessoDetalheControllerTest {
     }
 
     /**
+     * RotuloProcesso.rotuloJustificativa - correcao de continuacao do PR
+     * #126 ("paciente preemptivo"): o texto de ajuda abaixo de "Observações"
+     * (pre-preenchida com a justificativa clinica do solicitante) sempre
+     * dizia "justificativa clínica", mesmo quando a solicitacao de origem
+     * era preemptiva (onde o rotulo correto e "Por que a inserção
+     * preemptiva se aplica").
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void novoComOrigemPreemptivaUsaRotuloDeJustificativaPreemptivaNoTextoDeAjuda() throws Exception {
+        SolicitacaoOnline s = solicitacaoValida(5L);
+        s.setPreemptivo(true);
+        s.setPacienteRgct(null);
+        when(solicitacaoOnlineService.buscar(5L)).thenReturn(s);
+
+        String html = mvc.perform(get("/processos/novo").param("origemSolicitacaoOnlineId", "5"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html)
+            .contains("id=\"textoAjudaObservacoes\"")
+            .contains("Por que a inserção preemptiva se aplica")
+            .doesNotContain("Por que a urgência se aplica");
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void novoComOrigemComumUsaRotuloDeJustificativaDeUrgenciaNoTextoDeAjuda() throws Exception {
+        when(solicitacaoOnlineService.buscar(5L)).thenReturn(solicitacaoValida(5L));
+
+        String html = mvc.perform(get("/processos/novo").param("origemSolicitacaoOnlineId", "5"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html)
+            .contains("Por que a urgência se aplica");
+    }
+
+    /**
      * Bug real de producao (2026-08-21, relatado pelo dono do produto):
      * {@code Processo.pacienteDataNascimento} nao tinha {@code @DateTimeFormat
      * (iso = DateTimeFormat.ISO.DATE)} (ao contrario de {@code
@@ -886,6 +925,35 @@ class ProcessoDetalheControllerTest {
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/processos/1"))
             .andExpect(flash().attribute("erro", ProcessoValidator.MSG_ENCERRADO));
+    }
+
+    /**
+     * Correcao de continuacao do PR #126 ("paciente preemptivo"): o
+     * formulario de EDICAO tinha o mesmo radio Urgencia Renal/Preemptivo do
+     * formulario de CRIACAO, mas sem nenhum {@code onchange} - trocar o tipo
+     * so surtia efeito apos salvar (round-trip ao servidor), sem alternar a
+     * visibilidade/obrigatoriedade do RGCT na hora, como ja acontecia no
+     * cadastro. A pagina precisa reusar {@code atualizarTipoProcesso} (mesmo
+     * script de processos/form.html), nao duplicar a logica.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void editarReusaOScriptDeAlternanciaDeTipoDeProcesso() throws Exception {
+        processo.setStatus(StatusProcesso.SOLICITADO);
+
+        String html = mvc.perform(get("/processos/1/editar"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html)
+            .contains("onchange=\"atualizarTipoProcesso(false)\"")
+            .contains("onchange=\"atualizarTipoProcesso(true)\"")
+            .contains("id=\"blocoRgct\"")
+            .contains("id=\"labelPacienteRgct\"")
+            .contains("id=\"labelDataSituacaoEspecial\"")
+            // Nome do arquivo tem fingerprint de cache-busting (ex.
+            // processo-form-<hash>.js) - checa so o prefixo estavel do path.
+            .contains("/js/processo-form");
     }
 
     @Test

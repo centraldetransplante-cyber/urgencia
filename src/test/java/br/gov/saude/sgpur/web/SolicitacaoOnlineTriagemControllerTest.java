@@ -84,6 +84,38 @@ class SolicitacaoOnlineTriagemControllerTest {
             .andExpect(model().attribute("q", (Object) null));
     }
 
+    /**
+     * RotuloProcesso.tipoCurto(SolicitacaoOnline) - correcao de continuacao
+     * do PR #126 ("paciente preemptivo"): a fila de triagem do operador nao
+     * mostrava se a solicitacao era Preemptiva, o metodo existia mas nunca
+     * era chamado por nenhum template.
+     */
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void listaMostraBadgeDePreemptivoQuandoASolicitacaoForPreemptiva() throws Exception {
+        solicitacao.setPreemptivo(true);
+        when(service.listarPendentesTriagem(null)).thenReturn(List.of(solicitacao));
+        when(service.diasEspera(solicitacao)).thenReturn(new SolicitacaoOnlineService.DiasEspera(2, "bg-secondary"));
+
+        mvc.perform(get("/processos/solicitacoes-online"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Preemptivo")));
+    }
+
+    @Test
+    @WithMockUser(roles = "OPERADOR")
+    void listaNaoMostraBadgeDePreemptivoParaSolicitacaoComum() throws Exception {
+        solicitacao.setPreemptivo(false);
+        when(service.listarPendentesTriagem(null)).thenReturn(List.of(solicitacao));
+        when(service.diasEspera(solicitacao)).thenReturn(new SolicitacaoOnlineService.DiasEspera(2, "bg-secondary"));
+
+        String html = mvc.perform(get("/processos/solicitacoes-online"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html).doesNotContain("Preemptivo");
+    }
+
     @Test
     @WithMockUser(roles = "OPERADOR")
     void listaComFiltroTodasExibeTodasAsSolicitacoes() throws Exception {
@@ -134,6 +166,42 @@ class SolicitacaoOnlineTriagemControllerTest {
             // Cabecalho do card de chat mostra o nome real, nao o literal
             // generico "Conversa com o solicitante" (correcao de 2026-08-08).
             .andExpect(content().string(org.hamcrest.Matchers.containsString("Santa Casa - Nefro")));
+    }
+
+    /**
+     * Mesma correcao (RotuloProcesso.tipoCurto/rotuloJustificativa) para a
+     * tela de detalhe da triagem: badge de tipo no cabecalho + rotulo
+     * condicional do campo "Justificativa clinica".
+     */
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void detalhePreemptivoMostraBadgeERotuloDeJustificativaPreemptiva() throws Exception {
+        solicitacao.setPreemptivo(true);
+        solicitacao.setPacienteRgct(null);
+        when(service.buscarParaDetalhe(50L)).thenReturn(solicitacao);
+        when(service.nomeSolicitante(50L)).thenReturn("Santa Casa - Nefro");
+
+        mvc.perform(get("/processos/solicitacoes-online/50"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Preemptivo")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "Por que a inserção preemptiva se aplica")));
+    }
+
+    @Test
+    @WithMockUser(roles = "ADMIN")
+    void detalheComumMostraRotuloDeJustificativaDeUrgenciaSemBadge() throws Exception {
+        solicitacao.setPreemptivo(false);
+        when(service.buscarParaDetalhe(50L)).thenReturn(solicitacao);
+        when(service.nomeSolicitante(50L)).thenReturn("Santa Casa - Nefro");
+
+        String html = mvc.perform(get("/processos/solicitacoes-online/50"))
+            .andExpect(status().isOk())
+            .andReturn().getResponse().getContentAsString();
+
+        org.assertj.core.api.Assertions.assertThat(html)
+            .contains("Por que a urgência se aplica")
+            .doesNotContain("Preemptivo");
     }
 
     @Test

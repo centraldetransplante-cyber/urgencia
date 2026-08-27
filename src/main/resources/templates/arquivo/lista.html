@@ -60,6 +60,8 @@
                         <a th:href="@{/processos/{id}(id=${p.id})}"
                            class="text-decoration-none fw-semibold text-primary"
                            th:text="${p.identificacao()}">00/0000 - Paciente - RGCT</a>
+                        <span th:if="${p.isPreemptivo()}" class="badge bg-warning text-dark ms-1"
+                              th:text="${T(br.gov.saude.sgpur.service.RotuloProcesso).tipoCurto(p)}">Preemptivo</span>
                     </td>
                     <td class="small">
                         <span class="badge badge-rs-blue fw-normal" th:text="${p.solicitanteEquipe}">Equipe</span>
