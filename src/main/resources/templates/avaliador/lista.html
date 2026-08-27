@@ -57,7 +57,8 @@
             <h2>
                 Você tem <span th:text="${pareceres.size()}">0</span>
                 <span th:text="${pareceres.size() == 1} ? 'processo aguardando' : 'processos aguardando'">processos aguardando</span>
-                o seu voto
+                o seu voto<span th:if="${pendentesPreemptivos > 0}"
+                    th:text="' (' + ${pendentesPreemptivos} + ' preemptivo' + (${pendentesPreemptivos == 1} ? '' : 's') + ')'"></span>
             </h2>
             <p>
                 Cada processo abaixo espera o seu parecer para seguir na análise da
@@ -497,7 +498,7 @@
          numeros sobre si mesmo (ver Fase 3 do relatorio de UI). -->
     <h2 class="secao-titulo"><i class="bi bi-bar-chart-line"></i> Minhas estatísticas</h2>
     <div class="row g-3 mb-4">
-        <div class="col-6 col-md-4">
+        <div class="col-6 col-md-3">
             <!-- Padrao unico .stat-card/.stat-number/.stat-icon (ja usado pelo
                  Painel, Portal do Solicitante e Controle de Urgencias) - antes
                  esta secao era um 4o dialeto visual proprio (card text-center +
@@ -510,7 +511,7 @@
                 <div class="stat-label">Avaliados por mim</div>
             </div>
         </div>
-        <div class="col-6 col-md-4">
+        <div class="col-6 col-md-3">
             <div class="stat-card stat-card-portal stat-card-membros h-100">
                 <div class="d-flex align-items-center justify-content-between">
                     <span class="stat-number" th:text="${totalAtribuidos}">0</span>
@@ -519,7 +520,17 @@
                 <div class="stat-label">Atribuídos a mim</div>
             </div>
         </div>
-        <div class="col-12 col-md-4">
+        <div class="col-6 col-md-3">
+            <div class="stat-card stat-card-portal stat-card-preemptivo h-100"
+                 title="Processos de inserção em lista de espera renal (paciente preemptivo) que você já avaliou.">
+                <div class="d-flex align-items-center justify-content-between">
+                    <span class="stat-number" th:text="${avaliadosPreemptivos}">0</span>
+                    <span class="stat-icon"><i class="bi bi-clipboard-plus"></i></span>
+                </div>
+                <div class="stat-label">Preemptivos avaliados</div>
+            </div>
+        </div>
+        <div class="col-12 col-md-3">
             <div class="card h-100">
                 <div class="card-body py-3">
                     <div class="small text-muted mb-2">Meus votos por resultado</div>

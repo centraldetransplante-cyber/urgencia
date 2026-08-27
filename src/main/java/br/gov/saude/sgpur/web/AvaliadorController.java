@@ -254,6 +254,13 @@ public class AvaliadorController {
             .countByMembroIdAndResultado(membroId, ResultadoParecer.NAO_FAVORAVEL);
         long solicitaInfo = parecerRepo
             .countByMembroIdAndResultado(membroId, ResultadoParecer.SOLICITA_INFORMACAO);
+        // Recorte por tipo: quantos dos avaliados eram preemptivos, e quantos
+        // dos PENDENTES agora sao (derivado da view ja projetada, sem query).
+        long avaliadosPreemptivos = parecerRepo
+            .countByMembroIdAndResultadoNotNullAndProcesso_PreemptivoTrue(membroId);
+        long pendentesPreemptivos = pareceresView.stream()
+            .filter(ParecerPendenteView::preemptivo)
+            .count();
 
         model.addAttribute("pareceres", pareceresView);
         model.addAttribute("pareceresAtrasados", pareceresAtrasados);
@@ -280,6 +287,8 @@ public class AvaliadorController {
         model.addAttribute("favoraveis", favoraveis);
         model.addAttribute("naoFavoraveis", naoFavoraveis);
         model.addAttribute("solicitaInfo", solicitaInfo);
+        model.addAttribute("avaliadosPreemptivos", avaliadosPreemptivos);
+        model.addAttribute("pendentesPreemptivos", pendentesPreemptivos);
         return "avaliador/lista";
     }
 

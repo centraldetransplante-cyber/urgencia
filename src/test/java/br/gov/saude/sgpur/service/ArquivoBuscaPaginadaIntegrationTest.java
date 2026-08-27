@@ -70,7 +70,7 @@ class ArquivoBuscaPaginadaIntegrationTest {
     }
 
     private Page<Processo> buscar(String q, int pagina, int tamanho) {
-        return repo.buscarEncerrados(q, ENCERRADOS, PageRequest.of(pagina, tamanho));
+        return repo.buscarEncerrados(q, ENCERRADOS, false, false, PageRequest.of(pagina, tamanho));
     }
 
     @Test

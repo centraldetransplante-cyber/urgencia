@@ -34,6 +34,14 @@ public interface ParecerRepository extends JpaRepository<Parecer, Long> {
     long countByMembroIdAndResultado(Long membroId, ResultadoParecer resultado);
 
     /**
+     * Pareceres ja respondidos pelo membro em processos PREEMPTIVOS
+     * (insercao em lista de espera renal). {@code PreemptivoTrue} =
+     * {@code processo.preemptivo = true} - linhas legadas com {@code null}
+     * (urgencia renal comum) ficam de fora, que e o correto.
+     */
+    long countByMembroIdAndResultadoNotNullAndProcesso_PreemptivoTrue(Long membroId);
+
+    /**
      * Pareceres pendentes do membro (resultado nulo, envio ja registrado).
      * Usado pelo Portal do Avaliador para listar os processos que aguardam voto.
      */

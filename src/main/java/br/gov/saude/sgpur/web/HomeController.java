@@ -103,6 +103,7 @@ public class HomeController {
         long indeferidos = 0;
         long cancelados = 0;
         long emAndamento = 0;
+        long preemptivos = 0;
         Map<Long, EtapaFluxo> pendencias = new LinkedHashMap<>();
         for (Processo p : processos) {
             switch (p.getStatus()) {
@@ -115,6 +116,12 @@ public class HomeController {
             // SOLICITA_INFORMACAO).
             if (p.getStatus().isEmAndamento()) {
                 emAndamento++;
+            }
+            // Paciente preemptivo (insercao em lista de espera renal) - conta
+            // independente do status; o breakdown por status/tipo fica no
+            // filtro de /processos e no Relatorio Anual.
+            if (p.isPreemptivo()) {
+                preemptivos++;
             }
             // O que falta por processo reusa o FluxoProcessoService, e vale
             // TAMBEM para processo ja decidido: status final trava a edicao das
@@ -135,6 +142,7 @@ public class HomeController {
         model.addAttribute("indeferidos", indeferidos);
         model.addAttribute("cancelados", cancelados);
         model.addAttribute("emAndamento", emAndamento);
+        model.addAttribute("preemptivos", preemptivos);
         model.addAttribute("pendencias", pendencias);
         model.addAttribute("membrosAtivos", membroService.contarAtivos());
 

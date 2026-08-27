@@ -22,12 +22,20 @@
     <div class="card border-0 shadow-sm animate-fade-in-d1">
         <div class="card-body p-3">
             <form method="get" th:action="@{/arquivo}" class="row g-2 align-items-end">
-                <div class="col-md-8">
+                <div class="col-md-6">
                     <label class="form-label small fw-semibold text-muted mb-1" for="q">Busca</label>
                     <input type="text" name="q" class="form-control form-control-sm" th:value="${q}"
                            placeholder="Número, paciente ou solicitante..." id="q" data-busca-atalho>
                 </div>
-                <div class="col-md-4 d-flex gap-2">
+                <div class="col-md-3">
+                    <label class="form-label small fw-semibold text-muted mb-1" for="tipo">Tipo</label>
+                    <select name="tipo" class="form-select form-select-sm" id="tipo">
+                        <option value="">Todos</option>
+                        <option value="urgencia" th:selected="${tipoSelecionado == 'urgencia'}">Urgência Renal</option>
+                        <option value="preemptivo" th:selected="${tipoSelecionado == 'preemptivo'}">Preemptivo</option>
+                    </select>
+                </div>
+                <div class="col-md-3 d-flex gap-2">
                     <button class="btn btn-primary btn-sm flex-grow-1">
                         <i class="bi bi-search me-1"></i> Filtrar
                     </button>
@@ -105,7 +113,7 @@
     <nav class="mt-3 animate-fade-in-d3" th:if="${totalPaginas > 1}">
         <ul class="pagination pagination-sm justify-content-center">
             <li class="page-item" th:classappend="${paginaAtual == 0} ? 'disabled'">
-                <a class="page-link" th:href="@{/arquivo(q=${q}, page=${paginaAtual - 1})}">
+                <a class="page-link" th:href="@{/arquivo(q=${q}, tipo=${tipoSelecionado}, page=${paginaAtual - 1})}">
                     <i class="bi bi-chevron-left"></i> Anterior
                 </a>
             </li>
@@ -115,7 +123,7 @@
                 </span>
             </li>
             <li class="page-item" th:classappend="${paginaAtual + 1 >= totalPaginas} ? 'disabled'">
-                <a class="page-link" th:href="@{/arquivo(q=${q}, page=${paginaAtual + 1})}">
+                <a class="page-link" th:href="@{/arquivo(q=${q}, tipo=${tipoSelecionado}, page=${paginaAtual + 1})}">
                     Próxima <i class="bi bi-chevron-right"></i>
                 </a>
             </li>

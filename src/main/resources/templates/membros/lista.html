@@ -95,6 +95,10 @@
                             <span class="badge bg-success" th:text="${stats.get(m.id)[2]}">0</span>
                             <span class="text-muted">favoráveis</span>
                         </span>
+                        <span class="text-nowrap" th:if="${stats.get(m.id)[3] > 0}">
+                            <span class="badge bg-warning text-dark" th:text="${stats.get(m.id)[3]}">0</span>
+                            <span class="text-muted">preemptivos</span>
+                        </span>
                     </div>
                 </td>
                 <td class="text-center">

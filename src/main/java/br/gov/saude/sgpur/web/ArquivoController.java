@@ -3,6 +3,7 @@ package br.gov.saude.sgpur.web;
 import br.gov.saude.sgpur.domain.Processo;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.repository.ProcessoRepository;
+import br.gov.saude.sgpur.service.ProcessoService;
 import br.gov.saude.sgpur.service.ProcessoValidator;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -69,10 +70,17 @@ public class ArquivoController {
     @GetMapping
     @Transactional(readOnly = true)
     public String listar(@RequestParam(required = false) String q,
+                         @RequestParam(required = false) String tipo,
                          @RequestParam(defaultValue = "0") int page,
                          Model model) {
+        String tipoFiltro = (ProcessoService.TIPO_PREEMPTIVO.equalsIgnoreCase(tipo)
+                || ProcessoService.TIPO_URGENCIA.equalsIgnoreCase(tipo))
+            ? tipo.toLowerCase() : null;
+        boolean filtrarTipo = tipoFiltro != null;
+        boolean preemptivo = ProcessoService.TIPO_PREEMPTIVO.equals(tipoFiltro);
         Page<Processo> pagina = processoRepository.buscarEncerrados(
-            q, ENCERRADOS, PageRequest.of(Math.max(page, 0), TAMANHO_PAGINA));
+            q, ENCERRADOS, filtrarTipo, preemptivo, PageRequest.of(Math.max(page, 0), TAMANHO_PAGINA));
+        model.addAttribute("tipoSelecionado", tipoFiltro);
 
         // Bug real de producao (500 em /arquivo, corrigido em 2026-08-11):
         // buscarEncerrados NAO traz pareceres (fetch join de colecao +

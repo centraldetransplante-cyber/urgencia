@@ -186,8 +186,10 @@ public class RelatorioAnualService {
         tituloDoc.setSpacingAfter(16);
         doc.add(tituloDoc);
 
+        long preemptivosCapa = processos.stream().filter(Processo::isPreemptivo).count();
         Paragraph resumoCapa = new Paragraph(
             "Total de processos no ano: " + processos.size()
+                + (preemptivosCapa == 0 ? "" : "  (" + preemptivosCapa + " preemptivo(s))")
                 + "  |  Emitido em " + java.time.LocalDateTime.now().format(DATA_HORA), fSub);
         resumoCapa.setAlignment(Element.ALIGN_CENTER);
         doc.add(resumoCapa);
@@ -214,6 +216,15 @@ public class RelatorioAnualService {
         String percentDeferimento = decididos == 0
             ? "-" : Math.round(deferido * 100.0 / decididos) + "%";
 
+        // Paciente preemptivo (insercao em lista de espera renal): recorte do
+        // total, mais o quanto desses ja foi deferido. A coluna "Tipo" da
+        // tabela de processos logo abaixo detalha caso a caso.
+        long preemptivos = processos.stream().filter(Processo::isPreemptivo).count();
+        long preemptivosDeferidos = processos.stream()
+            .filter(Processo::isPreemptivo)
+            .filter(p -> p.getStatus() == StatusProcesso.DEFERIDO)
+            .count();
+
         PdfPTable t = new PdfPTable(new float[]{6, 2});
         t.setWidthPercentage(60);
         t.setSpacingBefore(6);
@@ -226,6 +237,8 @@ public class RelatorioAnualService {
         linhaResumo(t, "Deferidos", String.valueOf(deferido), false);
         linhaResumo(t, "Indeferidos", String.valueOf(indeferido), false);
         linhaResumo(t, "Cancelados", String.valueOf(cancelado), false);
+        linhaResumo(t, "Preemptivos (inserção em lista de espera)",
+            preemptivos + (preemptivos == 0 ? "" : " (dos quais " + preemptivosDeferidos + " deferido(s))"), false);
         linhaResumo(t, "% de deferimento (sobre os decididos)", percentDeferimento, true);
         linhaResumo(t, "Tempo médio de resposta dos avaliadores",
             TempoRespostaService.formatarDias(tempoAno.mediaGeralDias()), true);

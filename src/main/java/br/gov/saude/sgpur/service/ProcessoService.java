@@ -74,10 +74,17 @@ public class ProcessoService {
         this.auditoriaService = auditoriaService;
     }
 
+    /** Valores aceitos em {@code ?tipo=} nas listas de processos. */
+    public static final String TIPO_PREEMPTIVO = "preemptivo";
+    public static final String TIPO_URGENCIA = "urgencia";
+
     public org.springframework.data.domain.Page<Processo> buscar(
-            String q, StatusProcesso status, org.springframework.data.domain.Pageable pageable) {
+            String q, StatusProcesso status, String tipo,
+            org.springframework.data.domain.Pageable pageable) {
         String termo = (q == null || q.isBlank()) ? null : q.trim();
-        return processoRepository.buscar(termo, status, pageable);
+        boolean filtrarTipo = TIPO_PREEMPTIVO.equalsIgnoreCase(tipo) || TIPO_URGENCIA.equalsIgnoreCase(tipo);
+        boolean preemptivo = TIPO_PREEMPTIVO.equalsIgnoreCase(tipo);
+        return processoRepository.buscar(termo, status, filtrarTipo, preemptivo, pageable);
     }
 
     public Processo buscar(Long id) {
