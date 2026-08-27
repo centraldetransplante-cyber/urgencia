@@ -21,18 +21,19 @@
             <div th:if="${#fields.hasGlobalErrors()}" class="alert alert-danger">
                 <div th:each="e : ${#fields.globalErrors()}" th:text="${e}"></div>
             </div>
+            <!-- 2026-08-27: mesma mudanca do Portal do Solicitante - checkbox
+                 UNICO opcional em vez de 2 radios obrigatorios. Desmarcado
+                 (padrao) = Urgencia Renal, sem exigir clique do operador. -->
             <div class="row g-3">
                 <div class="col-md-6">
-                    <label class="form-label d-block">Tipo de processo *</label>
-                    <div class="btn-group" role="group" aria-label="Tipo de processo">
-                        <input type="radio" class="btn-check" name="preemptivo" id="tipoUrgencia" value="false"
-                               th:checked="${!processo.isPreemptivo()}" onchange="atualizarTipoProcesso(false)">
-                        <label class="btn btn-outline-primary" for="tipoUrgencia">Urgência Renal</label>
-                        <input type="radio" class="btn-check" name="preemptivo" id="tipoPreemptivo" value="true"
-                               th:checked="${processo.isPreemptivo() == true}" onchange="atualizarTipoProcesso(true)">
-                        <label class="btn btn-outline-warning" for="tipoPreemptivo">Preemptivo (inserção em lista de espera)</label>
+                    <div class="form-check">
+                        <input type="checkbox" class="form-check-input" id="tipoPreemptivo"
+                               th:field="*{preemptivo}" onchange="atualizarTipoProcesso(this.checked)">
+                        <label class="form-check-label" for="tipoPreemptivo">
+                            Este é um processo de inserção preemptiva (paciente ainda não está na lista de espera do SNT)
+                        </label>
                     </div>
-                    <div class="form-text">Preemptivo: paciente ainda não está na lista de espera do SNT — o processo avalia a inserção.</div>
+                    <div class="form-text">Deixe desmarcado para Urgência Renal (caso mais comum). Marque apenas para avaliar a inserção do paciente na lista de espera renal.</div>
                 </div>
             </div>
             <div class="row g-3 mt-0">

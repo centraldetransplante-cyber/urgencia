@@ -98,11 +98,13 @@
     atualizar();
 })();
 
-// === SAUR - paciente preemptivo (2026-08-27): alterna RGCT (obrigatorio so
-// para urgencia renal comum), o rotulo da data e a SUGESTAO de numero da
-// serie correta, ao trocar o radio de tipo. So UX/apresentacao - a regra de
-// verdade (obrigatoriedade do RGCT, formato/prefixo do numero) mora sempre
-// no backend (ProcessoDetalheController/ProcessoService), nunca so aqui. ===
+// === SAUR - paciente preemptivo (2026-08-27, ajustado no mesmo dia para
+// checkbox unico opcional): alterna RGCT (obrigatorio so para urgencia renal
+// comum), o rotulo da data e a SUGESTAO de numero da serie correta, ao
+// trocar o checkbox de tipo (desmarcado = urgencia renal, marcado =
+// preemptivo). So UX/apresentacao - a regra de verdade (obrigatoriedade do
+// RGCT, formato/prefixo do numero) mora sempre no backend
+// (ProcessoDetalheController/ProcessoService), nunca so aqui. ===
 function atualizarTipoProcesso(preemptivo) {
     var campoRgct = document.querySelector('[name="pacienteRgct"]');
     var blocoRgct = document.getElementById('blocoRgct');
@@ -130,7 +132,7 @@ function atualizarTipoProcesso(preemptivo) {
     }
     // Rotulo do texto de ajuda de "Observacoes" - mesmo vocabulario de
     // RotuloProcesso.rotuloJustificativa (Java), so espelhado em JS para nao
-    // exigir round-trip ao servidor ao trocar o radio de tipo.
+    // exigir round-trip ao servidor ao trocar o checkbox de tipo.
     if (textoAjudaObservacoes) {
         var rotuloJustificativa = preemptivo
             ? 'Por que a inserção preemptiva se aplica'

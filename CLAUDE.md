@@ -162,6 +162,32 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
     só via `display:none`/`th:required`), em vez de sumir do DOM por
     completo quando o processo já era preemptivo — sem isso o JS não
     conseguia reexibi-lo ao trocar de volta para Urgência Renal.
+  - **UX do campo "tipo de pedido" trocada de 2 rádios obrigatórios para 1
+    checkbox opcional (2026-08-27, feedback direto do usuário).** Urgência
+    renal é o caso padrão/mais comum — antes o solicitante/operador era
+    obrigado a clicar num dos 2 rádios ("Sim — é uma urgência renal" / "Não
+    — é um pedido de inserção preemptiva") toda vez, mesmo no caso comum.
+    Hoje é 1 `<input type="checkbox" th:field="*{preemptivo}">` único,
+    **desmarcado por padrão** = urgência renal (nenhum clique exigido);
+    marcado = preemptivo. Aplicado nos 3 formulários que tinham o mesmo
+    padrão de rádio: `solicitante/nova.html` (Portal do Solicitante),
+    `processos/form.html` (conversão pelo operador) e `processos/editar.html`
+    (edição, só quando `status == SOLICITADO`). `th:field` num campo
+    `Boolean` do `SolicitacaoOnline`/`Processo` já resolve sozinho o binding
+    de checkbox (gera o hidden `_preemptivo` que o Spring usa para tratar
+    "não marcado" como `false` — não precisou de nenhum hidden manual extra
+    nem de `@InitBinder` novo). Os handlers JS (`atualizarTipoSolicitacao`/
+    `atualizarTipoProcesso` em `solicitante-nova.js`/`processo-form.js`)
+    continuam os mesmos, só passam a receber `this.checked` do checkbox em
+    vez do valor fixo `true`/`false` de cada rádio — nenhuma lógica de
+    obrigatoriedade/visibilidade do RGCT mudou. `ProcessoAtualizacaoIntegrationTest`
+    passou a ignorar `preemptivo` no loop genérico "todo campo do form
+    chega ao banco" (`IGNORADOS_DE_PROPOSITO`) — sua escrita é gated por
+    status (`ProcessoService.atualizarDados` rejeita a troca fora de
+    `SOLICITADO`) e já tem cobertura dedicada em
+    `PacientePreemptivoIntegrationTest`, então generalizar aquele loop
+    misturaria essa regra de negócio com a família de bug "campo esquecido
+    no copy" que o teste protege.
   - **RGCT deixou de ser `@NotBlank` na entidade** (`Processo`/
     `SolicitacaoOnline.pacienteRgct`) — paciente preemptivo não tem RGCT.
     Obrigatoriedade agora é **condicional** (`!isPreemptivo()`), validada em

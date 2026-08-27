@@ -55,8 +55,19 @@ class ProcessoAtualizacaoIntegrationTest {
      * mudam"): o numero do processo e fixo (campo {@code readonly} na tela) e
      * so muda por outro caminho (numeracao automatica/manual), nunca por esta
      * edicao de cadastro.
+     *
+     * <p>{@code preemptivo} (checkbox de tipo, 2026-08-27) tambem fica de
+     * fora: seu comportamento e CONDICIONAL ao status do processo
+     * ({@code ProcessoService.atualizarDados} rejeita a troca de tipo com
+     * {@code IllegalStateException} quando o processo ja saiu de
+     * {@code SOLICITADO}) - o fixture desta classe usa status
+     * {@code ENVIADO} de proposito (simula um processo ja em andamento), e
+     * generalizar o loop para alternar o tipo aqui misturaria essa regra de
+     * negocio com a familia de bug que este teste protege ("campo do form
+     * esquecido no copy"). A escrita de {@code preemptivo} tem cobertura
+     * dedicada em {@code PacientePreemptivoIntegrationTest}.</p>
      */
-    private static final List<String> IGNORADOS_DE_PROPOSITO = List.of("numero");
+    private static final List<String> IGNORADOS_DE_PROPOSITO = List.of("numero", "preemptivo");
 
     @Autowired
     private ProcessoService service;

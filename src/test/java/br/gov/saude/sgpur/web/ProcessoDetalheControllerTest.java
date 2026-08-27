@@ -935,6 +935,11 @@ class ProcessoDetalheControllerTest {
      * visibilidade/obrigatoriedade do RGCT na hora, como ja acontecia no
      * cadastro. A pagina precisa reusar {@code atualizarTipoProcesso} (mesmo
      * script de processos/form.html), nao duplicar a logica.
+     *
+     * <p>Atualizado em 2026-08-27 (mesmo dia, feedback direto do usuario):
+     * os 2 radios obrigatorios viraram 1 checkbox OPCIONAL
+     * ({@code #tipoPreemptivo}, desmarcado por padrao = Urgencia Renal),
+     * mantendo o mesmo {@code onchange} para {@code atualizarTipoProcesso}.</p>
      */
     @Test
     @WithMockUser(roles = "OPERADOR")
@@ -946,8 +951,8 @@ class ProcessoDetalheControllerTest {
             .andReturn().getResponse().getContentAsString();
 
         org.assertj.core.api.Assertions.assertThat(html)
-            .contains("onchange=\"atualizarTipoProcesso(false)\"")
-            .contains("onchange=\"atualizarTipoProcesso(true)\"")
+            .contains("id=\"tipoPreemptivo\"")
+            .contains("onchange=\"atualizarTipoProcesso(this.checked)\"")
             .contains("id=\"blocoRgct\"")
             .contains("id=\"labelPacienteRgct\"")
             .contains("id=\"labelDataSituacaoEspecial\"")
