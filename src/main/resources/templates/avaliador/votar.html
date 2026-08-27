@@ -303,7 +303,15 @@
                                 <!-- .voto-opcao-consequencia nao existe em app.css (nunca teve efeito,
                                      estilizava so por acidente via "small text-muted" - achado A4 de
                                      vistoria de UI); classe removida, mantido so o que de fato estiliza. -->
-                                <span class="small text-muted" th:switch="${r.name()}">
+                                <!-- Texto de apoio de cada voto: PREEMPTIVO nao e urgencia renal
+                                     (o avaliador julga a INSERCAO na lista de espera, nao o
+                                     reconhecimento de uma urgencia) - o rotulo muda conforme o tipo. -->
+                                <span class="small text-muted" th:switch="${r.name()}" th:if="${processo.preemptivo}">
+                                    <span th:case="'FAVORAVEL'">Concordo com a inserção do paciente na lista de espera renal.</span>
+                                    <span th:case="'NAO_FAVORAVEL'">Não concordo com a inserção preemptiva neste caso.</span>
+                                    <span th:case="'SOLICITA_INFORMACAO'"><strong>Pausa o processo</strong> até o solicitante enviar mais dados.</span>
+                                </span>
+                                <span class="small text-muted" th:switch="${r.name()}" th:unless="${processo.preemptivo}">
                                     <span th:case="'FAVORAVEL'">Concordo com o reconhecimento da urgência.</span>
                                     <span th:case="'NAO_FAVORAVEL'">Não reconheço a urgência para este caso.</span>
                                     <span th:case="'SOLICITA_INFORMACAO'"><strong>Pausa o processo</strong> até o solicitante enviar mais dados.</span>

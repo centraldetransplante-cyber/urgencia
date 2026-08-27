@@ -252,7 +252,7 @@ public class RelatorioService {
         t1.setKeepTogether(true);
         doc.add(t1);
 
-        pdfBuilder.secao(doc, fSecao, "2. Pareceres dos médicos (Urgência Renal)");
+        pdfBuilder.secao(doc, fSecao, "2. Pareceres dos médicos (" + RotuloProcesso.tipoCurto(p) + ")");
         PdfPTable t2 = new PdfPTable(new float[]{3, 2, 2});
         t2.setWidthPercentage(100);
         t2.setSpacingBefore(4);

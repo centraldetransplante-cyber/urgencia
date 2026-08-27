@@ -510,27 +510,41 @@ public class SolicitanteController {
         boolean deferido = s.getStatus() == StatusSolicitacaoOnline.APROVADA
             || (processoFinalizado && proc.getStatus() == StatusProcesso.DEFERIDO);
         if (deferido) {
+            // PREEMPTIVO nao e urgencia renal: o paciente ainda nao esta na lista
+            // de espera do SNT, entao NAO existe comprovante SNT a anexar/baixar -
+            // o Deferido apenas AUTORIZA a equipe a proceder com a inscricao
+            // depois (fora do sistema). Toda a redacao abaixo muda nesse caso.
+            boolean preempt = s.isPreemptivo();
             AnexoDownload anexo = comprovanteSnt != null
                 ? new AnexoDownload(comprovanteSnt.getId(), "Baixar comprovante de inserção no SNT")
                 : null;
             // A mensagem so pode afirmar que a resposta oficial JA foi enviada por
-            // e-mail quando isso e verdade nos dois sentidos: o anexo do comprovante
-            // SNT existe E ProcessoService.finalizarResposta ja confirmou o envio
-            // (Processo.emailEnviadoSolicitante). Antes disso, dizer "foi enviada"
-            // contradiz o proprio botao de download (que fica ausente, com o aviso
-            // "ainda sendo providenciado" logo abaixo, no template) - bug real
-            // achado em QA, corrigido em 2026-08.
-            boolean respostaJaEnviada = comprovanteSnt != null
-                && proc != null && proc.isEmailEnviadoSolicitante();
-            String mensagem = respostaJaEnviada
-                ? "Seu pedido (processo " + numero + ") foi analisado e DEFERIDO pela Central "
-                    + "de Transplantes do Estado do Rio Grande do Sul. A resposta oficial foi enviada por "
-                    + "e-mail à sua equipe (" + s.getSolicitanteEmail() + "), com o comprovante de inserção "
-                    + "no Sistema Nacional de Transplantes (SNT) em anexo."
-                : "Seu pedido (processo " + numero + ") foi analisado e DEFERIDO pela Central "
-                    + "de Transplantes do Estado do Rio Grande do Sul. A equipe está providenciando o envio "
-                    + "formal da resposta, com o comprovante de inserção no Sistema Nacional de Transplantes "
-                    + "(SNT), à sua equipe (" + s.getSolicitanteEmail() + ").";
+            // e-mail quando isso e verdade: para urgencia renal, o anexo do
+            // comprovante SNT existe E ProcessoService.finalizarResposta ja
+            // confirmou o envio (Processo.emailEnviadoSolicitante); para
+            // preemptivo (sem comprovante), basta o envio confirmado. Antes disso,
+            // dizer "foi enviada" contradiz o proprio botao de download (que fica
+            // ausente, com o aviso "ainda sendo providenciado" logo abaixo, no
+            // template) - bug real achado em QA, corrigido em 2026-08.
+            boolean respostaJaEnviada = proc != null && proc.isEmailEnviadoSolicitante()
+                && (preempt || comprovanteSnt != null);
+            String base = "Seu pedido (processo " + numero + ") foi analisado e DEFERIDO pela Central "
+                + "de Transplantes do Estado do Rio Grande do Sul. ";
+            String mensagem;
+            if (preempt) {
+                String autoriza = "Esta decisão autoriza a equipe a proceder com a inscrição do paciente "
+                    + "na lista de espera do Sistema Nacional de Transplantes (SNT). ";
+                mensagem = base + autoriza + (respostaJaEnviada
+                    ? "A resposta oficial foi enviada por e-mail à sua equipe (" + s.getSolicitanteEmail() + ")."
+                    : "A equipe está providenciando o envio formal da resposta à sua equipe ("
+                        + s.getSolicitanteEmail() + ").");
+            } else {
+                mensagem = base + (respostaJaEnviada
+                    ? "A resposta oficial foi enviada por e-mail à sua equipe (" + s.getSolicitanteEmail()
+                        + "), com o comprovante de inserção no Sistema Nacional de Transplantes (SNT) em anexo."
+                    : "A equipe está providenciando o envio formal da resposta, com o comprovante de inserção "
+                        + "no Sistema Nacional de Transplantes (SNT), à sua equipe (" + s.getSolicitanteEmail() + ").");
+            }
             // O corpo BRUTO do e-mail institucional (Processo.mensagemResposta) NAO
             // entra mais aqui. Ele repetia, em prosa de oficio, exatamente o que a
             // "mensagem" acima ja diz em linguagem direta (deferido + e-mail enviado +
@@ -541,11 +555,14 @@ public class SolicitanteController {
             // fazer a partir de agora; e so faz sentido depois que a resposta saiu
             // de fato (com a resposta pendente, quem tem pendencia e a equipe, e o
             // proprio texto acima ja diz isso).
-            String detalhe = respostaJaEnviada
-                ? "Não é preciso fazer mais nada por aqui — guarde o comprovante para os seus registros."
-                : null;
+            String detalhe = !respostaJaEnviada ? null
+                : preempt
+                    ? "Não é preciso fazer mais nada por aqui — a equipe dará andamento à inscrição na lista de espera."
+                    : "Não é preciso fazer mais nada por aqui — guarde o comprovante para os seus registros.";
             return new SituacaoPedidoView("Deferido", "success", "check-circle-fill",
-                "Deferido — Urgência renal reconhecida", mensagem, detalhe, false, false, anexo, numero);
+                preempt ? "Deferido — Inserção em lista de espera renal autorizada"
+                        : "Deferido — Urgência renal reconhecida",
+                mensagem, detalhe, false, false, anexo, numero);
         }
 
         boolean indeferido = s.getStatus() == StatusSolicitacaoOnline.REPROVADA
@@ -581,7 +598,9 @@ public class SolicitanteController {
                 detalhe = null;
             }
             return new SituacaoPedidoView("Indeferido", "danger", "x-circle-fill",
-                "Indeferido — Urgência renal não reconhecida", mensagem, detalhe, false, false, anexo, numero);
+                s.isPreemptivo() ? "Indeferido — Inserção em lista de espera renal não autorizada"
+                                 : "Indeferido — Urgência renal não reconhecida",
+                mensagem, detalhe, false, false, anexo, numero);
         }
 
         if (s.getStatus() == StatusSolicitacaoOnline.DEVOLVIDA) {
