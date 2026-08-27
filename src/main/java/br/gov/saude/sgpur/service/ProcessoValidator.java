@@ -359,7 +359,11 @@ public class ProcessoValidator {
      * (simetria entre as duas decisoes finais).
      */
     public Optional<String> validarRespostaSolicitante(Processo processo) {
-        if (processo.getStatus() == StatusProcesso.DEFERIDO
+        // Paciente PREEMPTIVO (2026-08-27) nao tem comprovante SNT NENHUM -
+        // ele ainda nao esta na lista de espera do SNT, entao nao existe
+        // "comprovante de insercao" para exigir. So urgencia renal comum
+        // (!preemptivo) segue exigindo o anexo antes de concluir.
+        if (processo.getStatus() == StatusProcesso.DEFERIDO && !processo.isPreemptivo()
                 && processo.getAnexos().stream().noneMatch(a -> a.getTipo() == TipoAnexo.COMPROVANTE_SNT)) {
             return Optional.of(
                 "Anexe o comprovante de insercao no SNT antes de confirmar a resposta ao solicitante.");

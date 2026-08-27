@@ -33,6 +33,18 @@
                     <i class="bi bi-hash"></i><span th:text="${numero}">00/0000</span>
                 </span>
             </h1>
+            <!-- Aviso de TIPO bem visivel (paciente preemptivo, 2026-08-27) - o
+                 avaliador precisa saber CLARAMENTE, sem ter que inferir pelo
+                 texto corrido, que este processo e uma avaliacao de INSERCAO
+                 EM LISTA DE ESPERA RENAL (nao uma urgencia renal comum). NUNCA
+                 viola a imparcialidade: so o tipo do processo, sem nome/equipe
+                 do paciente. -->
+            <p th:if="${processo.preemptivo}" class="pagina-contexto mb-0">
+                <span class="badge bg-warning text-dark fs-6">
+                    <i class="bi bi-hourglass-split"></i> Inserção em Lista de Espera Renal (Preemptivo)
+                    — este processo NÃO é uma urgência renal
+                </span>
+            </p>
             <!-- Progresso entre OS PROPRIOS pendentes do avaliador (nunca dado do
                  processo em si) - quem tem varios atrasados sabe onde esta na fila.
                  Em modo leitura nao existe posicao (o processo saiu da fila). -->
@@ -171,6 +183,12 @@
             <dl class="row mb-0">
                 <dt class="col-sm-4">Processo</dt>
                 <dd class="col-sm-8 fw-semibold" th:text="${numero}">00/0000</dd>
+
+                <dt class="col-sm-4">Tipo</dt>
+                <dd class="col-sm-8">
+                    <span th:if="${processo.preemptivo}" class="badge bg-warning text-dark">Preemptivo (inserção em lista de espera)</span>
+                    <span th:unless="${processo.preemptivo}" class="badge bg-primary">Urgência Renal</span>
+                </dd>
 
                 <dt class="col-sm-4">Paciente</dt>
                 <dd class="col-sm-8">

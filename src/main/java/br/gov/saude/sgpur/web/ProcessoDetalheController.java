@@ -237,6 +237,7 @@ public class ProcessoDetalheController {
         p.setPacienteCpf(s.getPacienteCpf());
         p.setPacienteSexo(s.getPacienteSexo());
         p.setPacienteNomeMae(s.getPacienteNomeMae());
+        p.setPreemptivo(s.getPreemptivo());
         p.setSolicitanteEquipe(s.getSolicitanteEquipe());
         p.setSolicitanteEmail(s.getSolicitanteEmail());
         p.setEmailAdicional(s.getEmailAdicional());
@@ -245,8 +246,15 @@ public class ProcessoDetalheController {
         model.addAttribute("origemSolicitacaoOnlineId", origemSolicitacaoOnlineId);
         int ano = Year.now().getValue();
         boolean automatica = processoService.isNumeracaoAutomatica(ano);
+        // Sugestao do proximo numero de CADA serie (paciente preemptivo,
+        // 2026-08-27) - o JS troca a sugestao no campo "numero" ao alternar o
+        // radio de tipo, sem sobrescrever algo ja digitado (§9.2 do plano).
+        String proximoNumeroUrgencia = processoService.proximoNumero(ano, false);
+        String proximoNumeroPreemptivo = processoService.proximoNumero(ano, true);
+        model.addAttribute("proximoNumeroUrgencia", proximoNumeroUrgencia);
+        model.addAttribute("proximoNumeroPreemptivo", proximoNumeroPreemptivo);
         if (!automatica) {
-            p.setNumero(processoService.proximoNumero(ano)); // sugestao editavel
+            p.setNumero(p.isPreemptivo() ? proximoNumeroPreemptivo : proximoNumeroUrgencia); // sugestao editavel
         }
         model.addAttribute("processo", p);
         model.addAttribute("numeracaoAutomatica", automatica);
@@ -323,17 +331,38 @@ public class ProcessoDetalheController {
             }
         }
 
-        // Numero so e obrigatorio/validado quando a numeracao for manual
+        // Numero so e obrigatorio/validado quando a numeracao for manual.
+        // Paciente preemptivo (2026-08-27): serie SEPARADA, prefixo "P-"
+        // (ex.: P-01/2026) - checagem cruzada obrigatoria (numero preemptivo
+        // TEM que ter o prefixo, numero de urgencia renal NAO PODE ter), sem
+        // a qual a digitacao manual de 2026 fura a distincao entre as series.
         if (!automatica) {
             String numero = processo.getNumero();
+            boolean preemptivo = processo.isPreemptivo();
             if (numero == null || numero.isBlank()) {
                 result.rejectValue("numero", "obrigatorio", "Informe o numero do processo (NN/AAAA).");
-            } else if (!numero.matches("\\d{1,3}/\\d{4}")) {
-                result.rejectValue("numero", "formato", "Use o formato NN/AAAA (ex.: 01/2026).");
+            } else if (!numero.matches("^(P-)?\\d{1,3}/\\d{4}$")) {
+                result.rejectValue("numero", "formato",
+                    "Use o formato NN/AAAA (ex.: 01/2026) ou P-NN/AAAA para preemptivo (ex.: P-01/2026).");
+            } else if (preemptivo && !numero.startsWith(ProcessoService.PREFIXO_PREEMPTIVO)) {
+                result.rejectValue("numero", "prefixoAusente",
+                    "Processo preemptivo precisa de numero no formato P-NN/AAAA.");
+            } else if (!preemptivo && numero.startsWith(ProcessoService.PREFIXO_PREEMPTIVO)) {
+                result.rejectValue("numero", "prefixoIndevido",
+                    "Numero de processo de urgência renal não pode ter o prefixo P-.");
             } else if (processoService.numeroJaExiste(numero)) {
                 result.rejectValue("numero", "duplicado",
                     "Ja existe um processo com o numero " + numero + ".");
             }
+        }
+        // RGCT condicionalmente obrigatorio: paciente preemptivo ainda nao
+        // esta na lista de espera do SNT, entao nao tem RGCT (ver javadoc de
+        // Processo.pacienteRgct).
+        if (!processo.isPreemptivo()
+                && (processo.getPacienteRgct() == null || processo.getPacienteRgct().isBlank())) {
+            result.rejectValue("pacienteRgct", "obrigatorio", "Informe o registro RGCT/SNT do paciente.");
+        } else if (processo.isPreemptivo()) {
+            processo.setPacienteRgct(null);
         }
         if (medicoIds == null || medicoIds.size() != ProcessoService.AVALIADORES_POR_PROCESSO) {
             result.reject("medicos", "Selecione exatamente "
@@ -373,6 +402,8 @@ public class ProcessoDetalheController {
             model.addAttribute("totalAvaliadores", ProcessoService.AVALIADORES_POR_PROCESSO);
             model.addAttribute("origemSolicitacaoOnlineId", origemSolicitacaoOnlineId);
             model.addAttribute("opcoesSexo", Sexo.values());
+            model.addAttribute("proximoNumeroUrgencia", processoService.proximoNumero(ano, false));
+            model.addAttribute("proximoNumeroPreemptivo", processoService.proximoNumero(ano, true));
             // Preserva a selecao de medicos no re-render (bug corrigido junto com o
             // endpoint de conflito de equipe, ver docs/RELATORIO-CONFIRMACAO-CONFLITO-
             // EQUIPE-2026-08.md secao 2.1): antes os checkboxes nao tinham th:checked
@@ -818,6 +849,10 @@ public class ProcessoDetalheController {
                 form.setPacienteCpf(cpfDigits);
             }
         }
+        // RGCT condicionalmente obrigatorio (paciente preemptivo nao tem RGCT).
+        if (!form.isPreemptivo() && (form.getPacienteRgct() == null || form.getPacienteRgct().isBlank())) {
+            result.rejectValue("pacienteRgct", "obrigatorio", "Informe o registro RGCT/SNT do paciente.");
+        }
         if (result.hasErrors()) {
             model.addAttribute("opcoesSexo", Sexo.values());
             return "processos/editar";
@@ -827,6 +862,11 @@ public class ProcessoDetalheController {
         }
         try {
             processoService.atualizarDados(id, form);
+        } catch (IllegalStateException e) {
+            // Troca de tipo (preemptivo) rejeitada porque o processo ja foi
+            // enviado aos avaliadores (ProcessoService.atualizarDados).
+            ra.addFlashAttribute("erro", e.getMessage());
+            return "redirect:/processos/" + id + "/editar";
         } catch (br.gov.saude.sgpur.service.EmailDominioInvalidoException e) {
             // E-mail adicional com dominio inexistente (EmailDominioValidator) -
             // ver ProcessoService.atualizarDados. Tipo ESPECIFICO (achado real de

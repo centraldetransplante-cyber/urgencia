@@ -48,6 +48,7 @@ public class ProcessoService {
     private final AnexoStorageService anexoStorage;
     private final HistoricoParecerRepository historicoParecerRepository;
     private final EmailDominioValidator emailDominioValidator;
+    private final AuditoriaService auditoriaService;
 
     public ProcessoService(ProcessoRepository processoRepository,
                            MembroUrgenciaRenalRepository membroRepository,
@@ -58,7 +59,8 @@ public class ProcessoService {
                            EmailSenderService emailSenderService,
                            AnexoStorageService anexoStorage,
                            HistoricoParecerRepository historicoParecerRepository,
-                           EmailDominioValidator emailDominioValidator) {
+                           EmailDominioValidator emailDominioValidator,
+                           AuditoriaService auditoriaService) {
         this.processoRepository = processoRepository;
         this.membroRepository = membroRepository;
         this.validator = validator;
@@ -69,6 +71,7 @@ public class ProcessoService {
         this.anexoStorage = anexoStorage;
         this.historicoParecerRepository = historicoParecerRepository;
         this.emailDominioValidator = emailDominioValidator;
+        this.auditoriaService = auditoriaService;
     }
 
     public org.springframework.data.domain.Page<Processo> buscar(
@@ -91,11 +94,28 @@ public class ProcessoService {
         return numero != null && processoRepository.findByNumero(numero).isPresent();
     }
 
-    /** Proximo numero NN/AAAA para um ano (quando automatico). */
+    /**
+     * Prefixo da serie de numeracao de processos preemptivos - serie SEPARADA
+     * da urgencia renal comum (NN/AAAA), com sequencia propria por ano
+     * (paciente preemptivo, 2026-08-27, ver docs/PLANO-PACIENTE-PREEMPTIVO-2026-08-27.md).
+     */
+    public static final String PREFIXO_PREEMPTIVO = "P-";
+
+    /** Proximo numero NN/AAAA para um ano (quando automatico) - serie de urgencia renal comum. */
     public String proximoNumero(int ano) {
-        Integer max = processoRepository.findMaxSequencialByAno(ano);
+        return proximoNumero(ano, false);
+    }
+
+    /**
+     * Proximo numero da serie correspondente ao tipo: {@code NN/AAAA} para
+     * urgencia renal comum, {@code P-NN/AAAA} para preemptivo - series
+     * independentes, cada uma com sua propria sequencia por ano.
+     */
+    public String proximoNumero(int ano, boolean preemptivo) {
+        Integer max = processoRepository.findMaxSequencialByAnoEPreemptivo(ano, preemptivo);
         int seq = (max == null ? 0 : max) + 1;
-        return String.format("%02d/%d", seq, ano);
+        String numero = String.format("%02d/%d", seq, ano);
+        return preemptivo ? PREFIXO_PREEMPTIVO + numero : numero;
     }
 
     /**
@@ -129,7 +149,7 @@ public class ProcessoService {
         processo.setAno(ano);
 
         if (isNumeracaoAutomatica(ano)) {
-            processo.setNumero(proximoNumero(ano));
+            processo.setNumero(proximoNumero(ano, processo.isPreemptivo()));
         }
         processo.setSequencial(extrairSequencial(processo.getNumero(), ano));
 
@@ -358,7 +378,10 @@ public class ProcessoService {
         return processoRepository.save(p);
     }
 
-    /** Atualiza apenas os dados descritivos do processo (numero e medicos nao mudam). */
+    /**
+     * Atualiza apenas os dados descritivos do processo (medicos nao mudam).
+     * O NUMERO so muda se o TIPO (preemptivo) mudar - ver bloco abaixo.
+     */
     @Transactional
     public Processo atualizarDados(Long id, Processo form) {
         Processo p = buscar(id);
@@ -367,8 +390,34 @@ public class ProcessoService {
         if (validator.edicaoBloqueada(p)) {
             throw new IllegalStateException(ProcessoValidator.MSG_ENCERRADO);
         }
+        // Troca de tipo (paciente preemptivo, 2026-08-27) - permitida por
+        // ADMIN ou OPERADOR (nao restrita a ADMIN) SO ENQUANTO o processo
+        // ainda nao foi enviado aos avaliadores: depois disso o PDF carimbado
+        // e o numero ja saíram com o rotulo/serie do tipo antigo. Muda o tipo
+        // -> reemite o numero na serie certa, na MESMA transacao, e audita.
+        boolean tipoNovo = form.isPreemptivo();
+        boolean tipoAntigo = p.isPreemptivo();
+        if (tipoNovo != tipoAntigo) {
+            if (p.getStatus() != StatusProcesso.SOLICITADO) {
+                throw new IllegalStateException(
+                    "O tipo do processo só pode ser alterado antes do envio aos avaliadores.");
+            }
+            String numeroAntigo = p.getNumero();
+            p.setPreemptivo(tipoNovo);
+            String novoNumero = proximoNumero(p.getAno(), tipoNovo);
+            p.setNumero(novoNumero);
+            p.setSequencial(extrairSequencial(novoNumero, p.getAno()));
+            auditoriaService.registrar("PROCESSO_TIPO_ALTERADO",
+                "Processo id " + p.getId() + " - numero " + numeroAntigo + " -> " + novoNumero
+                    + " - tipo " + rotuloTipo(tipoAntigo) + " -> " + rotuloTipo(tipoNovo));
+        }
         p.setPacienteNome(form.getPacienteNome());
-        p.setPacienteRgct(form.getPacienteRgct());
+        // RGCT condicionalmente obrigatorio (paciente preemptivo nao tem RGCT
+        // - ver Processo.pacienteRgct): a validacao de verdade (obrigatorio
+        // quando !preemptivo) fica no controller (result.rejectValue), aqui
+        // so normaliza string em branco para null quando preemptivo, nunca
+        // grava "" no banco.
+        p.setPacienteRgct(tipoNovo ? null : form.getPacienteRgct());
         p.setPacienteDataNascimento(form.getPacienteDataNascimento());
         p.setPacienteCpf(form.getPacienteCpf());
         p.setPacienteSexo(form.getPacienteSexo());
@@ -767,10 +816,16 @@ public class ProcessoService {
             ? emailTemplateService.emailDeferido(p)
             : emailTemplateService.emailIndeferido(p);
 
+        // Paciente PREEMPTIVO Deferido (2026-08-27) NAO tem comprovante SNT
+        // nenhum - ainda nao esta na lista de espera do SNT - entao o e-mail
+        // sai SEM anexo nesse caso (ver validator.validarRespostaSolicitante,
+        // que ja nao exige o anexo aqui). Urgencia renal comum continua
+        // exigindo o COMPROVANTE_SNT como sempre.
+        boolean deferidoSemAnexo = p.getStatus() == StatusProcesso.DEFERIDO && p.isPreemptivo();
         TipoAnexo tipoAnexo = (p.getStatus() == StatusProcesso.DEFERIDO)
             ? TipoAnexo.COMPROVANTE_SNT
             : TipoAnexo.OFICIO_INDEFERIMENTO;
-        Anexo anexo = anexoStorage.buscarUltimoPorTipo(p.getId(), tipoAnexo);
+        Anexo anexo = deferidoSemAnexo ? null : anexoStorage.buscarUltimoPorTipo(p.getId(), tipoAnexo);
 
         // TRADE-OFF CONSCIENTE (nao e descuido): o e-mail sai ANTES do save,
         // portanto fora da garantia transacional. Se a transacao falhar depois
@@ -799,13 +854,16 @@ public class ProcessoService {
         // ver Processo.emailAdicional (javadoc) e
         // docs/RELATORIO-EMAIL-ADICIONAL-SOLICITANTE-2026-08.md.
         String[] cc = ccEmailAdicional(p);
-        boolean enviado = emailSenderService.enviarComAnexo(
-            p.getSolicitanteEmail(),
-            cc,
-            template.assunto(),
-            template.corpo(),
-            anexoStorage.resolverArquivo(anexo).toFile(),
-            anexo.getNomeArquivo());
+        boolean enviado = deferidoSemAnexo
+            ? emailSenderService.enviar(new String[]{p.getSolicitanteEmail()}, cc,
+                template.assunto(), template.corpo())
+            : emailSenderService.enviarComAnexo(
+                p.getSolicitanteEmail(),
+                cc,
+                template.assunto(),
+                template.corpo(),
+                anexoStorage.resolverArquivo(anexo).toFile(),
+                anexo.getNomeArquivo());
 
         if (!enviado) {
             throw new IllegalStateException("Falha ao enviar e-mail para o solicitante. Verifique a configuracao de SMTP.");
@@ -913,16 +971,27 @@ public class ProcessoService {
         return salvo;
     }
 
+    private String rotuloTipo(boolean preemptivo) {
+        return preemptivo ? "Preemptivo" : "Urgência Renal";
+    }
+
     private int extrairSequencial(String numero, int ano) {
         if (numero == null || numero.isBlank()) {
             return 0;
         }
-        String parte = numero.split("/")[0].trim();
+        // Tolera o prefixo "P-" da serie preemptiva (ex.: "P-07/2027" -> 7) -
+        // sem isso Integer.parseInt("P-07") quebra e cai no fallback abaixo,
+        // que usava a sequencia ERRADA (mistura as duas series).
+        String semPrefixo = numero.startsWith(PREFIXO_PREEMPTIVO)
+            ? numero.substring(PREFIXO_PREEMPTIVO.length())
+            : numero;
+        boolean preemptivo = numero.startsWith(PREFIXO_PREEMPTIVO);
+        String parte = semPrefixo.split("/")[0].trim();
         try {
             return Integer.parseInt(parte);
         } catch (NumberFormatException e) {
-            // fallback: proximo da sequencia do ano
-            Integer max = processoRepository.findMaxSequencialByAno(ano);
+            // fallback: proximo da sequencia do ano, na serie correta
+            Integer max = processoRepository.findMaxSequencialByAnoEPreemptivo(ano, preemptivo);
             return (max == null ? 0 : max) + 1;
         }
     }

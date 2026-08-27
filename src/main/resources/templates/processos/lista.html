@@ -82,6 +82,7 @@
                         <a th:href="@{/processos/{id}(id=${p.id})}"
                            class="text-decoration-none fw-semibold text-primary"
                            th:text="${p.identificacao()}">00/0000 - Paciente - RGCT</a>
+                        <span th:if="${p.isPreemptivo()}" class="badge bg-warning text-dark ms-1">Preemptivo</span>
                     </td>
                     <!-- Relatorio de clareza (2026-08-05), item 5.1: so o titulo curto da
                          etapa pendente na celula; a frase completa fica no title, sem

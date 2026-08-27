@@ -68,7 +68,8 @@ public class OficioService {
             Paragraph cab = new Paragraph(PdfCabecalhoStamper.NOME_INSTITUICAO, fCab);
             cab.setAlignment(Element.ALIGN_CENTER);
             doc.add(cab);
-            Paragraph cab2 = new Paragraph("URGÊNCIA RENAL", fCabSub);
+            Paragraph cab2 = new Paragraph(
+                p.isPreemptivo() ? "INSERÇÃO EM LISTA DE ESPERA RENAL" : "URGÊNCIA RENAL", fCabSub);
             cab2.setAlignment(Element.ALIGN_CENTER);
             cab2.setSpacingAfter(24);
             doc.add(cab2);
@@ -102,14 +103,15 @@ public class OficioService {
             String texto = """
                 Prezado(a) Senhor(a),
 
-                Em referência ao Processo de Urgência Renal n. %s, referente ao(à) paciente \
+                Em referência ao %s n. %s, referente ao(à) paciente \
                 %s, comunicamos que, após análise dos pareceres da equipe de Urgência Renal, \
                 o pedido foi INDEFERIDO.
 
                 Motivo do indeferimento: %s
 
                 Permanecemos à disposição para os esclarecimentos que se fizerem necessários.
-                """.formatted(p.getNumero(), p.getPacienteNome(), motivo);
+                """.formatted(br.gov.saude.sgpur.service.RotuloProcesso.nomeLongo(p),
+                    p.getNumero(), p.getPacienteNome(), motivo);
             Paragraph corpo = new Paragraph(texto, fCorpo);
             corpo.setAlignment(Element.ALIGN_JUSTIFIED);
             corpo.setSpacingAfter(28);
@@ -179,7 +181,7 @@ public class OficioService {
         linha(rtf, "");
         linha(rtf, "Prezado(a) Senhor(a),");
         linha(rtf, "");
-        linha(rtf, "Em referência ao Processo de Urgência Renal n. " + p.getNumero()
+        linha(rtf, "Em referência ao " + br.gov.saude.sgpur.service.RotuloProcesso.nomeLongo(p) + " n. " + p.getNumero()
             + ", referente ao(à) paciente " + p.getPacienteNome() + ", comunicamos que, após "
             + "análise dos pareceres da equipe de Urgência Renal, o pedido foi INDEFERIDO.");
         linha(rtf, "");

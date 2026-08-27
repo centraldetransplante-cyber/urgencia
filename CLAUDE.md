@@ -108,6 +108,51 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   Indeferido** (exige **ofício + motivo**). As duas regras são **impostas** no
   serviço e no controller (`decidir` rejeita Deferido sem 2 favoráveis e
   Indeferido sem 2 desfavoráveis).
+- **Paciente preemptivo (2026-08-27) — segundo tipo de processo, mesma
+  equipe/mesmo rito.** `Processo`/`SolicitacaoOnline`/
+  `RascunhoSolicitacaoOnline.preemptivo` (`Boolean` nullable — `null`/`false`
+  == urgência renal comum, sem exigir backfill; sempre ler via
+  `isPreemptivo()`, nunca o getter cru). Paciente preemptivo ainda **não está
+  na lista de espera do SNT** — o processo dele avalia a **inserção** na lista
+  de espera renal, **não é uma urgência**. Julgado pela mesma equipe, no mesmo
+  sistema: **nenhuma regra de votação/decisão muda** — 3 avaliadores, maioria
+  simples 2/3, exceção do coordenador CET-RS, pausa `SOLICITA_INFORMACAO`,
+  fluxo de 5 passos, trava de processo encerrado, tudo idêntico. O que muda é
+  classificação/nomenclatura/numeração/obrigatoriedade de um campo:
+  - **Nomenclatura:** "Urgência Renal" → **"Inserção em Lista de Espera
+    Renal"** em todo texto/documento **específico de um processo
+    preemptivo** (título de PDF, carimbo de página, badge, e-mails daquele
+    processo) — fonte única em `service/RotuloProcesso.java`. Títulos
+    GERAIS/compartilhados do operador (Painel, rodapé, navbar, título do
+    Relatório Anual) **não mudam**, continuam "Urgência Renal" sempre.
+  - **RGCT deixou de ser `@NotBlank` na entidade** (`Processo`/
+    `SolicitacaoOnline.pacienteRgct`) — paciente preemptivo não tem RGCT.
+    Obrigatoriedade agora é **condicional** (`!isPreemptivo()`), validada em
+    `SolicitacaoOnlineService.criar` e
+    `ProcessoDetalheController.salvar`/`atualizar` (mesmo padrão já usado
+    para CPF/data de nascimento — nunca reintroduzir Bean Validation
+    incondicional nesse campo, quebraria escrita em processo preemptivo já
+    existente).
+  - **Numeração em série separada**, ver bullet "Numeração `NN/AAAA`" abaixo.
+  - **Tipo editável até o processo ser enviado** aos avaliadores (status
+    `SOLICITADO`), por ADMIN ou OPERADOR (`ProcessoService.atualizarDados`)
+    — troca reemite o número na série certa na mesma transação e grava
+    auditoria `PROCESSO_TIPO_ALTERADO` (id + número antigo→novo + tipo
+    antigo→novo, nunca o nome do paciente). Depois do envio a troca é
+    rejeitada (`IllegalStateException`).
+  - **Portal do Avaliador expõe o tipo claramente** (badge "Preemptivo" na
+    lista `/avaliador` e no formulário de voto `/avaliador/{id}`, texto
+    explícito "Inserção em Lista de Espera Renal" no cabeçalho, e-mails de
+    convite/lembrete citando o tipo) — reforço explícito de produto: o
+    avaliador não pode inferir isso só pelo texto corrido. Nunca viola a
+    imparcialidade (`ProcessoVotoView`/`ParecerPendenteView`/
+    `ParecerHistoricoView`/`ParecerDispensadoView` ganham só um `boolean
+    preemptivo`, nunca nome/equipe do paciente).
+  - Ver o bullet "Deferido exige anexar o comprovante..." abaixo para a
+    exceção do Comprovante SNT (paciente preemptivo não tem, a decisão só
+    AUTORIZA a equipe a inscrever depois, fora do sistema).
+  - Desenho completo e decisões fechadas em
+    `docs/PLANO-PACIENTE-PREEMPTIVO-2026-08-27.md`.
 - **Exceção — coordenador CET-RS defere sozinho:** se o médico marcado como
   `MembroUrgenciaRenal.coordenador` votar **Favorável**, o processo é
   **Deferido com esse único voto**, sem esperar os outros 2 pareceres
@@ -170,6 +215,16 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   (`TipoAnexo.COMPROVANTE_SNT`) e enviá-lo junto na resposta ao solicitante; a
   etapa "Comprovante SNT" bloqueia a conclusão até o anexo existir (simétrico
   ao ofício no indeferimento). O comprovante é gerado fora do sistema.
+  **Exceção — paciente preemptivo (2026-08-27, ver item "Paciente preemptivo"
+  logo abaixo):** essa exigência **não vale** quando `Processo.preemptivo =
+  true` — o paciente preemptivo ainda não está na lista de espera do SNT, então
+  não existe comprovante nenhum a anexar. `FluxoProcessoService` nem cria a
+  etapa "Comprovante SNT" nesse caso (nunca aparece, nunca bloqueia) e
+  `ProcessoValidator.validarRespostaSolicitante`/`ProcessoService
+  .finalizarResposta` liberam a conclusão sem o anexo, enviando o e-mail de
+  Deferido **sem anexo** (texto ajustado: "autoriza a equipe a proceder com a
+  inscrição", nunca afirma que a inscrição já ocorreu). Só urgência renal
+  comum (`preemptivo` nulo/false) continua exigindo o anexo como sempre.
   **Desde 2026-07-27, o Portal do Solicitante também exibe o resultado final**
   (`/solicitante/{id}`): quando o `Processo` gerado está Deferido/Indeferido/
   Cancelado, a tela mostra a decisão e, se o anexo já existir, um botão de
@@ -425,6 +480,17 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   `CONVITE_AVALIADOR_ENVIADO` / `CONVITE_AVALIADOR_NAO_ENVIADO` (sem e-mail) /
   `CONVITE_AVALIADOR_FALHA` (SMTP).
 - Numeração `NN/AAAA`: **manual em 2026**, **automática a partir de 2027**.
+  **Paciente preemptivo (2026-08-27) usa uma série SEPARADA, formato
+  `P-NN/AAAA`** (ex. `P-01/2026`), com sequência própria por ano
+  (`ProcessoRepository.findMaxSequencialByAnoEPreemptivo`, `coalesce
+  (preemptivo, false)` para não excluir da contagem as linhas legadas
+  `NULL`) — nunca compartilha a contagem com a série normal.
+  `ProcessoService.proximoNumero(ano, preemptivo)` gera o número de cada
+  série; `extrairSequencial` tolera o prefixo `P-`. Regex de validação manual
+  aceita `^(P-)?\d{1,3}/\d{4}$` com checagem cruzada (processo preemptivo
+  precisa do prefixo, urgência renal não pode ter). O formulário de novo
+  processo sugere o próximo número de cada série (`proximoNumeroUrgencia`/
+  `proximoNumeroPreemptivo`), atualizado por JS ao trocar o tipo.
 - Fluxo por e-mail com anexos por etapa. **Identificação do paciente:** o
   e-mail/material aos **médicos avaliadores oculta o nome** do paciente (só
   iniciais), para preservar a **imparcialidade do julgamento** — os avaliadores
@@ -447,6 +513,22 @@ RESPOSTA_AVALIADOR` foram removidos do enum**, não apenas do caminho de
 escrita — não sobrou nenhuma linha em produção usando esses valores, então
 não fazia sentido manter "legado só leitura". Ver detalhe da remoção em
 "Regras de negócio" acima.
+
+### Paciente preemptivo — aviso explícito ao avaliador (2026-08-27)
+O avaliador precisa saber, sem ambiguidade, quando está julgando uma
+**inserção em lista de espera renal (preemptiva)** em vez de uma urgência —
+o critério clínico é outro. Isso é **compatível** com a imparcialidade (que
+protege a identidade do paciente, não a natureza do pedido): o badge de tipo
+aparece na lista `/avaliador` (`avaliador/lista.html`) e no formulário de
+voto `/avaliador/{id}` (`avaliador/votar.html`, título "Inserção em Lista de
+Espera Renal (Preemptivo)" bem visível, não só implícito no texto corrido),
+e os e-mails de convite/lembrete (`EmailTemplateService.emailConviteAvaliador`
+/`emailConvitePortal`/`emailLembreteAvaliador`) citam o tipo do processo. O
+flag chega aos templates só como `boolean preemptivo` nos records projetados
+(`AvaliadorController.ProcessoVotoView`/`ParecerPendenteView`/
+`ParecerHistoricoView`/`ParecerDispensadoView`) — nunca via `Processo`/
+`Parecer` cru, mantendo a mesma proteção por design contra vazar
+`pacienteNome`/equipe (ver item 12 das regras de negócio).
 
 ### Perfil AVALIADOR
 - Novo valor `Perfil.AVALIADOR` em `domain/Perfil.java`.
@@ -1092,7 +1174,12 @@ dígitos, validado por módulo-11 via `CpfUtil`), `pacienteSexo` (enum
 (`RascunhoSolicitacaoOnline` espelha, sem obrigatoriedade). Todos
 `nullable` na coluna mesmo com `@NotNull` na Bean Validation (compatível
 com linhas gravadas antes destes campos existirem — mesma lacuna já
-documentada para `pacienteRgct`), nenhum backfill necessário. **Nunca**
+documentada para `pacienteRgct`), nenhum backfill necessário.
+**`pacienteRgct` (2026-08-27, paciente preemptivo):** deixou de ter
+`@NotBlank` na ENTIDADE — passou a ser condicionalmente obrigatório (só
+quando `!isPreemptivo()`), validado em `SolicitacaoOnlineService.criar` e
+`ProcessoDetalheController` — ver o bullet "Paciente preemptivo" em "Regras
+de negócio" acima. **Nunca**
 chegam ao avaliador — só até o Relatório Final/dossiê, lado do operador.
 **`pacienteDataNascimento` PRECISA de `@DateTimeFormat(iso =
 DateTimeFormat.ISO.DATE)`** em `Processo`/`SolicitacaoOnline` — bug real de

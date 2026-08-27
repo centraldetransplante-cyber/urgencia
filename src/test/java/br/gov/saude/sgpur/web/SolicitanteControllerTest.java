@@ -715,7 +715,7 @@ class SolicitanteControllerTest {
         java.time.LocalDateTime agora = java.time.LocalDateTime.of(2026, 8, 4, 15, 0);
         salvo.setAtualizadoEm(agora);
         when(rascunhoService.salvar(eq(1L), eq("So o nome"), isNull(), isNull(), isNull(),
-            isNull(), isNull(), isNull(), isNull(), isNull()))
+            isNull(), isNull(), isNull(), isNull(), isNull(), isNull()))
             .thenReturn(salvo);
 
         mvc.perform(post("/solicitante/nova/rascunho")
@@ -725,7 +725,7 @@ class SolicitanteControllerTest {
             .andExpect(jsonPath("$.ok").value(true))
             .andExpect(jsonPath("$.salvoEm").value(agora.toString()));
 
-        verify(rascunhoService).salvar(1L, "So o nome", null, null, null, null, null, null, null, null);
+        verify(rascunhoService).salvar(1L, "So o nome", null, null, null, null, null, null, null, null, null);
     }
 
     @Test

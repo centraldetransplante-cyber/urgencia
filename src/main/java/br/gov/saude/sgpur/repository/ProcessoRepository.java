@@ -93,6 +93,19 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     @Query("select max(p.sequencial) from Processo p where p.ano = :ano")
     Integer findMaxSequencialByAno(@Param("ano") int ano);
 
+    /**
+     * Maior sequencial ja usado em um ano, dentro da serie do TIPO informado
+     * (preemptivo ou urgencia renal comum) - as duas series sao
+     * independentes (paciente preemptivo, 2026-08-27), numero final
+     * "P-NN/AAAA" x "NN/AAAA". <b>Usa {@code coalesce} de proposito</b>: as
+     * linhas legadas tem {@code preemptivo = NULL}, que um {@code = false}
+     * cru excluiria da contagem da serie de urgencia renal, quebrando a
+     * sequencia existente.
+     */
+    @Query("select max(p.sequencial) from Processo p "
+        + "where p.ano = :ano and coalesce(p.preemptivo, false) = :preemptivo")
+    Integer findMaxSequencialByAnoEPreemptivo(@Param("ano") int ano, @Param("preemptivo") boolean preemptivo);
+
     long countByStatus(StatusProcesso status);
 
     /**
@@ -116,6 +129,7 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     @Query("""
         select count(p) from Processo p
         where p.status = br.gov.saude.sgpur.domain.StatusProcesso.DEFERIDO
+          and coalesce(p.preemptivo, false) = false
           and not exists (
             select 1 from Anexo a
             where a.processo = p
@@ -131,6 +145,7 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     @Query("""
         select p.id from Processo p
         where p.status = br.gov.saude.sgpur.domain.StatusProcesso.DEFERIDO
+          and coalesce(p.preemptivo, false) = false
           and not exists (
             select 1 from Anexo a
             where a.processo = p
@@ -145,6 +160,7 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     @Query("""
         select p from Processo p
         where p.status = br.gov.saude.sgpur.domain.StatusProcesso.DEFERIDO
+          and coalesce(p.preemptivo, false) = false
           and not exists (
             select 1 from Anexo a
             where a.processo = p
@@ -162,6 +178,7 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     @Query("""
         select p from Processo p
         where p.status = br.gov.saude.sgpur.domain.StatusProcesso.DEFERIDO
+          and coalesce(p.preemptivo, false) = false
           and p.dataDecisao is not null
           and p.dataDecisao < :limiteDecisao
           and (p.ultimoLembreteSntEm is null or p.ultimoLembreteSntEm < :limiteLembrete)

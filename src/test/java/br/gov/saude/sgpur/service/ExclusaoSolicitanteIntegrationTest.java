@@ -139,7 +139,7 @@ class ExclusaoSolicitanteIntegrationTest {
     @Test
     void excluirSolicitanteComApenasRascunhoFuncionaEApagaORascunhoJunto() {
         Usuario solicitante = criarSolicitante();
-        rascunhoService.salvar(solicitante.getId(), "Paciente Rascunho", null, null, null, null, null, null, null, null);
+        rascunhoService.salvar(solicitante.getId(), "Paciente Rascunho", null, null, null, null, null, null, null, null, null);
         Long id = solicitante.getId();
         assertThat(rascunhoRepo.findByUsuarioSolicitanteId(id)).isPresent();
 

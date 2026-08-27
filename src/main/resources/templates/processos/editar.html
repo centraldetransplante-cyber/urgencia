@@ -11,13 +11,32 @@
     <form th:action="@{/processos/{id}/editar(id=${processo.id})}" th:object="${processo}"
           method="post" class="card" data-lock-submit="Salvando alterações...">
         <div class="card-body">
+            <div class="row g-3" th:if="${processo.status.name() == 'SOLICITADO'}">
+                <div class="col-md-6">
+                    <label class="form-label d-block">Tipo de processo *</label>
+                    <div class="btn-group" role="group" aria-label="Tipo de processo">
+                        <input type="radio" class="btn-check" name="preemptivo" id="tipoUrgencia" value="false"
+                               th:checked="${!processo.isPreemptivo()}">
+                        <label class="btn btn-outline-primary" for="tipoUrgencia">Urgência Renal</label>
+                        <input type="radio" class="btn-check" name="preemptivo" id="tipoPreemptivo" value="true"
+                               th:checked="${processo.isPreemptivo() == true}">
+                        <label class="btn btn-outline-warning" for="tipoPreemptivo">Preemptivo (inserção em lista de espera)</label>
+                    </div>
+                    <div class="form-text">
+                        Alterar o tipo <strong>reemite o número</strong> do processo na série correta
+                        (só é possível enquanto o processo ainda não foi enviado aos avaliadores).
+                    </div>
+                </div>
+            </div>
+            <input type="hidden" name="preemptivo" th:if="${processo.status.name() != 'SOLICITADO'}"
+                   th:value="${processo.isPreemptivo() == true}">
             <div class="row g-3">
                 <div class="col-md-3">
                     <label class="form-label" th:for="numero">Número</label>
                     <input type="text" th:field="*{numero}" class="form-control" readonly>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label" th:for="dataSituacaoEspecial">Data de solicitação da urgência renal *</label>
+                    <label class="form-label" th:for="dataSituacaoEspecial" th:text="${processo.isPreemptivo()} ? 'Data da solicitação *' : 'Data de solicitação da urgência renal *'">Data de solicitação da urgência renal *</label>
                     <input type="date" th:field="*{dataSituacaoEspecial}" class="form-control" th:classappend="${#fields.hasErrors('dataSituacaoEspecial')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('dataSituacaoEspecial')} ? 'true' : null,aria-describedby=${#fields.hasErrors('dataSituacaoEspecial')} ? 'dataSituacaoEspecialErro' : null">
                     <div class="invalid-feedback d-block" id="dataSituacaoEspecialErro" role="alert" th:errors="*{dataSituacaoEspecial}"></div>
                 </div>
@@ -31,7 +50,7 @@
                     <input type="text" th:field="*{pacienteNome}" class="form-control" required th:classappend="${#fields.hasErrors('pacienteNome')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteNome')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteNome')} ? 'pacienteNomeErro' : null">
                     <div class="invalid-feedback d-block" id="pacienteNomeErro" role="alert" th:errors="*{pacienteNome}"></div>
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-4" th:unless="${processo.isPreemptivo()}">
                     <label class="form-label" th:for="pacienteRgct">RGCT / SNT *</label>
                     <input type="text" th:field="*{pacienteRgct}" class="form-control" required th:classappend="${#fields.hasErrors('pacienteRgct')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteRgct')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteRgct')} ? 'pacienteRgctErro' : null">
                     <div class="invalid-feedback d-block" id="pacienteRgctErro" role="alert" th:errors="*{pacienteRgct}"></div>

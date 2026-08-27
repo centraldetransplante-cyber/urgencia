@@ -97,3 +97,42 @@
     }
     atualizar();
 })();
+
+// === SAUR - paciente preemptivo (2026-08-27): alterna RGCT (obrigatorio so
+// para urgencia renal comum), o rotulo da data e a SUGESTAO de numero da
+// serie correta, ao trocar o radio de tipo. So UX/apresentacao - a regra de
+// verdade (obrigatoriedade do RGCT, formato/prefixo do numero) mora sempre
+// no backend (ProcessoDetalheController/ProcessoService), nunca so aqui. ===
+function atualizarTipoProcesso(preemptivo) {
+    var campoRgct = document.querySelector('[name="pacienteRgct"]');
+    var blocoRgct = document.getElementById('blocoRgct');
+    var labelRgct = document.getElementById('labelPacienteRgct');
+    var labelData = document.getElementById('labelDataSituacaoEspecial');
+    var campoNumero = document.getElementById('numero');
+    var sugestaoUrgencia = document.getElementById('sugestaoNumeroUrgencia');
+    var sugestaoPreemptivo = document.getElementById('sugestaoNumeroPreemptivo');
+
+    if (campoRgct) {
+        campoRgct.required = !preemptivo;
+        if (preemptivo) {
+            campoRgct.value = '';
+        }
+    }
+    if (blocoRgct) {
+        blocoRgct.style.display = preemptivo ? 'none' : '';
+    }
+    if (labelRgct) {
+        labelRgct.textContent = 'RGCT / SNT *';
+    }
+    if (labelData) {
+        labelData.textContent = preemptivo ? 'Data da solicitação *' : 'Data de solicitação da urgência renal *';
+    }
+    // Sugestao de numero: so preenche se o campo ainda estiver vazio (nunca
+    // sobrescreve algo ja digitado pelo operador - §5.7/§9.2 do plano).
+    if (campoNumero && !campoNumero.value.trim()) {
+        var sugestao = preemptivo
+            ? (sugestaoPreemptivo ? sugestaoPreemptivo.textContent : '')
+            : (sugestaoUrgencia ? sugestaoUrgencia.textContent : '');
+        campoNumero.value = sugestao;
+    }
+}

@@ -310,8 +310,12 @@ public class FluxoProcessoService {
             anterioresConcluidas = anterioresConcluidas && oficioOk;
         }
 
-        // 4b. Comprovante de insercao da urgencia renal no SNT (apenas quando deferido)
-        if (p.getStatus() == StatusProcesso.DEFERIDO) {
+        // 4b. Comprovante de insercao da urgencia renal no SNT (apenas quando
+        // deferido). Paciente PREEMPTIVO (2026-08-27) nao tem comprovante SNT
+        // nenhum - ainda nao esta na lista de espera do SNT - entao esta
+        // etapa NAO EXISTE/NAO SE APLICA nesse caso (nunca aparece no
+        // checklist, nunca bloqueia a conclusao).
+        if (p.getStatus() == StatusProcesso.DEFERIDO && !p.isPreemptivo()) {
             boolean comprovanteOk = temAnexo(p, TipoAnexo.COMPROVANTE_SNT);
             etapas.add(montar(Chave.COMPROVANTE_SNT, "Comprovante SNT", "clipboard2-check-fill",
                 comprovanteOk, anterioresConcluidas,

@@ -40,6 +40,8 @@ class ProcessoServiceTest {
     HistoricoParecerRepository historicoParecerRepository;
     @Mock
     EmailDominioValidator emailDominioValidator;
+    @Mock
+    AuditoriaService auditoriaService;
     ProcessoService service;
 
     // Usa o ProcessoValidator real (funcoes puras): as regras de negocio vivem
@@ -50,7 +52,7 @@ class ProcessoServiceTest {
             .thenReturn(true);
         service = new ProcessoService(processoRepository, membroRepository, new ProcessoValidator(), parecerRepository,
                 solicitacaoOnlineRepository, emailTemplateService, emailSenderService, anexoStorageService,
-                historicoParecerRepository, emailDominioValidator);
+                historicoParecerRepository, emailDominioValidator, auditoriaService);
     }
 
     private Parecer parecer(ResultadoParecer r) {
@@ -224,14 +226,21 @@ class ProcessoServiceTest {
 
     @Test
     void proximoNumeroFormataSequencialDoAno() {
-        when(processoRepository.findMaxSequencialByAno(2027)).thenReturn(4);
+        when(processoRepository.findMaxSequencialByAnoEPreemptivo(2027, false)).thenReturn(4);
         assertThat(service.proximoNumero(2027)).isEqualTo("05/2027");
     }
 
     @Test
     void proximoNumeroComecaEmUmQuandoAnoVazio() {
-        when(processoRepository.findMaxSequencialByAno(2027)).thenReturn(null);
+        when(processoRepository.findMaxSequencialByAnoEPreemptivo(2027, false)).thenReturn(null);
         assertThat(service.proximoNumero(2027)).isEqualTo("01/2027");
+    }
+
+    /** Serie separada do preemptivo (2026-08-27): prefixo P- e sequencia propria. */
+    @Test
+    void proximoNumeroPreemptivoUsaPrefixoESerieSeparada() {
+        when(processoRepository.findMaxSequencialByAnoEPreemptivo(2027, true)).thenReturn(2);
+        assertThat(service.proximoNumero(2027, true)).isEqualTo("P-03/2027");
     }
 
     @Test

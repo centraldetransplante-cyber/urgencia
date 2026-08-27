@@ -463,6 +463,16 @@ public class SolicitacaoOnlineService {
             throw new IllegalArgumentException("CPF do paciente invalido. Confira os digitos informados.");
         }
         solicitacao.setPacienteCpf(cpfDigits);
+        // RGCT condicionalmente obrigatorio (paciente preemptivo, 2026-08-27):
+        // ainda nao esta na lista de espera do SNT, entao nao tem RGCT - ver
+        // javadoc de SolicitacaoOnline.pacienteRgct/Processo.pacienteRgct.
+        if (!solicitacao.isPreemptivo()
+                && (solicitacao.getPacienteRgct() == null || solicitacao.getPacienteRgct().isBlank())) {
+            throw new IllegalArgumentException("Informe o RGCT/SNT do paciente.");
+        }
+        if (solicitacao.isPreemptivo()) {
+            solicitacao.setPacienteRgct(null); // normaliza "" -> null, nunca string vazia no banco
+        }
         // Campo opcional (2026-08-21): "" (input vazio submetido pelo navegador) vira
         // null, nunca uma string em branco gravada no banco - mesmo tratamento que
         // qualquer outro campo opcional de texto do sistema (ex. pacienteNomeMae, que
@@ -553,7 +563,11 @@ public class SolicitacaoOnlineService {
         // EmailTemplateService.blocoIdentificacaoPaciente).
         StringBuilder identificacao = new StringBuilder();
         identificacao.append("Paciente: ").append(s.getPacienteNome()).append('\n');
-        identificacao.append("RGCT/SNT: ").append(s.getPacienteRgct()).append('\n');
+        identificacao.append("Tipo: ").append(s.isPreemptivo()
+            ? "Preemptivo (inserção em lista de espera)" : "Urgência renal").append('\n');
+        if (s.getPacienteRgct() != null && !s.getPacienteRgct().isBlank()) {
+            identificacao.append("RGCT/SNT: ").append(s.getPacienteRgct()).append('\n');
+        }
         if (s.getPacienteCpf() != null && !s.getPacienteCpf().isBlank()) {
             identificacao.append("CPF: ").append(CpfUtil.formatar(s.getPacienteCpf())).append('\n');
         }

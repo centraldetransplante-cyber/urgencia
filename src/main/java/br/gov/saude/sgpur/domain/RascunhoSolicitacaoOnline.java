@@ -73,6 +73,10 @@ public class RascunhoSolicitacaoOnline {
     @Column(name = "data_situacao_especial")
     private LocalDate dataSituacaoEspecial;
 
+    /** Espelha {@link SolicitacaoOnline#getPreemptivo()}, sem obrigatoriedade nenhuma (rascunho nunca valida nada). */
+    @Column(name = "preemptivo")
+    private Boolean preemptivo;
+
     /**
      * Espelha {@link SolicitacaoOnline#getEmailAdicional()} (2026-08-21) - o
      * rascunho tambem guarda o e-mail adicional opcional que o solicitante ja
@@ -174,6 +178,19 @@ public class RascunhoSolicitacaoOnline {
 
     public void setDataSituacaoEspecial(LocalDate dataSituacaoEspecial) {
         this.dataSituacaoEspecial = dataSituacaoEspecial;
+    }
+
+    public Boolean getPreemptivo() {
+        return preemptivo;
+    }
+
+    public void setPreemptivo(Boolean preemptivo) {
+        this.preemptivo = preemptivo;
+    }
+
+    /** Null-safe: null (legado) == urgencia renal comum. */
+    public boolean isPreemptivo() {
+        return Boolean.TRUE.equals(preemptivo);
     }
 
     public String getEmailAdicional() {

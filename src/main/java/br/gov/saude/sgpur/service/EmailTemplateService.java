@@ -181,12 +181,12 @@ public class EmailTemplateService {
         String corpo = """
             Prezado(a) %s,
 
-            Você foi designado(a) como avaliador(a) do processo de Urgência Renal
-            abaixo e pode registrar seu parecer diretamente no sistema da Secretaria,
+            Você foi designado(a) como avaliador(a) do processo abaixo (%s)
+            e pode registrar seu parecer diretamente no sistema da Secretaria,
             sem necessidade de responder por e-mail.
 
             Processo: %s
-            Data de solicitação da urgência renal: %s
+            %s: %s
 
             Para emitir seu parecer, acesse o Portal do Avaliador com suas credenciais:
             %s
@@ -200,7 +200,9 @@ public class EmailTemplateService {
             %s
             """.formatted(
                 membro.getNome(),
+                RotuloProcesso.nomeLongo(p),
                 idProcesso,
+                RotuloProcesso.rotuloDataClinica(p),
                 p.getDataSituacaoEspecial() != null ? p.getDataSituacaoEspecial().format(DATA) : "(data)",
                 portalUrl,
                 assinatura());
@@ -257,8 +259,8 @@ public class EmailTemplateService {
         String corpo = """
             Prezado(a) %s,
 
-            Lembramos que o processo abaixo permanece disponível para a sua avaliação
-            e aguarda o seu parecer.
+            Lembramos que o processo abaixo (%s) permanece disponível para a sua
+            avaliação e aguarda o seu parecer.
 
             Processo %s
 
@@ -270,7 +272,7 @@ public class EmailTemplateService {
 
             Atenciosamente,
             %s
-            """.formatted(membro.getNome(), idProcesso, portalUrl, assinatura());
+            """.formatted(membro.getNome(), RotuloProcesso.nomeLongo(p), idProcesso, portalUrl, assinatura());
 
         return new EmailTemplate("lembrete-avaliador",
             "Lembrete de avaliação pendente - " + membro.getNome(), "bell",
@@ -299,9 +301,8 @@ public class EmailTemplateService {
 
             %s
 
-            O processo acima foi deferido há %d dia(s) e ainda não tem o comprovante
-            de inserção da urgência renal no Sistema Nacional de Transplantes (SNT)
-            anexado.
+            O processo acima foi deferido há %d dia(s) e ainda não tem o anexo
+            "%s" anexado.
 
             Enquanto o comprovante não for anexado, a resposta oficial ao
             solicitante permanece bloqueada - ou seja, a equipe que abriu o pedido
@@ -312,7 +313,8 @@ public class EmailTemplateService {
 
             Atenciosamente,
             %s
-            """.formatted(blocoIdentificacaoPaciente(p), diasDesdeDecisao, linkProcesso, assinatura());
+            """.formatted(blocoIdentificacaoPaciente(p), diasDesdeDecisao,
+                RotuloProcesso.rotuloComprovanteSnt(p), linkProcesso, assinatura());
 
         return new EmailTemplate("lembrete-comprovante-snt",
             "Lembrete interno: comprovante SNT pendente", "clipboard2-x",
@@ -336,11 +338,11 @@ public class EmailTemplateService {
         String corpo = """
             Prezados(as) avaliadores(as),
 
-            Vocês foram designados(as) para avaliar o processo de Urgência Renal abaixo
+            Vocês foram designados(as) para avaliar o processo abaixo (%s)
             e podem registrar o parecer diretamente no sistema (sem responder por e-mail).
 
             Processo: %s
-            Data de solicitação da urgência renal: %s
+            %s: %s
 
             Avaliadores designados:
             %s
@@ -353,7 +355,9 @@ public class EmailTemplateService {
             Atenciosamente,
             %s
             """.formatted(
+                RotuloProcesso.nomeLongo(p),
                 idProcesso,
+                RotuloProcesso.rotuloDataClinica(p),
                 p.getDataSituacaoEspecial() != null ? p.getDataSituacaoEspecial().format(DATA) : "(data)",
                 medicos,
                 portalUrl,
@@ -382,7 +386,7 @@ public class EmailTemplateService {
             %s
 
             Durante a análise do processo acima, um(a) dos(as) avaliadores(as)
-            da Urgência Renal solicitou informações complementares para
+            da equipe responsável solicitou informações complementares para
             concluir o parecer.
             %s
             Solicitamos, por gentileza, o envio das informações e/ou dos documentos
@@ -442,22 +446,38 @@ public class EmailTemplateService {
     }
 
     public EmailTemplate emailDeferido(Processo p) {
+        // Paciente PREEMPTIVO (2026-08-27): nao existe comprovante SNT nenhum
+        // (ainda nao esta na lista de espera do SNT) - o e-mail NAO promete
+        // nenhum anexo nesse caso (ver ProcessoService.finalizarResposta, que
+        // envia sem anexo). Urgencia renal comum continua com o comprovante.
+        //
+        // REDACAO (2026-08-27, ajuste fino confirmado pelo dono do produto):
+        // o Deferido AUTORIZA a equipe a inscrever o paciente na lista de
+        // espera do SNT DEPOIS (passo manual, fora do sistema) - a decisao em
+        // si NAO significa que a insercao ja ocorreu. O texto abaixo NUNCA
+        // afirma "paciente inserido/incluido" de forma definitiva para o
+        // caso preemptivo, so que a inscricao foi AUTORIZADA.
+        String linhaAnexo = p.isPreemptivo()
+            ? "\nEsta decisão autoriza a equipe a proceder com a inscrição do paciente na lista "
+                + "de espera do Sistema Nacional de Transplantes (SNT).\n"
+            : "\nSegue em anexo o comprovante de inserção da urgência renal no "
+                + "Sistema Nacional de Transplantes (SNT).\n";
         String corpo = """
             Prezados(as),
 
             %s
 
-            Informamos que o processo acima foi deferido pela equipe de
+            Informamos que o %s acima foi deferido pela equipe de
             Urgência Renal.
-
-            Segue em anexo o comprovante de inserção da urgência renal no
-            Sistema Nacional de Transplantes (SNT).
-
+            %s
             Permanecemos à disposição para esclarecimentos.
 
             Atenciosamente,
             %s
-            """.formatted(blocoIdentificacaoPaciente(p), assinatura());
+            """.formatted(blocoIdentificacaoPaciente(p),
+                p.isPreemptivo() ? "pedido de inserção em lista de espera renal" : "processo",
+                linhaAnexo,
+                assinatura());
 
         return new EmailTemplate("deferido", "Resposta ao solicitante (Deferido)", "check-circle",
             assunto("Processo " + p.getNumero() + " - Deferido"), corpo);
@@ -472,7 +492,7 @@ public class EmailTemplateService {
 
             %s
 
-            Informamos que o processo acima foi indeferido pela equipe de
+            Informamos que o %s acima foi indeferido pela equipe de
             Urgência Renal.
 
             Motivo: %s
@@ -483,7 +503,9 @@ public class EmailTemplateService {
 
             Atenciosamente,
             %s
-            """.formatted(blocoIdentificacaoPaciente(p), motivo, assinatura());
+            """.formatted(blocoIdentificacaoPaciente(p),
+                p.isPreemptivo() ? "pedido de inserção em lista de espera renal" : "processo",
+                motivo, assinatura());
 
         return new EmailTemplate("indeferido", "Resposta ao solicitante (Indeferido)", "x-circle",
             assunto("Processo " + p.getNumero() + " - Indeferido"), corpo);

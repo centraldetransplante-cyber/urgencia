@@ -122,6 +122,28 @@ class AvaliadorControllerTest {
     }
 
     /**
+     * Paciente PREEMPTIVO (2026-08-27): a lista de pendencias precisa
+     * marcar visivelmente o processo como preemptivo (reforco explicito do
+     * dono do produto), sem vazar o nome completo do paciente.
+     */
+    @Test
+    @WithMockUser(username = "avaliador1", roles = "AVALIADOR")
+    void listaMostraBadgeDeTipoPreemptivoSemNomeCompleto() throws Exception {
+        processo.setPreemptivo(true);
+        when(usuarioRepo.findByUsername("avaliador1")).thenReturn(Optional.of(usuario));
+        when(parecerRepo.findPendentesComProcesso(10L))
+            .thenReturn(List.of(parecer));
+        when(anexoRepo.findByProcessoIdAndTipo(1L, TipoAnexo.SOLICITACAO_AVALIADOR))
+            .thenReturn(List.of());
+
+        mvc.perform(get("/avaliador"))
+            .andExpect(status().isOk())
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Preemptivo")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Maria Rosa Silva"))));
+    }
+
+    /**
      * F6 do relatorio de vistoria de brechas (2026-08-10) - Achado 10: um
      * processo decidido (maioria simples/excecao do coordenador) ANTES de
      * este avaliador conseguir votar aparece na secao "Processos decididos
@@ -374,6 +396,33 @@ class AvaliadorControllerTest {
             .andExpect(status().isOk())
             .andExpect(view().name("avaliador/votar"))
             .andExpect(model().attribute("iniciais", "M.R.S."))
+            .andExpect(content().string(org.hamcrest.Matchers.not(
+                org.hamcrest.Matchers.containsString("Maria Rosa Silva"))));
+    }
+
+    /**
+     * Paciente PREEMPTIVO (2026-08-27): o avaliador precisa ver, sem
+     * ambiguidade, que este processo NAO e uma urgencia renal - reforco
+     * explicito do dono do produto (nao pode ficar so implicito no texto
+     * corrido). Continua sem vazar nome/equipe do paciente (so o badge de
+     * tipo + iniciais, mesmo padrao ja garantido pelo teste acima).
+     */
+    @Test
+    @WithMockUser(username = "avaliador1", roles = "AVALIADOR")
+    void votarExibeAvisoDeTipoPreemptivoSemVazarNomeDoPaciente() throws Exception {
+        processo.setPreemptivo(true);
+        when(usuarioRepo.findByUsername("avaliador1")).thenReturn(Optional.of(usuario));
+        when(parecerRepo.findByProcessoIdAndMembroIdComProcesso(1L, 10L)).thenReturn(Optional.of(parecer));
+        when(anexoRepo.findByProcessoIdAndTipo(1L, TipoAnexo.SOLICITACAO_AVALIADOR))
+            .thenReturn(List.of());
+
+        mvc.perform(get("/avaliador/1"))
+            .andExpect(status().isOk())
+            .andExpect(view().name("avaliador/votar"))
+            .andExpect(model().attribute("iniciais", "M.R.S."))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString("Preemptivo")))
+            .andExpect(content().string(org.hamcrest.Matchers.containsString(
+                "Inserção em Lista de Espera Renal")))
             .andExpect(content().string(org.hamcrest.Matchers.not(
                 org.hamcrest.Matchers.containsString("Maria Rosa Silva"))));
     }

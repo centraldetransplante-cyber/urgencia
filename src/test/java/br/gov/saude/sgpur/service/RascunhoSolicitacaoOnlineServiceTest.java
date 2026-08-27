@@ -59,7 +59,7 @@ class RascunhoSolicitacaoOnlineServiceTest {
         Usuario u = criarSolicitante("rascunho-parcial");
 
         RascunhoSolicitacaoOnline salvo = service.salvar(
-            u.getId(), "Fulano de Tal", null, null, null, null, null, null, null, null);
+            u.getId(), "Fulano de Tal", null, null, null, null, null, null, null, null, null);
 
         RascunhoSolicitacaoOnline reler = repository.findById(salvo.getId()).orElseThrow();
         assertThat(reler.getUsuarioSolicitante().getId()).isEqualTo(u.getId());
@@ -80,10 +80,10 @@ class RascunhoSolicitacaoOnlineServiceTest {
         Usuario u = criarSolicitante("rascunho-upsert");
 
         service.salvar(u.getId(), "Nome 1", "RGCT-1", LocalDate.of(1980, 1, 1), "11144477735",
-            Sexo.MASCULINO, "Mae 1", LocalDate.of(2026, 1, 1), "Justificativa 1", "primeiro@example.com");
+            Sexo.MASCULINO, "Mae 1", LocalDate.of(2026, 1, 1), "Justificativa 1", "primeiro@example.com", null);
         RascunhoSolicitacaoOnline segundo = service.salvar(
             u.getId(), "Nome 2", "RGCT-2", LocalDate.of(1990, 2, 2), "22233344405",
-            Sexo.FEMININO, "Mae 2", LocalDate.of(2026, 2, 2), "Justificativa 2", "segundo@example.com");
+            Sexo.FEMININO, "Mae 2", LocalDate.of(2026, 2, 2), "Justificativa 2", "segundo@example.com", null);
 
         assertThat(repository.count()).isEqualTo(1);
         RascunhoSolicitacaoOnline reler = repository.findById(segundo.getId()).orElseThrow();
@@ -111,7 +111,7 @@ class RascunhoSolicitacaoOnlineServiceTest {
     void apagarRemoveORascunhoDoUsuario() {
         Usuario u = criarSolicitante("rascunho-apagar");
         service.salvar(u.getId(), "Nome", "RGCT", LocalDate.of(1985, 3, 15), "11144477735",
-            Sexo.MASCULINO, null, LocalDate.now(), "Justificativa", null);
+            Sexo.MASCULINO, null, LocalDate.now(), "Justificativa", null, null);
         assertThat(service.buscarPorUsuario(u.getId())).isPresent();
 
         service.apagar(u.getId());
@@ -141,7 +141,7 @@ class RascunhoSolicitacaoOnlineServiceTest {
 
         service.salvar(u.getId(), "Paciente Rascunho", "999999999-99999",
             LocalDate.of(1985, 3, 15), "11144477735", Sexo.MASCULINO, null,
-            LocalDate.now(), "Justificativa clinica completa do rascunho.", null);
+            LocalDate.now(), "Justificativa clinica completa do rascunho.", null, null);
 
         assertThat(solicitacaoOnlineRepository.findAllByOrderByDataEnvioDesc()).isEmpty();
         assertThat(solicitacaoOnlineRepository.countByStatus(

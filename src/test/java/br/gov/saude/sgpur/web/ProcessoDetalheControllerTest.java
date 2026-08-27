@@ -216,13 +216,17 @@ class ProcessoDetalheControllerTest {
         int ano = Year.now().getValue();
         when(solicitacaoOnlineService.buscar(5L)).thenReturn(solicitacaoValida(5L));
         when(processoService.isNumeracaoAutomatica(ano)).thenReturn(false);
-        when(processoService.proximoNumero(ano)).thenReturn("05/" + ano);
+        when(processoService.proximoNumero(ano, false)).thenReturn("05/" + ano);
+        when(processoService.proximoNumero(ano, true)).thenReturn("P-01/" + ano);
 
         mvc.perform(get("/processos/novo").param("origemSolicitacaoOnlineId", "5"))
             .andExpect(status().isOk())
-            .andExpect(model().attribute("numeracaoAutomatica", false));
+            .andExpect(model().attribute("numeracaoAutomatica", false))
+            .andExpect(model().attribute("proximoNumeroUrgencia", "05/" + ano))
+            .andExpect(model().attribute("proximoNumeroPreemptivo", "P-01/" + ano));
 
-        verify(processoService).proximoNumero(ano);
+        verify(processoService).proximoNumero(ano, false);
+        verify(processoService).proximoNumero(ano, true);
     }
 
     /**

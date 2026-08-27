@@ -22,9 +22,27 @@
                 <div th:each="e : ${#fields.globalErrors()}" th:text="${e}"></div>
             </div>
             <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label d-block">Tipo de processo *</label>
+                    <div class="btn-group" role="group" aria-label="Tipo de processo">
+                        <input type="radio" class="btn-check" name="preemptivo" id="tipoUrgencia" value="false"
+                               th:checked="${!processo.isPreemptivo()}" onchange="atualizarTipoProcesso(false)">
+                        <label class="btn btn-outline-primary" for="tipoUrgencia">Urgência Renal</label>
+                        <input type="radio" class="btn-check" name="preemptivo" id="tipoPreemptivo" value="true"
+                               th:checked="${processo.isPreemptivo() == true}" onchange="atualizarTipoProcesso(true)">
+                        <label class="btn btn-outline-warning" for="tipoPreemptivo">Preemptivo (inserção em lista de espera)</label>
+                    </div>
+                    <div class="form-text">Preemptivo: paciente ainda não está na lista de espera do SNT — o processo avalia a inserção.</div>
+                </div>
+            </div>
+            <div class="row g-3 mt-0">
                 <div class="col-md-3" th:unless="${numeracaoAutomatica}">
-                    <label class="form-label" th:for="numero">Número (NN/AAAA) *</label>
-                    <input type="text" th:field="*{numero}" class="form-control" placeholder="01/2026" th:classappend="${#fields.hasErrors('numero')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('numero')} ? 'true' : null,aria-describedby=${#fields.hasErrors('numero')} ? 'numeroErro' : null">
+                    <label class="form-label" th:for="numero">Número *</label>
+                    <input type="text" th:field="*{numero}" id="numero" class="form-control" placeholder="01/2026" th:classappend="${#fields.hasErrors('numero')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('numero')} ? 'true' : null,aria-describedby=${#fields.hasErrors('numero')} ? 'numeroErro' : null">
+                    <div class="form-text">
+                        Sugestão: <span id="sugestaoNumeroUrgencia" th:text="${proximoNumeroUrgencia}">01/2026</span> (Urgência Renal) /
+                        <span id="sugestaoNumeroPreemptivo" th:text="${proximoNumeroPreemptivo}">P-01/2026</span> (Preemptivo)
+                    </div>
                     <div class="invalid-feedback d-block" id="numeroErro" role="alert" th:errors="*{numero}"></div>
                 </div>
                 <div class="col-md-3" th:if="${numeracaoAutomatica}">
@@ -32,7 +50,7 @@
                     <input type="text" id="numeroAutomaticoInfo" class="form-control" value="Gerado automaticamente" disabled>
                 </div>
                 <div class="col-md-3">
-                    <label class="form-label" th:for="dataSituacaoEspecial">Data de solicitação da urgência renal *</label>
+                    <label class="form-label" th:for="dataSituacaoEspecial" id="labelDataSituacaoEspecial">Data de solicitação da urgência renal *</label>
                     <input type="date" th:field="*{dataSituacaoEspecial}" class="form-control" th:classappend="${#fields.hasErrors('dataSituacaoEspecial')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('dataSituacaoEspecial')} ? 'true' : null,aria-describedby=${#fields.hasErrors('dataSituacaoEspecial')} ? 'dataSituacaoEspecialErro' : null">
                     <div class="invalid-feedback d-block" id="dataSituacaoEspecialErro" role="alert" th:errors="*{dataSituacaoEspecial}"></div>
                 </div>
@@ -46,9 +64,9 @@
                     <input type="text" th:field="*{pacienteNome}" class="form-control" maxlength="200" required th:classappend="${#fields.hasErrors('pacienteNome')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteNome')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteNome')} ? 'pacienteNomeErro' : null">
                     <div class="invalid-feedback d-block" id="pacienteNomeErro" role="alert" th:errors="*{pacienteNome}"></div>
                 </div>
-                <div class="col-md-4">
-                    <label class="form-label" th:for="pacienteRgct">RGCT / SNT *</label>
-                    <input type="text" th:field="*{pacienteRgct}" class="form-control" placeholder="123456789-12345" required maxlength="60" th:classappend="${#fields.hasErrors('pacienteRgct')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteRgct')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteRgct')} ? 'pacienteRgctErro' : null">
+                <div class="col-md-4" id="blocoRgct">
+                    <label class="form-label" th:for="pacienteRgct" id="labelPacienteRgct">RGCT / SNT *</label>
+                    <input type="text" th:field="*{pacienteRgct}" class="form-control" placeholder="123456789-12345" maxlength="60" th:classappend="${#fields.hasErrors('pacienteRgct')} ? 'is-invalid'" th:attr="aria-invalid=${#fields.hasErrors('pacienteRgct')} ? 'true' : null,aria-describedby=${#fields.hasErrors('pacienteRgct')} ? 'pacienteRgctErro' : null">
                     <div class="invalid-feedback d-block" id="pacienteRgctErro" role="alert" th:errors="*{pacienteRgct}"></div>
                 </div>
             </div>
