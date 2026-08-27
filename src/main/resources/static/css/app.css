@@ -614,6 +614,20 @@ tr.linha-inativa > td:first-child {
    menor que --saur-font-xs para nao competir com ele; mantido literal. */
 .badge-encerramento-xs .badge { font-size: .65rem; }
 
+/* Bug real reproduzido em 2026-08-27 (processo 11/2026 em producao,
+   "Status e Medico 1 se sobrepondo" no Painel): o Bootstrap aplica
+   `white-space: nowrap` em TODO `.badge` por padrao. Um badge curto
+   ("Reaberto 2x") cabe na largura de `mw-10rem` da celula Status sem
+   problema, mas um mais longo (badgeRegraDecisao, "Voto único do
+   Coordenador CET-RS") nao quebra linha e ULTRAPASSA a borda direita da
+   propria celula (table-cell nao recalcula a largura da coluna so por
+   causa de conteudo inline-block que nao quebra) - visualmente invade a
+   celula "Medico 1" ao lado, dando a impressao de sobreposicao/CSS
+   quebrado. So os badges SECUNDARIOS empilhados abaixo do badge de status
+   principal (encerramento/regra de decisao/reaberturas) precisam poder
+   quebrar em mais de uma linha dentro da largura da propria celula. */
+.badge-encerramento-xs .badge { white-space: normal; word-break: break-word; }
+
 /* === Animacoes === */
 @keyframes fadeInUp {
     from { opacity: 0; transform: translateY(12px); }

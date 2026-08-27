@@ -125,6 +125,29 @@ class DashboardStatusMedicoVisualIT extends PlaywrightTestBase {
         preemptivo.getPareceres().get(0).setEraCoordenadorNoVoto(true);
         processoRepository.saveAndFlush(preemptivo);
 
+        // Cenario 3: reproducao do processo REAL de producao (nº 11/2026,
+        // id=16) relatado pelo usuario como "Status e Medico 1 se
+        // sobrepondo" - numerado "13" aqui so pra nao colidir com o "11"
+        // ja usado (como placeholder generico) pelo cenario 1 sintetico
+        // acima. Dados consultados diretamente no banco de producao:
+        // processo COMUM (nao preemptivo), SEM reabertura, Deferido pelo
+        // voto UNICO do coordenador da CET-RS (Medico 1 = coordenador,
+        // votou Favoravel; Medico 2/3 seguem sem resultado - dispensados),
+        // com o comprovante SNT ja anexado mas a resposta ao solicitante
+        // ainda pendente de envio (mesma combinacao que gera, na celula
+        // Status: badge "Deferido" + badgeEncerramento + badgeRegraDecisao
+        // "Deferido pelo Coordenador da CET-RS" + a pendencia da etapa 5 -
+        // SEM badge de reaberturas/preemptivo, ao contrario do cenario 2
+        // acima, que e sinteticamente "mais carregado" mas nao bate 1:1 com
+        // o caso real).
+        Processo real = processoBase("13", false, m1, m2, m3);
+        real.setStatus(StatusProcesso.DEFERIDO);
+        real.setDataDecisao(LocalDateTime.now().minusDays(2));
+        real.setEmailEnviadoSolicitante(false);
+        real.setReaberturas(null);
+        real.getPareceres().get(0).setEraCoordenadorNoVoto(true);
+        processoRepository.saveAndFlush(real);
+
         login("admin", "Admin123!");
         assertThat(page.url()).doesNotContain("/login");
         page.navigate("/");
@@ -133,7 +156,7 @@ class DashboardStatusMedicoVisualIT extends PlaywrightTestBase {
         Locator tabela = page.locator("table.table-hover");
         tabela.first().waitFor();
 
-        List<String> numeros = List.of(indeferido.getNumero(), preemptivo.getNumero());
+        List<String> numeros = List.of(indeferido.getNumero(), preemptivo.getNumero(), real.getNumero());
 
         // Viewport 1: desktop largo (1440x1080, padrao dos demais testes E2E).
         screenshot("dashboard-status-medico1-cenario-completo-1440x1080");
@@ -195,6 +218,32 @@ class DashboardStatusMedicoVisualIT extends PlaywrightTestBase {
             assertThat(boxStatus.x + boxStatus.width)
                 .as("borda direita da celula Status nao deve invadir a celula Medico 1 (processo " + numeroProcesso + ")")
                 .isLessThanOrEqualTo(boxMedico1.x + 1.0);
+
+            // A checagem acima SOZINHA nao pega o bug real (achado em
+            // 2026-08-27, com dados de producao): o boundingBox() de um
+            // <td> mede so a caixa de layout da propria celula de tabela,
+            // NAO o conteudo que "vaza" para fora dela por causa de
+            // `white-space: nowrap` num badge comprido (ex.
+            // badgeRegraDecisao "Voto único do Coordenador CET-RS") - o
+            // <td> continua "do tamanho certo" mesmo com o badge escapando
+            // visualmente para dentro da coluna vizinha. Por isso confere
+            // TAMBEM cada badge individual dentro da celula Status contra o
+            // inicio real da celula Medico 1 - e assim que o bug foi
+            // confirmado visualmente (screenshot 1366x720/1024x768) e so
+            // depois corrigido (app.css, `.badge-encerramento-xs .badge`
+            // ganhou `white-space: normal`).
+            Locator badgesStatus = celulaStatus.locator(".badge");
+            int totalBadges = badgesStatus.count();
+            for (int i = 0; i < totalBadges; i++) {
+                BoundingBox boxBadge = badgesStatus.nth(i).boundingBox();
+                if (boxBadge == null) {
+                    continue;
+                }
+                assertThat(boxBadge.x + boxBadge.width)
+                    .as("borda direita do badge #" + i + " da celula Status nao deve invadir a celula Medico 1"
+                        + " (processo " + numeroProcesso + ") - badge vazando pra fora da propria celula")
+                    .isLessThanOrEqualTo(boxMedico1.x + 1.0);
+            }
         }
     }
 }
