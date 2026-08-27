@@ -203,6 +203,19 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     int registrarUltimoLembreteSnt(@Param("processoId") Long processoId,
                                    @Param("agora") java.time.LocalDateTime agora);
 
+    /**
+     * Lista paginada de /processos. Ativos primeiro, depois "mais recente
+     * primeiro" por {@code dataCadastro}.
+     *
+     * <p><b>Ordenacao por {@code dataCadastro}, NAO por {@code sequencial}</b>
+     * (paciente preemptivo, 2026): o preemptivo usa uma serie de numeracao
+     * SEPARADA ({@code P-NN/AAAA}) que reinicia em 1 a cada ano, entao um
+     * preemptivo recem-criado tem {@code sequencial} baixo e, sob
+     * {@code sequencial desc}, aparecia LA NO FIM da lista, fora de ordem
+     * cronologica. {@code sequencial} fica so como desempate final. {@code nulls
+     * last}: linhas gravadas antes da coluna {@code dataCadastro} existir (todas
+     * ja encerradas) vao para o fim do seu ano.</p>
+     */
     @Query("""
         select p from Processo p
         where (:status is null or p.status = :status)
@@ -215,7 +228,7 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
             br.gov.saude.sgpur.domain.StatusProcesso.DEFERIDO,
             br.gov.saude.sgpur.domain.StatusProcesso.INDEFERIDO,
             br.gov.saude.sgpur.domain.StatusProcesso.CANCELADO) then 1 else 0 end asc,
-          p.ano desc, p.sequencial desc
+          p.ano desc, p.dataCadastro desc nulls last, p.sequencial desc
         """)
     Page<Processo> buscar(@Param("q") String q, @Param("status") StatusProcesso status, Pageable pageable);
 
@@ -275,7 +288,7 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
                or lower(p.pacienteNome) like lower(concat('%', :q, '%'))
                or p.numero like concat('%', :q, '%')
                or lower(p.solicitanteEquipe) like lower(concat('%', :q, '%')))
-        order by p.ano desc, p.sequencial desc
+        order by p.ano desc, p.dataCadastro desc nulls last, p.sequencial desc
         """)
     Page<Processo> buscarEncerrados(@Param("q") String q,
                                     @Param("status") java.util.Collection<StatusProcesso> status,
