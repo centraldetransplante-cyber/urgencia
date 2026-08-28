@@ -53,6 +53,19 @@ public class ProcessoListaController {
             // Lista curta por natureza (pendencias abertas): sem paginacao, para
             // o operador ver de uma vez tudo o que esta travando comunicacao.
             processos = processoService.listarDeferidosSemComprovanteSnt();
+            // Achado A10 da auditoria de 2026-08-27: antes o ?tipo era
+            // silenciosamente IGNORADO neste ramo (o <select> continuava
+            // mostrando o valor escolhido, mas a lista nao respeitava) -
+            // agora os dois filtros combinam (E logico), igual ao ramo de
+            // baixo. Paciente preemptivo nunca aparece aqui de qualquer jeito
+            // (nao exige comprovante SNT), entao tipo=preemptivo aqui sempre
+            // resulta em lista vazia - e o comportamento correto, nao um bug.
+            if (tipoFiltro != null) {
+                boolean querPreemptivo = ProcessoService.TIPO_PREEMPTIVO.equals(tipoFiltro);
+                processos = processos.stream()
+                    .filter(p -> p.isPreemptivo() == querPreemptivo)
+                    .toList();
+            }
             model.addAttribute("paginaAtual", 0);
             model.addAttribute("totalPaginas", 1);
         } else {

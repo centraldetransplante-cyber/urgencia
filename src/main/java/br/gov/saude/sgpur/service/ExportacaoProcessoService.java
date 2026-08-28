@@ -214,9 +214,7 @@ public class ExportacaoProcessoService {
 
     private String montarResumo(Processo p, List<Parecer> pareceres, List<Anexo> anexos) {
         StringBuilder sb = new StringBuilder();
-        linhaTitulo(sb, (p.isPreemptivo()
-            ? "PROCESSO DE INSERCAO EM LISTA DE ESPERA RENAL (PREEMPTIVO)"
-            : "PROCESSO DE URGENCIA RENAL") + " - RESUMO COMPLETO");
+        linhaTitulo(sb, RotuloProcesso.tituloDossieCaixaAltaSemAcento(p) + " - RESUMO COMPLETO");
         sb.append("Gerado pelo SAUR em ").append(java.time.LocalDateTime.now().format(DATA_HORA))
           .append('\n')
           .append("Documento interno da equipe de Urgencia Renal (contem o nome completo do paciente).\n\n");
@@ -240,7 +238,7 @@ public class ExportacaoProcessoService {
         sb.append('\n');
 
         linhaTitulo(sb, "3. DATAS");
-        campo(sb, p.isPreemptivo() ? "Data da solicitacao" : "Data de solicitacao da urgencia renal",
+        campo(sb, RotuloProcesso.rotuloDataClinicaSemAcento(p),
             data(p.getDataSituacaoEspecial()));
         campo(sb, "Data de cadastro no sistema", dataHora(p.getDataCadastro()));
         campo(sb, "Data da decisao", dataHora(p.getDataDecisao()));

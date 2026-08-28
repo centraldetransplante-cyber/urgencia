@@ -416,7 +416,7 @@ public class ProcessoService {
             p.setSequencial(extrairSequencial(novoNumero, p.getAno()));
             auditoriaService.registrar("PROCESSO_TIPO_ALTERADO",
                 "Processo id " + p.getId() + " - numero " + numeroAntigo + " -> " + novoNumero
-                    + " - tipo " + rotuloTipo(tipoAntigo) + " -> " + rotuloTipo(tipoNovo));
+                    + " - tipo " + RotuloProcesso.tipoCurto(tipoAntigo) + " -> " + RotuloProcesso.tipoCurto(tipoNovo));
         }
         p.setPacienteNome(form.getPacienteNome());
         // RGCT condicionalmente obrigatorio (paciente preemptivo nao tem RGCT
@@ -978,9 +978,6 @@ public class ProcessoService {
         return salvo;
     }
 
-    private String rotuloTipo(boolean preemptivo) {
-        return preemptivo ? "Preemptivo" : "Urgência Renal";
-    }
 
     private int extrairSequencial(String numero, int ano) {
         if (numero == null || numero.isBlank()) {

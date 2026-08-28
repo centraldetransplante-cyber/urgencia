@@ -68,8 +68,7 @@ public class OficioService {
             Paragraph cab = new Paragraph(PdfCabecalhoStamper.NOME_INSTITUICAO, fCab);
             cab.setAlignment(Element.ALIGN_CENTER);
             doc.add(cab);
-            Paragraph cab2 = new Paragraph(
-                p.isPreemptivo() ? "INSERÇÃO EM LISTA DE ESPERA RENAL" : "URGÊNCIA RENAL", fCabSub);
+            Paragraph cab2 = new Paragraph(RotuloProcesso.subtituloOficioCaixaAlta(p), fCabSub);
             cab2.setAlignment(Element.ALIGN_CENTER);
             cab2.setSpacingAfter(24);
             doc.add(cab2);

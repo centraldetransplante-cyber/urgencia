@@ -82,8 +82,13 @@
                    th:href="@{/solicitante/{id}/processo-anexo/{anexoId}(id=${solicitacao.id},anexoId=${situacao.anexoParaBaixar.id})}">
                     <i class="bi bi-download"></i> <span th:text="${situacao.anexoParaBaixar.rotulo}">Baixar</span>
                 </a>
+                <!--/* Achado A2 da auditoria de 2026-08-27: paciente preemptivo
+                       Deferido NUNCA tem comprovante SNT (a decisao so autoriza a
+                       equipe a inscrever depois, fora do sistema - ver o cartao de
+                       resultado acima) - dizer "ainda sendo providenciado" e uma
+                       mensagem falsa que contradiz o proprio texto do cartao. */-->
                 <span th:unless="${situacao.anexoParaBaixar != null}" class="small">
-                    <span th:if="${situacao.rotulo == 'Deferido'}">Comprovante SNT ainda sendo providenciado pela equipe.</span>
+                    <span th:if="${situacao.rotulo == 'Deferido' and !solicitacao.isPreemptivo()}">Comprovante SNT ainda sendo providenciado pela equipe.</span>
                     <span th:if="${situacao.rotulo == 'Indeferido'}">Ofício ainda sendo providenciado pela equipe.</span>
                 </span>
             </div>
@@ -202,7 +207,12 @@
     <div class="superficie-apoio p-3 mb-3">
             <dl class="row mb-0">
                 <dt class="col-sm-4">RGCT / SNT</dt>
-                <dd class="col-sm-8" th:text="${solicitacao.pacienteRgct}"></dd>
+                <!--/* Achado A5 da auditoria de 2026-08-27: paciente preemptivo nao
+                       tem RGCT (campo condicionalmente obrigatorio, ver
+                       RotuloProcesso/CLAUDE.md) - antes a linha aparecia com o
+                       <dd> vazio, sem nenhuma indicacao do motivo. */-->
+                <dd class="col-sm-8" th:if="${!solicitacao.isPreemptivo()}" th:text="${solicitacao.pacienteRgct}"></dd>
+                <dd class="col-sm-8 text-muted" th:if="${solicitacao.isPreemptivo()}">Não se aplica (paciente preemptivo)</dd>
                 <dt class="col-sm-4">Data de nascimento</dt>
                 <dd class="col-sm-8"
                     th:text="${solicitacao.pacienteDataNascimento != null ? #temporals.format(solicitacao.pacienteDataNascimento, 'dd/MM/yyyy') : '-'}"></dd>

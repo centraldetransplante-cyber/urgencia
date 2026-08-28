@@ -267,6 +267,65 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
     CLAUDE.md para `/*[[expr]]*/` sem `th:inline="javascript"`: um wiring
     de duas partes onde só metade foi feita, sem erro visível no caminho
     feliz).
+  - **Correções da auditoria final de 2026-08-27**
+    (`docs/RELATORIO-AUDITORIA-FINAL-PACIENTE-PREEMPTIVO-2026-08-27.md`),
+    todas aplicadas na mesma leva:
+    - **A1 — sugestão de número no formulário de conversão:** o campo
+      `numero` já vinha pré-preenchido pelo controller no regime manual
+      (2026), então a condição antiga "só preenche se vazio"
+      (`processo-form.js`) nunca disparava ao alternar o checkbox de tipo —
+      todo operador que trocasse o tipo levava erro de validação de
+      prefixo. Corrigido rastreando a ÚLTIMA sugestão automática mostrada
+      (`ultimaSugestaoNumeroProcesso`): re-sugere quando o campo está vazio
+      **ou** ainda é igual à última sugestão que o próprio script colocou
+      ali, nunca sobrescrevendo uma correção manual do operador.
+    - **A2 — Portal do Solicitante:** `solicitante/detalhe.html` dizia
+      "Comprovante SNT ainda sendo providenciado pela equipe" mesmo em
+      processo preemptivo Deferido (que nunca tem esse anexo, ver acima) —
+      contradizia o próprio cartão de resultado. Condição agora exclui
+      `solicitacao.isPreemptivo()`.
+    - **A3 — e-mail interno de nova solicitação:** `SolicitacaoOnlineService
+      .notificarOperadores` sempre abria com "urgência renal" e o assunto
+      não distinguia o tipo, mesmo com a linha "Tipo:" já certa no corpo.
+      Passou a usar `RotuloProcesso.tipoPedido`/`prefixoAssunto`.
+    - **A4/cosmético 2 — cor do card "Preemptivos":** tinha a MESMA cor de
+      `.stat-card-membros`, com quem fica lado a lado no Painel e no Portal
+      do Avaliador ("Preemptivos avaliados" x "Atribuídos a mim") — violava
+      a regra fixa de cor por opção. `.stat-card-preemptivo` agora é
+      dourado, coerente com o badge de tipo (que já era `bg-warning`).
+    - **A5 — linha "RGCT / SNT" vazia** no Portal do Solicitante: agora
+      omitida com o texto "Não se aplica (paciente preemptivo)" quando
+      `isPreemptivo()`.
+    - **A6/A7 — ternários inline duplicando `RotuloProcesso`:**
+      `OficioService` (subtítulo do cabeçalho) e `ExportacaoProcessoService`
+      (título do dossiê + rótulo de data) tinham a lógica repetida em vez de
+      centralizada; `RotuloProcesso` ganhou `subtituloOficioCaixaAlta`,
+      `tituloDossieCaixaAltaSemAcento` e `rotuloDataClinicaSemAcento` para
+      isso. `ProcessoService.rotuloTipo` (idêntico a `RotuloProcesso
+      .tipoCurto`) foi removido, os 2 usos passaram a chamar a fonte única.
+    - **A8 — Relatório Anual:** `ProcessoRepository.findByAnoComPareceres`
+      ordenava só por `sequencial asc`, intercalando as duas séries (dois
+      "1", dois "2"...). Agora agrupa por tipo primeiro
+      (`coalesce(preemptivo,false) asc`), urgência renal antes de
+      preemptivo, sequencial dentro de cada grupo.
+    - **A9 — card "Preemptivos" do Painel:** contava só o ano corrente mas
+      linkava a lista sem recorte de ano. O rótulo agora mostra o ano por
+      escrito (`Preemptivos (2026)`) e o `title` explica que o link não
+      recorta por ano — não foi criado um filtro `?ano=` novo em
+      `/processos` (mudança de escopo maior).
+    - **A10 — `?tipo` ignorado com `?filtro=snt-pendente`:**
+      `ProcessoListaController` agora combina os dois filtros (E lógico);
+      `tipo=preemptivo` nesse ramo sempre resulta em lista vazia por
+      definição (paciente preemptivo nunca exige comprovante SNT).
+    - **A11/A12 — testes que faltavam:**
+      `web/PacientePreemptivoConversaoIntegrationTest` (MockMvc ponta a
+      ponta, `GET /processos/novo` + `POST /processos`) cobre a propagação
+      de `preemptivo` na conversão `SolicitacaoOnline` → `Processo`, relendo
+      do banco; `service/PacientePreemptivoIntegrationTest` ganhou 4 testes
+      de regressão de decisão (maioria simples 2/3 favorável/desfavorável,
+      voto único do coordenador defere, indeferir vedado com coordenador já
+      favorável) confirmando que processo preemptivo segue exatamente a
+      mesma regra de votação de urgência renal comum.
   - Desenho completo e decisões fechadas em
     `docs/PLANO-PACIENTE-PREEMPTIVO-2026-08-27.md`.
 - **Exceção — coordenador CET-RS defere sozinho:** se o médico marcado como

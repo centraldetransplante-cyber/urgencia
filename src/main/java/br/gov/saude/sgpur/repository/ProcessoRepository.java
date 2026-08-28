@@ -26,13 +26,22 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
     /**
      * Processos de um ano, ordenados por sequencial, ja com pareceres e medicos
      * (fetch join) para o relatorio anual sem incorrer em N+1.
+     *
+     * <p><b>Achado A8 da auditoria de 2026-08-27:</b> paciente preemptivo usa
+     * uma serie de numeracao SEPARADA ({@code P-NN/AAAA}), entao um "order by
+     * sequencial asc" puro intercalava as duas series no mesmo ano (dois "1",
+     * dois "2" etc.) - confuso visualmente, mesmo com a coluna "Tipo" ja
+     * desambiguando. Agora agrupa por tipo primeiro (urgencia renal comum
+     * antes de preemptivo - {@code coalesce(preemptivo,false)} trata o legado
+     * NULL como urgencia renal, mesmo criterio ja usado nos filtros/contadores)
+     * e so depois ordena por sequencial dentro de cada grupo.</p>
      */
     @Query("""
         select distinct p from Processo p
         left join fetch p.pareceres par
         left join fetch par.membro
         where p.ano = :ano
-        order by p.sequencial asc
+        order by coalesce(p.preemptivo, false) asc, p.sequencial asc
         """)
     List<Processo> findByAnoComPareceres(@Param("ano") int ano);
 

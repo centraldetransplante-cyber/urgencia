@@ -117,16 +117,25 @@
                 <div class="stat-label">Cancelados</div>
             </a>
         </div>
+        <!-- Achado A9 da auditoria de 2026-08-27: o contador conta so o ANO
+             CORRENTE, mas o link levava para a lista SEM recorte de ano (todos
+             os anos) - o operador podia clicar em "3" e ver mais processos que
+             isso, sem entender o porque. O rotulo agora deixa o recorte
+             explicito por escrito (nao so no title/tooltip, facil de nunca ser
+             lido) - mesma ambiguidade ja existente nos cards
+             Deferidos/Indeferidos/Cancelados, nao corrigida aqui por ser
+             mudanca de escopo maior (seria preciso um filtro "ano" novo em
+             /processos). -->
         <div class="col">
             <a th:href="@{/processos(tipo='preemptivo')}"
                class="stat-card stat-card-portal text-decoration-none d-block stat-card-preemptivo"
-               title="Processos de inserção em lista de espera renal (paciente preemptivo) neste ano.">
+               th:title="'Processos de inserção em lista de espera renal (paciente preemptivo) neste ano (' + ${anoCorrente} + '). O link leva à lista completa, sem recorte de ano.'">
                 <div class="d-flex align-items-center justify-content-between">
                     <span class="stat-number" th:text="${preemptivos}">0</span>
                     <span class="stat-icon">
                         <i class="bi bi-clipboard-plus"></i></span>
                 </div>
-                <div class="stat-label">Preemptivos</div>
+                <div class="stat-label">Preemptivos <span class="small text-body-secondary" th:text="'(' + ${anoCorrente} + ')'">(2026)</span></div>
             </a>
         </div>
         <div class="col">

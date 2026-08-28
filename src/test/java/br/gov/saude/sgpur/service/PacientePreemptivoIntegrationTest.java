@@ -2,13 +2,17 @@ package br.gov.saude.sgpur.service;
 
 import br.gov.saude.sgpur.domain.Anexo;
 import br.gov.saude.sgpur.domain.MembroUrgenciaRenal;
+import br.gov.saude.sgpur.domain.OrigemParecer;
+import br.gov.saude.sgpur.domain.Parecer;
 import br.gov.saude.sgpur.domain.Perfil;
 import br.gov.saude.sgpur.domain.Processo;
+import br.gov.saude.sgpur.domain.ResultadoParecer;
 import br.gov.saude.sgpur.domain.Sexo;
 import br.gov.saude.sgpur.domain.SolicitacaoOnline;
 import br.gov.saude.sgpur.domain.StatusProcesso;
 import br.gov.saude.sgpur.domain.TipoAnexo;
 import br.gov.saude.sgpur.domain.Usuario;
+import br.gov.saude.sgpur.repository.ParecerRepository;
 import br.gov.saude.sgpur.repository.AnexoRepository;
 import br.gov.saude.sgpur.repository.LogAuditoriaRepository;
 import br.gov.saude.sgpur.repository.MembroUrgenciaRenalRepository;
@@ -62,6 +66,8 @@ class PacientePreemptivoIntegrationTest {
     private LogAuditoriaRepository logAuditoriaRepository;
     @Autowired
     private AnexoRepository anexoRepository;
+    @Autowired
+    private ParecerRepository parecerRepository;
 
     @MockitoBean
     private EmailSenderService emailSenderService;
@@ -344,5 +350,131 @@ class PacientePreemptivoIntegrationTest {
         // o legado (preemptivo = NULL) conta como urgencia renal, via coalesce
         assertThat(soUrgencia.getContent()).extracting(Processo::getNumero)
             .containsExactlyInAnyOrder("10/2026", "11/2026");
+    }
+
+    // ---------------------------------------------------------------
+    // 9. Regressao de decisao (Achado A12 da auditoria de 2026-08-27):
+    //    maioria simples 2/3 e a excecao do coordenador CET-RS precisam
+    //    funcionar EXATAMENTE igual em processo preemptivo - o tipo do
+    //    processo nunca deve vazar para a logica de votacao/decisao
+    //    (CLAUDE.md: "nenhuma regra de votacao/decisao muda"). O plano
+    //    original (secao 8.6) exigia este teste e ele nunca foi escrito -
+    //    ate aqui a regra so tinha sido validada manualmente (Playwright).
+    // ---------------------------------------------------------------
+
+    /** Voto autenticado no Portal do Avaliador (mesmo padrao de DecisaoAutomaticaSchedulerIntegrationTest). */
+    private Parecer votar(Processo p, MembroUrgenciaRenal membro, ResultadoParecer resultado) {
+        Parecer par = new Parecer(membro);
+        par.setProcesso(p);
+        par.setDataEnvio(LocalDate.now());
+        par.setResultado(resultado);
+        par.setDataResposta(LocalDate.now());
+        par.setOrigem(OrigemParecer.AVALIADOR_SISTEMA);
+        // Snapshot do papel no momento do voto (Parecer.eraCoordenadorNoVoto),
+        // mesmo comportamento de AvaliadorController.registrarVoto.
+        par.setEraCoordenadorNoVoto(membro.isCoordenador());
+        return parecerRepository.saveAndFlush(par);
+    }
+
+    @Test
+    void maioriaSimplesDeDoisFavoraveisDefereProcessoPreemptivoIgualAoComum() {
+        // 3 avaliadores COMUNS (nenhum coordenador) - 2 favoraveis, 1
+        // desfavoravel: maioria simples de verdade, sem exceção nenhuma.
+        MembroUrgenciaRenal a = membroRepository.save(new MembroUrgenciaRenal("HCPA", "Avaliador Preempt A", "prA@example.com"));
+        MembroUrgenciaRenal b = membroRepository.save(new MembroUrgenciaRenal("ISCMPA", "Avaliador Preempt B", "prB@example.com"));
+        MembroUrgenciaRenal c = membroRepository.save(new MembroUrgenciaRenal("HSL", "Avaliador Preempt C", "prC@example.com"));
+
+        Processo p = novoProcesso(true, null, "P-20/2026", 2026);
+        p.setStatus(StatusProcesso.ENVIADO);
+        Long id = processoRepository.saveAndFlush(p).getId();
+        Processo salvo = processoRepository.findById(id).orElseThrow();
+        votar(salvo, a, ResultadoParecer.FAVORAVEL);
+        votar(salvo, b, ResultadoParecer.FAVORAVEL);
+        votar(salvo, c, ResultadoParecer.NAO_FAVORAVEL);
+
+        Processo decidido = processoService.decidir(id, StatusProcesso.DEFERIDO, null);
+
+        assertThat(decidido.getStatus()).isEqualTo(StatusProcesso.DEFERIDO);
+        assertThat(decidido.isPreemptivo()).isTrue();
+    }
+
+    @Test
+    void maioriaSimplesDeDoisDesfavoraveisIndefereProcessoPreemptivoIgualAoComum() {
+        MembroUrgenciaRenal a = membroRepository.save(new MembroUrgenciaRenal("HCPA", "Avaliador Preempt D", "prD@example.com"));
+        MembroUrgenciaRenal b = membroRepository.save(new MembroUrgenciaRenal("ISCMPA", "Avaliador Preempt E", "prE@example.com"));
+        MembroUrgenciaRenal c = membroRepository.save(new MembroUrgenciaRenal("HSL", "Avaliador Preempt F", "prF@example.com"));
+
+        Processo p = novoProcesso(true, null, "P-21/2026", 2026);
+        p.setStatus(StatusProcesso.ENVIADO);
+        Long id = processoRepository.saveAndFlush(p).getId();
+        Processo salvo = processoRepository.findById(id).orElseThrow();
+        votar(salvo, a, ResultadoParecer.NAO_FAVORAVEL);
+        votar(salvo, b, ResultadoParecer.NAO_FAVORAVEL);
+        votar(salvo, c, ResultadoParecer.FAVORAVEL);
+
+        Processo decidido = processoService.decidir(id, StatusProcesso.INDEFERIDO, "Motivo institucional de teste.");
+
+        assertThat(decidido.getStatus()).isEqualTo(StatusProcesso.INDEFERIDO);
+        assertThat(decidido.isPreemptivo()).isTrue();
+    }
+
+    /**
+     * Excecao do coordenador CET-RS: 1 unico voto Favoravel do coordenador
+     * defere sozinho, mesmo com 2 desfavoraveis - IDENTICO ao comportamento
+     * ja coberto para urgencia renal comum em
+     * {@code DecisaoAutomaticaSchedulerIntegrationTest.coordenadorFavoravelDefereMesmoComDoisDesfavoraveis}
+     * e {@code ProcessoServiceTest}, agora tambem em processo preemptivo.
+     */
+    @Test
+    void votoUnicoDoCoordenadorDefereProcessoPreemptivoMesmoComDoisDesfavoraveis() {
+        MembroUrgenciaRenal coordenador = new MembroUrgenciaRenal("CET-RS", "Coordenador Preempt", "coord-preempt@example.com");
+        coordenador.setCoordenador(true);
+        coordenador = membroRepository.save(coordenador);
+        MembroUrgenciaRenal a = membroRepository.save(new MembroUrgenciaRenal("HCPA", "Avaliador Preempt G", "prG@example.com"));
+        MembroUrgenciaRenal b = membroRepository.save(new MembroUrgenciaRenal("ISCMPA", "Avaliador Preempt H", "prH@example.com"));
+
+        Processo p = novoProcesso(true, null, "P-22/2026", 2026);
+        p.setStatus(StatusProcesso.ENVIADO);
+        Long id = processoRepository.saveAndFlush(p).getId();
+        Processo salvo = processoRepository.findById(id).orElseThrow();
+        votar(salvo, coordenador, ResultadoParecer.FAVORAVEL);
+        votar(salvo, a, ResultadoParecer.NAO_FAVORAVEL);
+        votar(salvo, b, ResultadoParecer.NAO_FAVORAVEL);
+
+        Processo decidido = processoService.decidir(id, StatusProcesso.DEFERIDO, null);
+
+        assertThat(decidido.getStatus()).isEqualTo(StatusProcesso.DEFERIDO);
+        assertThat(decidido.isPreemptivo()).isTrue();
+        assertThat(processoService.deferidoPeloCoordenador(decidido)).isTrue();
+    }
+
+    /**
+     * Espelho da regra "Indeferido continua exigindo >=2 SEMPRE - o
+     * coordenador nao pesa mais para indeferir e fica VEDADO indeferir
+     * manualmente enquanto ele ja votou favoravel" (CLAUDE.md, item 3),
+     * agora em processo preemptivo: mesma excecao do teste acima, so que
+     * tentando Indeferir - tem que ser rejeitado exatamente como seria num
+     * processo de urgencia renal comum.
+     */
+    @Test
+    void indeferirEVedadoEmProcessoPreemptivoQuandoCoordenadorJaVotouFavoravel() {
+        MembroUrgenciaRenal coordenador = new MembroUrgenciaRenal("CET-RS", "Coordenador Preempt 2", "coord-preempt2@example.com");
+        coordenador.setCoordenador(true);
+        coordenador = membroRepository.save(coordenador);
+        MembroUrgenciaRenal a = membroRepository.save(new MembroUrgenciaRenal("HCPA", "Avaliador Preempt I", "prI@example.com"));
+        MembroUrgenciaRenal b = membroRepository.save(new MembroUrgenciaRenal("ISCMPA", "Avaliador Preempt J", "prJ@example.com"));
+
+        Processo p = novoProcesso(true, null, "P-23/2026", 2026);
+        p.setStatus(StatusProcesso.ENVIADO);
+        Long id = processoRepository.saveAndFlush(p).getId();
+        Processo salvo = processoRepository.findById(id).orElseThrow();
+        votar(salvo, coordenador, ResultadoParecer.FAVORAVEL);
+        votar(salvo, a, ResultadoParecer.NAO_FAVORAVEL);
+        votar(salvo, b, ResultadoParecer.NAO_FAVORAVEL);
+
+        assertThatThrownBy(() -> processoService.decidir(id, StatusProcesso.INDEFERIDO, "Motivo qualquer."))
+            .isInstanceOf(IllegalStateException.class);
+
+        assertThat(processoRepository.findById(id).orElseThrow().getStatus()).isEqualTo(StatusProcesso.ENVIADO);
     }
 }
