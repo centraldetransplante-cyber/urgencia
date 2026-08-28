@@ -118,12 +118,20 @@
                     </span>
                 </td>
                 <td class="text-end">
-                    <a th:href="@{/membros/{id}/editar(id=${m.id})}" class="btn btn-sm btn-outline-secondary">Editar</a>
-                    <form th:action="@{/membros/{id}/alternar-ativo(id=${m.id})}" method="post" class="d-inline"
-                          th:attr="data-confirm-msg=${m.ativo} ? ('Inativar o membro &quot;' + ${m.nome} + '&quot;? Ele deixará de poder ser designado a novos processos.') : ('Reativar o membro &quot;' + ${m.nome} + '&quot;?')">
-                        <button class="btn btn-sm btn-outline-warning"
-                                th:text="${m.ativo} ? 'Inativar' : 'Ativar'">Inativar</button>
-                    </form>
+                    <!-- Mesmo padrao de coluna de acoes ja fixado em
+                         controle-urgencias/lista.html: flex container com gap
+                         consistente (empilha no mobile, lado a lado alinhado a
+                         direita a partir de sm) em vez de <a> + <form d-inline>
+                         soltos, que dependiam so do espaco em branco entre eles
+                         e quebravam de forma irregular quando a coluna aperta. -->
+                    <div class="d-flex flex-column flex-sm-row justify-content-sm-end gap-1">
+                        <a th:href="@{/membros/{id}/editar(id=${m.id})}" class="btn btn-sm btn-outline-secondary">Editar</a>
+                        <form th:action="@{/membros/{id}/alternar-ativo(id=${m.id})}" method="post"
+                              th:attr="data-confirm-msg=${m.ativo} ? ('Inativar o membro &quot;' + ${m.nome} + '&quot;? Ele deixará de poder ser designado a novos processos.') : ('Reativar o membro &quot;' + ${m.nome} + '&quot;?')">
+                            <button class="btn btn-sm btn-outline-warning w-100"
+                                    th:text="${m.ativo} ? 'Inativar' : 'Ativar'">Inativar</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
             <tr th:if="${membros.isEmpty()}">

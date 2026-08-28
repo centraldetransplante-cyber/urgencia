@@ -58,16 +58,23 @@
                     </span>
                 </td>
                 <td class="text-end">
-                    <a th:href="@{/usuarios/{id}/editar(id=${u.id})}" class="btn btn-sm btn-outline-secondary">Editar</a>
-                    <form th:action="@{/usuarios/{id}/alternar-ativo(id=${u.id})}" method="post" class="d-inline"
-                          th:attr="data-confirm-msg=${u.ativo} ? ('Inativar o usuário &quot;' + ${u.username} + '&quot;? Ele perderá o acesso ao sistema.') : ('Reativar o usuário &quot;' + ${u.username} + '&quot;?')">
-                        <button class="btn btn-sm btn-outline-warning"
-                                th:text="${u.ativo} ? 'Inativar' : 'Ativar'">Inativar</button>
-                    </form>
-                    <form th:action="@{/usuarios/{id}/excluir(id=${u.id})}" method="post" class="d-inline"
-                          th:attr="data-confirm-msg='Excluir usuário &quot;' + ${u.username} + '&quot;? Esta ação não pode ser desfeita.'">
-                        <button class="btn btn-sm btn-outline-danger">Excluir</button>
-                    </form>
+                    <!-- Coluna de acoes no mesmo padrao de membros/ e
+                         controle-urgencias/: flex container com gap consistente
+                         (empilha no mobile, lado a lado a direita a partir de sm)
+                         em vez de <a> + <form d-inline> soltos que quebravam de
+                         forma irregular quando a coluna aperta. -->
+                    <div class="d-flex flex-column flex-sm-row justify-content-sm-end gap-1">
+                        <a th:href="@{/usuarios/{id}/editar(id=${u.id})}" class="btn btn-sm btn-outline-secondary">Editar</a>
+                        <form th:action="@{/usuarios/{id}/alternar-ativo(id=${u.id})}" method="post"
+                              th:attr="data-confirm-msg=${u.ativo} ? ('Inativar o usuário &quot;' + ${u.username} + '&quot;? Ele perderá o acesso ao sistema.') : ('Reativar o usuário &quot;' + ${u.username} + '&quot;?')">
+                            <button class="btn btn-sm btn-outline-warning w-100"
+                                    th:text="${u.ativo} ? 'Inativar' : 'Ativar'">Inativar</button>
+                        </form>
+                        <form th:action="@{/usuarios/{id}/excluir(id=${u.id})}" method="post"
+                              th:attr="data-confirm-msg='Excluir usuário &quot;' + ${u.username} + '&quot;? Esta ação não pode ser desfeita.'">
+                            <button class="btn btn-sm btn-outline-danger w-100">Excluir</button>
+                        </form>
+                    </div>
                 </td>
             </tr>
             <tr th:if="${usuarios.isEmpty()}">
