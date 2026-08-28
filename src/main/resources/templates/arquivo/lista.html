@@ -85,16 +85,23 @@
                     <td class="small text-muted text-center"
                         th:text="${p.dataDecisao != null} ? ${#temporals.format(p.dataDecisao, 'dd/MM/yyyy')} : '-'">-</td>
                     <td class="text-end pe-3">
-                        <a th:href="@{/processos/{id}(id=${p.id})}" class="btn btn-sm btn-outline-secondary">
-                            <i class="bi bi-eye"></i> Abrir
-                        </a>
-                        <form th:action="@{/processos/{id}/reabrir(id=${p.id})}" method="post" class="d-inline"
-                              sec:authorize="hasRole('ADMIN')"
-                              data-confirm-msg="Reabrir este processo encerrado? Ele voltará para o status Enviado e poderá ser decidido novamente.">
-                            <button class="btn btn-sm btn-outline-warning">
-                                <i class="bi bi-arrow-counterclockwise"></i> Reabrir
-                            </button>
-                        </form>
+                        <!-- Contêiner flex com gap (mesmo padrão de membros/, usuarios/ e
+                             controle-urgencias/): "Abrir" + "Reabrir" (só ADMIN) lado a
+                             lado alinhados à direita, empilhados no mobile — em vez de
+                             <a> + <form d-inline> separados só por espaço em branco, que
+                             quebravam colados/tortos quando a coluna aperta. -->
+                        <div class="d-flex flex-column flex-sm-row justify-content-sm-end gap-1">
+                            <a th:href="@{/processos/{id}(id=${p.id})}" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-eye"></i> Abrir
+                            </a>
+                            <form th:action="@{/processos/{id}/reabrir(id=${p.id})}" method="post"
+                                  sec:authorize="hasRole('ADMIN')"
+                                  data-confirm-msg="Reabrir este processo encerrado? Ele voltará para o status Enviado e poderá ser decidido novamente.">
+                                <button class="btn btn-sm btn-outline-warning w-100">
+                                    <i class="bi bi-arrow-counterclockwise"></i> Reabrir
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 <tr th:if="${processos.isEmpty()}">

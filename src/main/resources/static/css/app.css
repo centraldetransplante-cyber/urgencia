@@ -748,6 +748,15 @@ tr.linha-inativa > td:first-child {
 /* Evita estouro de conteúdo em células da tabela: quebra palavras longas e permite wrap */
 .table td { overflow-wrap: break-word; white-space: normal; }
 
+/* ...MAS a regra acima (especificidade 0-1-1) vence o `.text-truncate` do
+   Bootstrap (0-1-0, sem !important) e devolve white-space:normal - a célula
+   que deveria cortar numa linha só com reticências passa a quebrar em várias
+   linhas, empurrando a altura da linha. Restaura o nowrap com especificidade
+   igual + a própria classe. Usado em auditoria/lista, processos/lista e
+   processos/mensagens-avaliadores-lista (todas com th:title = texto completo
+   no hover). */
+.table td.text-truncate { white-space: nowrap; }
+
 /* === Form controls === */
 .form-control, .form-select {
     border-radius: var(--saur-radius-sm);
