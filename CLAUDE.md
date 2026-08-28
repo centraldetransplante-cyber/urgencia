@@ -41,8 +41,8 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   acessar manualmente após o boot) · login inicial `admin` / `Admin123!`
   (criado automaticamente por `AdminBootstrap` só quando a tabela `usuario`
   está vazia; em prod exige `SGPUR_ADMIN_PASSWORD` via env var, sem default).
-- Testes: `.\test.ps1` (ou `mvn test`) — **1.131 testes** (contagem exata via
-  `target/surefire-reports`, reverificada em 2026-08-25; esse número sobe a
+- Testes: `.\test.ps1` (ou `mvn test`) — **1181 testes** (contagem exata via
+  `target/surefire-reports`, reverificada em 2026-08-28; esse número sobe a
   cada sessão que adiciona teste novo — se divergir, reconte em vez de
   confiar cegamente nele), sempre com **JDK 21**.
   Build: `mvn -DskipTests package` (gera o JAR).
@@ -685,6 +685,164 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
   maioria simples (2/3 favoráveis → Deferido; 2/3 desfavoráveis → Indeferido).
 - "Membros da Urgência Renal" (nunca "Câmara Técnica").
 
+### Regras de negócio adicionais (consolidado de sessões 2026-07/08)
+
+Parte da seção **Regras de negócio** acima — implementadas depois da escrita
+original dela. Histórico completo de cada uma em
+`docs/historico/CLAUDE-log-sessoes-2026-07-a-08.md`.
+
+**Decisão — snapshot do coordenador e regra aplicada, sempre auditáveis:**
+- `Parecer.eraCoordenadorNoVoto` (nullable): snapshot de
+  `MembroUrgenciaRenal.coordenador` capturado no INSTANTE do voto
+  (`AvaliadorController.registrarVoto`). `ProcessoValidator
+  .temVotoCoordenadorFavoravel` lê esse snapshot, não o cargo ao vivo —
+  corrige o caso do coordenador trocar de mão entre o voto e a decisão.
+  `null` (voto legado, anterior a esta mudança) nunca conta como voto de
+  coordenador — decisão conservadora, sem backfill necessário.
+- `service/dto/RegraDecisao` (enum: `MAIORIA_SIMPLES`, `VOTO_COORDENADOR`,
+  `CANCELAMENTO`, `NAO_DECIDIDO`) + `ProcessoValidator.regraAplicada` —
+  fonte única de "por que essa decisão saiu assim", usada por
+  `ExportacaoProcessoService` (dossiê), `RelatorioService` (PDF),
+  `FluxoProcessoService` e o fragment `layout :: badgeRegraDecisao`,
+  exibido em `processos/detalhe.html`, `processos/lista.html`,
+  `arquivo/lista.html` e `dashboard.html`. Nunca mais dizer "maioria
+  formada"/"2 de 3" num processo decidido pelo voto único do coordenador.
+- `Processo.reaberturas` (contador, nullable, sem backfill): incrementado
+  em `ProcessoService.reabrir`, que também **remove o anexo
+  `RELATORIO_FINAL` da decisão anulada** (é sempre derivado, regenerado na
+  próxima decisão — nunca deixar baixável um relatório afirmando um
+  resultado que já foi desfeito). Badge "Reaberto Nx" no mesmo fragment
+  `badgeRegraDecisao`/`badgeReaberturas`, mesmas 4 telas.
+- `HistoricoParecer` (entidade de staging, append-only, nunca se mistura ao
+  ciclo de vida do `Parecer` real): antes de `retomarAposInformacao` zerar
+  um parecer que pediu "Solicita informação", um snapshot completo
+  (incluindo a justificativa original) é gravado ali — sem isso, o pedido e
+  a justificativa que motivaram a pausa somem quando o parecer é reaberto
+  para novo voto. Exibido em seção colapsável no card Respostas e no
+  Relatório Final.
+- Portal do Avaliador mostra "Processos decididos sem o seu voto" (quem foi
+  dispensado por maioria simples/coordenador antes de conseguir votar) —
+  **só** número do processo + iniciais, nunca a decisão nem o voto dos
+  outros avaliadores (imparcialidade).
+
+**Solicita informação — múltiplos pedidos simultâneos (2026-08-11/12,
+bug real corrigido no processo 12/2026 de produção):** a pausa não é mais
+tratada como "uma rodada" única. `SolicitacaoOnlineService
+.EstadoInformacaoComplementar` (record) é a fonte única: cada pedido de
+informação é avaliado **independentemente** (respondido = existe anexo
+`INFO_COMPLEMENTAR` enviado DEPOIS daquele pedido específico) — um pedido
+novo nunca apaga a resposta a um pedido anterior, e um pedido já atendido
+nunca é relistado. **Um único envio do solicitante responde a TODOS os
+pedidos abertos naquele momento** (decisão de produto confirmada
+2026-08-12, não exige resposta por avaliador). Lista/detalhe do Portal do
+Solicitante e o placar do card Respostas do operador usam o mesmo estado —
+nunca duplicar essa lógica em lugar nenhum novo. Durante a pausa, a etapa
+"Respostas dos médicos" só fica CONCLUÍDA com maioria de verdade (não com
+"todos responderam", já que "Solicita informação" não é veredito).
+
+**Encaminhar informação complementar ao avaliador que pediu
+(2026-08-11):** `TipoAnexo.INFO_COMPLEMENTAR_AVALIADOR` — o operador
+**redige** (nunca promove automaticamente) o texto que vai ao avaliador,
+que passa pelo mesmo `VerificadorNomePaciente` do chat antes de ser salvo.
+Solicitante também pode responder com **texto livre**, não só arquivo
+(`SolicitacaoOnlineService.enviarInformacaoComplementar` aceita texto OU
+arquivo). Quem vê o material: só quem pediu a informação naquele processo
+(via `Parecer` vivo ou `HistoricoParecer`), nunca outro avaliador.
+
+**Confirmação de conflito de equipe ao escolher os 3 médicos
+(2026-08-17):** `processos/form.html` consulta `GET /processos/conflito-
+equipe` assim que o trio de médicos fica completo e, se algum for da mesma
+equipe do solicitante (`ConflitoEquipeMatcher`), pede confirmação via modal
+antes de cadastrar — client-side, fail-open (erro de rede não bloqueia),
+não substitui o aviso não-bloqueante já existente na tela de detalhe.
+
+**Dados adicionais de identificação do paciente (2026-08-20):**
+`pacienteDataNascimento` (`LocalDate`, `@NotNull`), `pacienteCpf` (11
+dígitos, validado por módulo-11 via `CpfUtil`), `pacienteSexo` (enum
+`Sexo`, `MASCULINO`/`FEMININO`, sem terceira opção por decisão de produto),
+`pacienteNomeMae` (opcional) — em `Processo`/`SolicitacaoOnline`
+(`RascunhoSolicitacaoOnline` espelha, sem obrigatoriedade). Todos
+`nullable` na coluna mesmo com `@NotNull` na Bean Validation (compatível
+com linhas gravadas antes destes campos existirem — mesma lacuna já
+documentada para `pacienteRgct`), nenhum backfill necessário.
+**`pacienteRgct` (2026-08-27, paciente preemptivo):** deixou de ter
+`@NotBlank` na ENTIDADE — passou a ser condicionalmente obrigatório (só
+quando `!isPreemptivo()`), validado em `SolicitacaoOnlineService.criar` e
+`ProcessoDetalheController` — ver o bullet "Paciente preemptivo" em "Regras
+de negócio" acima. **Nunca**
+chegam ao avaliador — só até o Relatório Final/dossiê, lado do operador.
+**`pacienteDataNascimento` PRECISA de `@DateTimeFormat(iso =
+DateTimeFormat.ISO.DATE)`** em `Processo`/`SolicitacaoOnline` — bug real de
+produção (2026-08-21): sem essa anotação, o Thymeleaf renderiza o
+`LocalDate` no formato padrão da JVM (`"11/2/80"`) em vez de ISO no
+`value` do `<input type="date">`, que o navegador **descarta em silêncio**
+(campo aparece vazio, sem erro) — o dado ficava íntegro no banco, só
+sumia visualmente ao reabrir o formulário de conversão/edição. Qualquer
+`LocalDate` novo que vá para um `<input type="date">` via `th:field`
+precisa dessa anotação, sempre.
+
+**E-mail adicional (CC) do solicitante por processo (2026-08-21):**
+`Processo`/`SolicitacaoOnline`/`RascunhoSolicitacaoOnline.emailAdicional`
+(opcional, `@Email`, sem `@NotBlank`) — um segundo e-mail que recebe
+**cópia (CC)**, nunca substituição, dos avisos automáticos sobre aquele
+processo específico (`ProcessoService.finalizarResposta` e o e-mail pronto
+manual equivalente em `ProcessoDecisaoController.prepararEmailPronto`,
+templates `"deferido"|"indeferido"|"solicita-info"`). Fonte única do CC:
+`ProcessoService.ccEmailAdicional(Processo)`. **Nunca** usado nos e-mails
+ao time interno (convite/lembrete a avaliador, cancelamento). Validação de
+formato explícita em `SolicitacaoOnlineService.criar` (antes do `save()`,
+para não cair em 500 via `ConstraintViolationException` sem
+`@ExceptionHandler`).
+
+**Validação leve de domínio + isolamento de falha do CC (2026-08-24, achado
+real de vistoria):** `@Email` só confere a FORMA do endereço, nunca se o
+domínio existe — `EmailDominioValidator.dominioResolvivel` (só JDK puro,
+`javax.naming`/`java.net`, sem lib nova) consulta MX e, se não houver,
+A/AAAA do domínio antes de rejeitar. **Fail-open por design**: qualquer erro
+que não seja uma resolução negativa clara (timeout de DNS, rede fora do ar
+no próprio servidor) é tratado como "domínio ok" — só bloqueia quando NEM
+MX NEM A/AAAA resolvem. Chamado em `SolicitacaoOnlineService.criar` (form do
+solicitante) e `ProcessoService.atualizarDados` (form do operador,
+`ProcessoDetalheController.atualizar` trata a rejeição com
+`result.rejectValue` no campo, nunca cai no handler genérico de "registro
+não encontrado"). **Isolamento de falha do CC** (mesmo achado):
+`EmailSenderService.enviar`/`enviarComAnexo` com CC agora tentam de novo
+SEM o CC se o primeiro envio falhar (JavaMailSender rejeita a mensagem
+inteira — TO+CC são o mesmo envelope SMTP) — um `emailAdicional` com
+domínio ruim NUNCA mais bloqueia a entrega ao destinatário principal
+(solicitante), só falha de verdade quando nem sem CC funciona.
+
+**Revisão adicional (2026-08-24, PR #120) corrigiu 2 problemas na checagem
+de domínio:**
+1) **Fail-open que na prática rejeitava:** `InetAddress.getAllByName` lança
+a MESMA `UnknownHostException` tanto para "domínio realmente não existe"
+quanto para "DNS instável/rede intermitente" — as duas causas eram tratadas
+igual (rejeitando), contradizendo o fail-open prometido no javadoc.
+2) **DoS síncrono na thread HTTP:** a consulta rodava direto na thread do
+servlet, sem teto de tempo agregado (timeout do MX + timeout NÃO
+configurável do `InetAddress` podiam, sob DNS lento, esgotar o pool de
+threads do Tomcat). Corrigido rodando a checagem inteira num
+`ExecutorService` DEDICADO (nunca o pool de request do Tomcat, 4 threads
+daemon) com um teto RÍGIDO de 2s via `CompletableFuture.get(timeout, ...)`
+— qualquer timeout, interrupção ou exceção inesperada cai no MESMO
+fail-open do catch externo; só uma resposta RÁPIDA e limpa de "host not
+found" (dentro do teto) continua rejeitando. Coberto por
+`EmailDominioValidatorTest` (simula timeout ocupando a única thread de um
+executor de teste antes da chamada real, sem depender de rede/DNS real).
+
+**Exceção específica para erro de domínio (`EmailDominioInvalidoException
+extends IllegalArgumentException`, mesma revisão):** antes,
+`ProcessoDetalheController.atualizar` capturava `IllegalArgumentException`
+genérica vinda de `ProcessoService.atualizarDados` e SEMPRE assumia que era
+erro de `emailAdicional` (`result.rejectValue("emailAdicional", ...)`) —
+qualquer outra validação de negócio dentro de `atualizarDados` (atual ou
+futura) seria incorretamente atribuída a esse campo. Agora só
+`EmailDominioInvalidoException` (lançada por
+`SolicitacaoOnlineService.criar`/`ProcessoService.atualizarDados` só no
+ponto que valida `emailAdicional`) aponta o campo; qualquer outra
+`IllegalArgumentException` cai num flash de erro genérico, sem apontar
+campo nenhum.
+
 ## Portal do Avaliador (/avaliador) — Fase 1 MVP
 
 **Atualização de 2026-07-27: o "modelo híbrido" original foi encerrado.**
@@ -1086,111 +1244,18 @@ diretórios `src/`, `docs/`, `deploy/`, `scripts/`, `teste-pdfs/`, `.github/`.
   `solicitacao_online` — os backfills manuais documentados neste arquivo
   (`versao = 0 WHERE versao IS NULL`) continuam íntegros, sem regressão.
 
-## Sessão de 2026-07-28 (correções na VM)
-Todas as pendências de infra resolvidas neste ciclo:
+## Sessão de 2026-07-28 (correções na VM) — arquivado
 
-1. **Vistoria operacional/infra**: criado `/etc/logrotate.d/sgpur` (weekly,
-   rotate 4, compress), com rotina de backup de anexos adicionada ao
-   `backup-db.sh` (rclone sync para Google Drive, pasta `sgpur-backups/anexos/`
-   com archive versionado em `anexos-archive/`). O script roda via crontab do
-   postgres (`0 3 * * *`). Backup de DB já existia (pg_dump, 14d retenção,
-   rclone para `gdrive:sgpur-backups/`). **Anexos antes sem backup ← corrigido**.
-2. **Jars de backup**: script `rotacionar-backups-jar.sh` (KEEP=3) já existia
-   mas sem cron; adicionado ao crontab do root (`0 5 * * 0`). Rodado
-   manualmente: 29 jars antigos (~70MB cada) removidos, 3 mais recentes
-   mantidos. Liberados ~2GB em disco (agora 37G livres de 45G).
-3. **Erro 413**: nginx real na VM (`/etc/nginx/sites-available/sgpur`) tem
-   `client_max_body_size 30m;` idêntico ao `deploy/nginx-sgpur.conf` do repo.
-   Nenhum log de 413 encontrado no journalctl. **Suspeita descartada** — se
-   o erro reaparecer, investigar o multipart do Spring Boot
-   (`spring.servlet.multipart.max-file-size`/`max-request-size`) que estava em
-   25MB/30MB (application.yml) antes do commit `e15ff82` (04/07).
-4. **Backfill parecer.versao**: `UPDATE parecer SET versao = 0 WHERE versao IS
-   NULL` — 0 linhas afetadas (já estavam OK).
-5. **Backfill membro_urgencia_renal.versao**: `UPDATE membro_urgencia_renal SET
-   versao = 0 WHERE versao IS NULL` — 8 linhas corrigidas.
-6. **Upgrades de dependência (patches)**: `postgresql 42.7.13`, `bootstrap
-   5.3.8`, `h2 2.4.240` — atualizados no pom.xml, build OK.
-
-7. **Backfill solicitacao_online.status**: `UPDATE solicitacao_online s SET
-   status = CASE WHEN p.status = 'DEFERIDO' THEN 'APROVADA' WHEN p.status IN
-   ('INDEFERIDO','CANCELADO') THEN 'REPROVADA' ELSE s.status END FROM processo
-   p WHERE s.processo_gerado_id = p.id AND s.status = 'CONVERTIDA'` — 1 linha
-   corrigida. A propagação CONVERTIDA->APROVADA/REPROVADA já existe no código
-   desde o commit que adicionou `ProcessoService.decidir()` (linhas 422-428),
-   mas dados históricos anteriores a essa implementação ficavam travados.
-8. **Portal do Solicitante (timeline)**: passo 3 da timeline consulta
-   `processoGerado.status` quando `solicitacao.status==CONVERTIDA`, exibindo
-   o resultado (Deferido/Indeferido) em vez de "Aguardando decisao". Badge do
-   topo também reflete a decisão real. Passo 4 redundante removido.
-9. **Correção bootstrap 5.3.8**: `layout.html` tinha caminho hardcoded
-   `/webjars/bootstrap/5.3.3/...`; atualizado para 5.3.8 após o upgrade no
-   pom.xml (commit anterior). App ficou sem CSS/JS no login até esta correção.
-
-**Vistoria geral de segurança (2026-07-28)**: auditoria completa de
-autenticação, exposição de dados, IDOR e configuração. 6 correções aplicadas:
-- OpenPDF 1.3.30 → 1.3.34 (CVE XXE crítico — processa PDFs de terceiros)
-- GeminiService default `enabled=false` (antes `true`); prod já tinha
-  kill-switch, mas default no código agora é seguro também
-- Password policy: mínimo 8 chars + maiúscula + minúscula + número + especial
-  (aplicado em criar, editar e alterar própria senha)
-- Login audit trail: toda tentativa de login (sucesso e falha) logada com IP
-  (antes só logava o bloqueio de 15 min). **Atualização mesmo dia (commit
-  `cfc9f86`): o bloqueio de 15 min foi removido** — decisão deliberada de
-  produto (não bug), o log de auditoria com IP continua sendo a defesa
-  usada. `LoginAttemptService.estaBloqueado` agora sempre retorna `false`.
-  **Limpeza de 2026-07-29:** o código morto que sobrou dessa remoção foi
-  apagado — `estaBloqueado()` (e a contagem de falhas em memória que só ele
-  lia), o `LockedException` inalcançável do `UsuarioDetailsService`, o ramo
-  `LockedException → /login?bloqueado` do `SecurityConfig.loginFailureHandler`
-  e o alerta `th:if="${param.bloqueado}"` do `login.html`. `LoginAttemptService`
-  continua existindo e intacto no que importa: é o `Filter` que captura o IP
-  + os `@EventListener` que logam sucesso/falha de login. Se o bloqueio um dia
-  voltar, os 4 pontos precisam voltar juntos (documentado no javadoc da classe).
-- LogAuditoria.PROCESSO_CADASTRADO: usa `Iniciais.de()` (antes nome completo
-  do paciente no detalhe, visível na tela de auditoria ADMIN)
-- Session management: timeout 30m explícito + `maxSessions=1` (concorrência
-  bloqueada por usuário)
-
-Nenhuma falha estrutural de IDOR encontrada (AvaliadorController e
-SolicitanteController têm verificação de posse rigorosa; controllers de
-processo usam controle por role, que é o design pretendido).
-
-**Demais upgrades** (Spring Boot 4, Spring Security 7, OpenPDF >=1.3.35):
-continuam pendentes para sessão dedicada (major version, risco de breaking
-change).
-
-**Vistoria de conformidade de regras de negócio concluída em 2026-07-24**
-(cada regra da seção "Regras de negócio" deste arquivo vs. o código real,
-service+controller, cobrindo maioria simples/coordenador, anexos
-obrigatórios, processo encerrado, pausa "Solicita informação", fluxo de 6
-passos, Recebimento/Envio, Portal do Avaliador e imparcialidade). Nenhuma
-violação de regra de negócio encontrada. 4 gaps estruturais corrigidos no
-mesmo dia:
-- `ProcessoService.confirmarRespostaSolicitante` criado como fonte única da
-  regra "Deferido exige comprovante SNT" (antes vivia duplicada em 3
-  lugares: só no controller, sem espelho no service, mais uma cópia inline
-  em `prepararEmailPronto`).
-- `MembroController.salvar` ganhou `@Transactional` (fechava a janela de
-  race condition ao desmarcar outros coordenadores CET-RS).
-- `atualizarStatusPorPareceres`/`tentarDecisaoAutomatica`/
-  `retomarAposInformacao` (ProcessoService) agora lançam
-  `IllegalStateException` em vez de no-op silencioso quando chamados sobre
-  processo já finalizado (todos os call-sites reais já garantiam isso
-  antes; só torna bugs futuros ruidosos em vez de mascarados).
-- `AvaliadorController.votar()` passou a expor `ProcessoVotoView`/
-  `ParecerVotoView` (DTOs projetados) ao template em vez da entidade
-  `Processo`/`Parecer` inteira, fechando por design o risco de um `th:text`
-  futuro vazar `pacienteNome` (quebraria a regra de imparcialidade).
-Suíte completa validada após as correções: **418 testes, 0 falhas** (JDK 21).
-
-Nota: o **deploy automático via GitHub Actions foi corrigido em 2026-07-10**
-(o secret `SAUR_ORACLE_SSH_KEY` estava vazio/malformado desde 21/07, todo
-`Deploy` falhava; corrigido + também corrigido um falso-negativo no
-health-check que tinha timeout curto demais pro boot real de ~76s contra o
-Neon). Confirmado funcionando ponta a ponta (CI -> Deploy) na época.
-**Atualização de 2026-08-03: voltou a ser pendência** — ver seção "Deploy"
-abaixo, o repositório foi migrado e o secret não acompanhou.
+Detalhe de sessão (logrotate + backup de anexos por rclone, rotação de jars
+de backup, backfills de `versao`, upgrades de patch, vistoria de segurança
+com 6 correções, vistoria de conformidade de regras de negócio de 2026-07-24
+com 4 gaps estruturais corrigidos) movido para
+`docs/historico/CLAUDE-log-sessoes-2026-07-a-08.md` em 2026-08-28. As regras
+que ainda valem estão em **Segurança e sessão — reforços** (baseline de
+senha/sessão/OpenPDF/Gemini) e em **Regras de negócio** (as fontes únicas
+criadas na vistoria de conformidade: `confirmarRespostaSolicitante`,
+`@Transactional` em `MembroController.salvar`, exceções em vez de no-op
+silencioso, DTOs projetados no `AvaliadorController`).
 
 ## Deploy
 Artefatos em `deploy/` (systemd, nginx, env de exemplo, guia). Host alvo:
@@ -1279,163 +1344,15 @@ senha real em uso via `/proc/<PID>/environ`, não só o arquivo, antes de
 trocar de teoria). Utilitário `deploy/testar-smtp.py` testa a credencial
 SMTP isolada (sem depender do Java) com `getpass`.
 
-## Regras de negócio adicionais (consolidado de sessões 2026-07/08)
+**Backup (2026-08-21):** alerta por e-mail de falha do backup instalado e
+confirmado funcionando (best-effort — não derruba o backup se o alerta
+falhar); rclone com `client_id` próprio.
 
-Estas regras foram implementadas em sessões posteriores à escrita original
-da seção "Regras de negócio" acima e não estavam refletidas nela. Histórico
-completo de cada uma em `docs/historico/CLAUDE-log-sessoes-2026-07-a-08.md`.
-
-**Decisão — snapshot do coordenador e regra aplicada, sempre auditáveis:**
-- `Parecer.eraCoordenadorNoVoto` (nullable): snapshot de
-  `MembroUrgenciaRenal.coordenador` capturado no INSTANTE do voto
-  (`AvaliadorController.registrarVoto`). `ProcessoValidator
-  .temVotoCoordenadorFavoravel` lê esse snapshot, não o cargo ao vivo —
-  corrige o caso do coordenador trocar de mão entre o voto e a decisão.
-  `null` (voto legado, anterior a esta mudança) nunca conta como voto de
-  coordenador — decisão conservadora, sem backfill necessário.
-- `service/dto/RegraDecisao` (enum: `MAIORIA_SIMPLES`, `VOTO_COORDENADOR`,
-  `CANCELAMENTO`, `NAO_DECIDIDO`) + `ProcessoValidator.regraAplicada` —
-  fonte única de "por que essa decisão saiu assim", usada por
-  `ExportacaoProcessoService` (dossiê), `RelatorioService` (PDF),
-  `FluxoProcessoService` e o fragment `layout :: badgeRegraDecisao`,
-  exibido em `processos/detalhe.html`, `processos/lista.html`,
-  `arquivo/lista.html` e `dashboard.html`. Nunca mais dizer "maioria
-  formada"/"2 de 3" num processo decidido pelo voto único do coordenador.
-- `Processo.reaberturas` (contador, nullable, sem backfill): incrementado
-  em `ProcessoService.reabrir`, que também **remove o anexo
-  `RELATORIO_FINAL` da decisão anulada** (é sempre derivado, regenerado na
-  próxima decisão — nunca deixar baixável um relatório afirmando um
-  resultado que já foi desfeito). Badge "Reaberto Nx" no mesmo fragment
-  `badgeRegraDecisao`/`badgeReaberturas`, mesmas 4 telas.
-- `HistoricoParecer` (entidade de staging, append-only, nunca se mistura ao
-  ciclo de vida do `Parecer` real): antes de `retomarAposInformacao` zerar
-  um parecer que pediu "Solicita informação", um snapshot completo
-  (incluindo a justificativa original) é gravado ali — sem isso, o pedido e
-  a justificativa que motivaram a pausa somem quando o parecer é reaberto
-  para novo voto. Exibido em seção colapsável no card Respostas e no
-  Relatório Final.
-- Portal do Avaliador mostra "Processos decididos sem o seu voto" (quem foi
-  dispensado por maioria simples/coordenador antes de conseguir votar) —
-  **só** número do processo + iniciais, nunca a decisão nem o voto dos
-  outros avaliadores (imparcialidade).
-
-**Solicita informação — múltiplos pedidos simultâneos (2026-08-11/12,
-bug real corrigido no processo 12/2026 de produção):** a pausa não é mais
-tratada como "uma rodada" única. `SolicitacaoOnlineService
-.EstadoInformacaoComplementar` (record) é a fonte única: cada pedido de
-informação é avaliado **independentemente** (respondido = existe anexo
-`INFO_COMPLEMENTAR` enviado DEPOIS daquele pedido específico) — um pedido
-novo nunca apaga a resposta a um pedido anterior, e um pedido já atendido
-nunca é relistado. **Um único envio do solicitante responde a TODOS os
-pedidos abertos naquele momento** (decisão de produto confirmada
-2026-08-12, não exige resposta por avaliador). Lista/detalhe do Portal do
-Solicitante e o placar do card Respostas do operador usam o mesmo estado —
-nunca duplicar essa lógica em lugar nenhum novo. Durante a pausa, a etapa
-"Respostas dos médicos" só fica CONCLUÍDA com maioria de verdade (não com
-"todos responderam", já que "Solicita informação" não é veredito).
-
-**Encaminhar informação complementar ao avaliador que pediu
-(2026-08-11):** `TipoAnexo.INFO_COMPLEMENTAR_AVALIADOR` — o operador
-**redige** (nunca promove automaticamente) o texto que vai ao avaliador,
-que passa pelo mesmo `VerificadorNomePaciente` do chat antes de ser salvo.
-Solicitante também pode responder com **texto livre**, não só arquivo
-(`SolicitacaoOnlineService.enviarInformacaoComplementar` aceita texto OU
-arquivo). Quem vê o material: só quem pediu a informação naquele processo
-(via `Parecer` vivo ou `HistoricoParecer`), nunca outro avaliador.
-
-**Confirmação de conflito de equipe ao escolher os 3 médicos
-(2026-08-17):** `processos/form.html` consulta `GET /processos/conflito-
-equipe` assim que o trio de médicos fica completo e, se algum for da mesma
-equipe do solicitante (`ConflitoEquipeMatcher`), pede confirmação via modal
-antes de cadastrar — client-side, fail-open (erro de rede não bloqueia),
-não substitui o aviso não-bloqueante já existente na tela de detalhe.
-
-**Dados adicionais de identificação do paciente (2026-08-20):**
-`pacienteDataNascimento` (`LocalDate`, `@NotNull`), `pacienteCpf` (11
-dígitos, validado por módulo-11 via `CpfUtil`), `pacienteSexo` (enum
-`Sexo`, `MASCULINO`/`FEMININO`, sem terceira opção por decisão de produto),
-`pacienteNomeMae` (opcional) — em `Processo`/`SolicitacaoOnline`
-(`RascunhoSolicitacaoOnline` espelha, sem obrigatoriedade). Todos
-`nullable` na coluna mesmo com `@NotNull` na Bean Validation (compatível
-com linhas gravadas antes destes campos existirem — mesma lacuna já
-documentada para `pacienteRgct`), nenhum backfill necessário.
-**`pacienteRgct` (2026-08-27, paciente preemptivo):** deixou de ter
-`@NotBlank` na ENTIDADE — passou a ser condicionalmente obrigatório (só
-quando `!isPreemptivo()`), validado em `SolicitacaoOnlineService.criar` e
-`ProcessoDetalheController` — ver o bullet "Paciente preemptivo" em "Regras
-de negócio" acima. **Nunca**
-chegam ao avaliador — só até o Relatório Final/dossiê, lado do operador.
-**`pacienteDataNascimento` PRECISA de `@DateTimeFormat(iso =
-DateTimeFormat.ISO.DATE)`** em `Processo`/`SolicitacaoOnline` — bug real de
-produção (2026-08-21): sem essa anotação, o Thymeleaf renderiza o
-`LocalDate` no formato padrão da JVM (`"11/2/80"`) em vez de ISO no
-`value` do `<input type="date">`, que o navegador **descarta em silêncio**
-(campo aparece vazio, sem erro) — o dado ficava íntegro no banco, só
-sumia visualmente ao reabrir o formulário de conversão/edição. Qualquer
-`LocalDate` novo que vá para um `<input type="date">` via `th:field`
-precisa dessa anotação, sempre.
-
-**E-mail adicional (CC) do solicitante por processo (2026-08-21):**
-`Processo`/`SolicitacaoOnline`/`RascunhoSolicitacaoOnline.emailAdicional`
-(opcional, `@Email`, sem `@NotBlank`) — um segundo e-mail que recebe
-**cópia (CC)**, nunca substituição, dos avisos automáticos sobre aquele
-processo específico (`ProcessoService.finalizarResposta` e o e-mail pronto
-manual equivalente em `ProcessoDecisaoController.prepararEmailPronto`,
-templates `"deferido"|"indeferido"|"solicita-info"`). Fonte única do CC:
-`ProcessoService.ccEmailAdicional(Processo)`. **Nunca** usado nos e-mails
-ao time interno (convite/lembrete a avaliador, cancelamento). Validação de
-formato explícita em `SolicitacaoOnlineService.criar` (antes do `save()`,
-para não cair em 500 via `ConstraintViolationException` sem
-`@ExceptionHandler`).
-
-**Validação leve de domínio + isolamento de falha do CC (2026-08-24, achado
-real de vistoria):** `@Email` só confere a FORMA do endereço, nunca se o
-domínio existe — `EmailDominioValidator.dominioResolvivel` (só JDK puro,
-`javax.naming`/`java.net`, sem lib nova) consulta MX e, se não houver,
-A/AAAA do domínio antes de rejeitar. **Fail-open por design**: qualquer erro
-que não seja uma resolução negativa clara (timeout de DNS, rede fora do ar
-no próprio servidor) é tratado como "domínio ok" — só bloqueia quando NEM
-MX NEM A/AAAA resolvem. Chamado em `SolicitacaoOnlineService.criar` (form do
-solicitante) e `ProcessoService.atualizarDados` (form do operador,
-`ProcessoDetalheController.atualizar` trata a rejeição com
-`result.rejectValue` no campo, nunca cai no handler genérico de "registro
-não encontrado"). **Isolamento de falha do CC** (mesmo achado):
-`EmailSenderService.enviar`/`enviarComAnexo` com CC agora tentam de novo
-SEM o CC se o primeiro envio falhar (JavaMailSender rejeita a mensagem
-inteira — TO+CC são o mesmo envelope SMTP) — um `emailAdicional` com
-domínio ruim NUNCA mais bloqueia a entrega ao destinatário principal
-(solicitante), só falha de verdade quando nem sem CC funciona.
-
-**Revisão adicional (2026-08-24, PR #120) corrigiu 2 problemas na checagem
-de domínio:**
-1) **Fail-open que na prática rejeitava:** `InetAddress.getAllByName` lança
-a MESMA `UnknownHostException` tanto para "domínio realmente não existe"
-quanto para "DNS instável/rede intermitente" — as duas causas eram tratadas
-igual (rejeitando), contradizendo o fail-open prometido no javadoc.
-2) **DoS síncrono na thread HTTP:** a consulta rodava direto na thread do
-servlet, sem teto de tempo agregado (timeout do MX + timeout NÃO
-configurável do `InetAddress` podiam, sob DNS lento, esgotar o pool de
-threads do Tomcat). Corrigido rodando a checagem inteira num
-`ExecutorService` DEDICADO (nunca o pool de request do Tomcat, 4 threads
-daemon) com um teto RÍGIDO de 2s via `CompletableFuture.get(timeout, ...)`
-— qualquer timeout, interrupção ou exceção inesperada cai no MESMO
-fail-open do catch externo; só uma resposta RÁPIDA e limpa de "host not
-found" (dentro do teto) continua rejeitando. Coberto por
-`EmailDominioValidatorTest` (simula timeout ocupando a única thread de um
-executor de teste antes da chamada real, sem depender de rede/DNS real).
-
-**Exceção específica para erro de domínio (`EmailDominioInvalidoException
-extends IllegalArgumentException`, mesma revisão):** antes,
-`ProcessoDetalheController.atualizar` capturava `IllegalArgumentException`
-genérica vinda de `ProcessoService.atualizarDados` e SEMPRE assumia que era
-erro de `emailAdicional` (`result.rejectValue("emailAdicional", ...)`) —
-qualquer outra validação de negócio dentro de `atualizarDados` (atual ou
-futura) seria incorretamente atribuída a esse campo. Agora só
-`EmailDominioInvalidoException` (lançada por
-`SolicitacaoOnlineService.criar`/`ProcessoService.atualizarDados` só no
-ponto que valida `emailAdicional`) aponta o campo; qualquer outra
-`IllegalArgumentException` cai num flash de erro genérico, sem apontar
-campo nenhum.
+**Deploy automático (CI→Deploy):** confirmado funcionando ponta a ponta
+repetidamente. Se voltar a falhar logo após migrar/trocar o repositório
+remoto, checar PRIMEIRO se o secret `SAUR_ORACLE_SSH_KEY` acompanhou a
+migração — secrets do GitHub Actions **não migram sozinhos** (foi a causa
+do incidente de 2026-07-31→08-03 acima).
 
 ## Redesign visual — Portais do Solicitante e Avaliador (2026-08-06 a 08)
 
@@ -1563,9 +1480,10 @@ extração nunca foi de fato reproduzido).
 - **Atraso progressivo no login, NÃO bloqueio** (2026-08-07): após 2 falhas
   seguidas do mesmo username numa janela de 15min, cada falha soma atraso
   (teto 5s) — mas login com senha certa **nunca** é atrasado, mesmo logo
-  após falhas. Mantém a filosofia de nunca travar o usuário legítimo (ver
-  "Sessão de 2026-07-28" acima, onde o bloqueio de 15min foi removido de
-  propósito em favor só do log de auditoria com IP).
+  após falhas. Mantém a filosofia de nunca travar o usuário legítimo — o
+  bloqueio de 15min que existia antes foi removido de propósito em
+  2026-07-28 (`LoginAttemptService.estaBloqueado` sempre retorna `false`;
+  código morto limpo em 2026-07-29), em favor só do log de auditoria com IP.
 - **Actuator ligado**: só `/actuator/health` é público (`show-details:
   never`, sem checar SMTP — `management.health.mail.enabled=false`); resto
   de `/actuator/**` é ADMIN-only por regra explícita (defesa em
@@ -1595,6 +1513,16 @@ extração nunca foi de fato reproduzido).
   Painel; `RelatorioController.agruparPorTipoDepoisSequencial` para os
   PDFs). Regra geral: **agrupamento/ordenação derivada de expressão em query
   `select distinct` faz-se em Java, nunca no `ORDER BY`.**
+- **Baseline de segurança (consolidado da vistoria de 2026-07-28):**
+  política de senha exige **mínimo 8 caracteres + maiúscula + minúscula +
+  número + caractere especial** (`SenhaPolicy`, aplicada em criar/editar
+  usuário e trocar a própria senha); sessão com **timeout de 30 min
+  explícito + `maxSessions=1`** (concorrência bloqueada por usuário);
+  `GeminiService` nasce com `enabled=false` no código (prod tem kill-switch
+  próprio); OpenPDF **≥ 1.3.34** obrigatório (CVE de XXE — o sistema
+  processa PDF de terceiros). `LogAuditoria.PROCESSO_CADASTRADO` usa
+  `Iniciais.de()`, nunca o nome do paciente. Detalhe do incidente/vistoria
+  em `docs/historico/CLAUDE-log-sessoes-2026-07-a-08.md`.
 
 ## Auditoria — filtros e exportação
 
@@ -1606,22 +1534,6 @@ Arquivo, Auditoria, Membros, Usuários, Controle de Urgências, Solicitações
 online) — recaída conhecida do mesmo padrão de vazamento de nome de
 paciente já corrigido 2× antes; nunca incluir o termo de busca numa
 mensagem de auditoria nova.
-
-## Infra / Deploy — atualizações desde a escrita original
-
-- **IP da VM mudou em 2026-08-21**: `163.176.163.213` → `163.176.30.222`
-  (IP público efêmero, muda se a instância for parada/reiniciada pelo
-  console Oracle — reservar o IP continua sendo pendência real, não feita
-  ainda). `.github/workflows/deploy.yml` e os comandos SSH acima já
-  refletem o IP novo.
-- Backup: alerta por e-mail de falha instalado e confirmado funcionando
-  (best-effort, não derruba o backup se o alerta falhar); `client_id`
-  próprio do rclone aparenta resolvido (aviso do client_id compartilhado
-  sumiu do log).
-- Deploy automático (CI→Deploy) confirmado funcionando ponta a ponta
-  repetidamente; se voltar a falhar logo após migrar/trocar o repositório
-  remoto, checar primeiro se o secret `SAUR_ORACLE_SSH_KEY` acompanhou a
-  migração (secrets do Actions NÃO migram sozinhos).
 
 ## Decisões de "não fazer" (não reabrir sem pedido explícito)
 

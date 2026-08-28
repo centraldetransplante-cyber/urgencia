@@ -5880,3 +5880,119 @@ relendo o `Processo` resultante com a data correta.
 o atributo `value` do HTML renderizado de fato (nenhum teste de status/model
 attribute pegaria essa classe de bug). Suíte completa: **1083 testes, 0
 falhas** (JDK 21, `mvn clean test`).
+
+
+---
+
+# Movido do CLAUDE.md em 2026-08-28 (reestruturação "sem perder regra")
+
+Era a seção "## Sessão de 2026-07-28 (correções na VM)". Narrativa de
+sessão — as regras vivas foram para "Segurança e sessão — reforços"
+(baseline de senha/sessão) e "Regras de negócio" (fontes únicas da
+vistoria de conformidade de 2026-07-24) no próprio CLAUDE.md.
+
+## Sessão de 2026-07-28 (correções na VM)
+Todas as pendências de infra resolvidas neste ciclo:
+
+1. **Vistoria operacional/infra**: criado `/etc/logrotate.d/sgpur` (weekly,
+   rotate 4, compress), com rotina de backup de anexos adicionada ao
+   `backup-db.sh` (rclone sync para Google Drive, pasta `sgpur-backups/anexos/`
+   com archive versionado em `anexos-archive/`). O script roda via crontab do
+   postgres (`0 3 * * *`). Backup de DB já existia (pg_dump, 14d retenção,
+   rclone para `gdrive:sgpur-backups/`). **Anexos antes sem backup ← corrigido**.
+2. **Jars de backup**: script `rotacionar-backups-jar.sh` (KEEP=3) já existia
+   mas sem cron; adicionado ao crontab do root (`0 5 * * 0`). Rodado
+   manualmente: 29 jars antigos (~70MB cada) removidos, 3 mais recentes
+   mantidos. Liberados ~2GB em disco (agora 37G livres de 45G).
+3. **Erro 413**: nginx real na VM (`/etc/nginx/sites-available/sgpur`) tem
+   `client_max_body_size 30m;` idêntico ao `deploy/nginx-sgpur.conf` do repo.
+   Nenhum log de 413 encontrado no journalctl. **Suspeita descartada** — se
+   o erro reaparecer, investigar o multipart do Spring Boot
+   (`spring.servlet.multipart.max-file-size`/`max-request-size`) que estava em
+   25MB/30MB (application.yml) antes do commit `e15ff82` (04/07).
+4. **Backfill parecer.versao**: `UPDATE parecer SET versao = 0 WHERE versao IS
+   NULL` — 0 linhas afetadas (já estavam OK).
+5. **Backfill membro_urgencia_renal.versao**: `UPDATE membro_urgencia_renal SET
+   versao = 0 WHERE versao IS NULL` — 8 linhas corrigidas.
+6. **Upgrades de dependência (patches)**: `postgresql 42.7.13`, `bootstrap
+   5.3.8`, `h2 2.4.240` — atualizados no pom.xml, build OK.
+
+7. **Backfill solicitacao_online.status**: `UPDATE solicitacao_online s SET
+   status = CASE WHEN p.status = 'DEFERIDO' THEN 'APROVADA' WHEN p.status IN
+   ('INDEFERIDO','CANCELADO') THEN 'REPROVADA' ELSE s.status END FROM processo
+   p WHERE s.processo_gerado_id = p.id AND s.status = 'CONVERTIDA'` — 1 linha
+   corrigida. A propagação CONVERTIDA->APROVADA/REPROVADA já existe no código
+   desde o commit que adicionou `ProcessoService.decidir()` (linhas 422-428),
+   mas dados históricos anteriores a essa implementação ficavam travados.
+8. **Portal do Solicitante (timeline)**: passo 3 da timeline consulta
+   `processoGerado.status` quando `solicitacao.status==CONVERTIDA`, exibindo
+   o resultado (Deferido/Indeferido) em vez de "Aguardando decisao". Badge do
+   topo também reflete a decisão real. Passo 4 redundante removido.
+9. **Correção bootstrap 5.3.8**: `layout.html` tinha caminho hardcoded
+   `/webjars/bootstrap/5.3.3/...`; atualizado para 5.3.8 após o upgrade no
+   pom.xml (commit anterior). App ficou sem CSS/JS no login até esta correção.
+
+**Vistoria geral de segurança (2026-07-28)**: auditoria completa de
+autenticação, exposição de dados, IDOR e configuração. 6 correções aplicadas:
+- OpenPDF 1.3.30 → 1.3.34 (CVE XXE crítico — processa PDFs de terceiros)
+- GeminiService default `enabled=false` (antes `true`); prod já tinha
+  kill-switch, mas default no código agora é seguro também
+- Password policy: mínimo 8 chars + maiúscula + minúscula + número + especial
+  (aplicado em criar, editar e alterar própria senha)
+- Login audit trail: toda tentativa de login (sucesso e falha) logada com IP
+  (antes só logava o bloqueio de 15 min). **Atualização mesmo dia (commit
+  `cfc9f86`): o bloqueio de 15 min foi removido** — decisão deliberada de
+  produto (não bug), o log de auditoria com IP continua sendo a defesa
+  usada. `LoginAttemptService.estaBloqueado` agora sempre retorna `false`.
+  **Limpeza de 2026-07-29:** o código morto que sobrou dessa remoção foi
+  apagado — `estaBloqueado()` (e a contagem de falhas em memória que só ele
+  lia), o `LockedException` inalcançável do `UsuarioDetailsService`, o ramo
+  `LockedException → /login?bloqueado` do `SecurityConfig.loginFailureHandler`
+  e o alerta `th:if="${param.bloqueado}"` do `login.html`. `LoginAttemptService`
+  continua existindo e intacto no que importa: é o `Filter` que captura o IP
+  + os `@EventListener` que logam sucesso/falha de login. Se o bloqueio um dia
+  voltar, os 4 pontos precisam voltar juntos (documentado no javadoc da classe).
+- LogAuditoria.PROCESSO_CADASTRADO: usa `Iniciais.de()` (antes nome completo
+  do paciente no detalhe, visível na tela de auditoria ADMIN)
+- Session management: timeout 30m explícito + `maxSessions=1` (concorrência
+  bloqueada por usuário)
+
+Nenhuma falha estrutural de IDOR encontrada (AvaliadorController e
+SolicitanteController têm verificação de posse rigorosa; controllers de
+processo usam controle por role, que é o design pretendido).
+
+**Demais upgrades** (Spring Boot 4, Spring Security 7, OpenPDF >=1.3.35):
+continuam pendentes para sessão dedicada (major version, risco de breaking
+change).
+
+**Vistoria de conformidade de regras de negócio concluída em 2026-07-24**
+(cada regra da seção "Regras de negócio" deste arquivo vs. o código real,
+service+controller, cobrindo maioria simples/coordenador, anexos
+obrigatórios, processo encerrado, pausa "Solicita informação", fluxo de 6
+passos, Recebimento/Envio, Portal do Avaliador e imparcialidade). Nenhuma
+violação de regra de negócio encontrada. 4 gaps estruturais corrigidos no
+mesmo dia:
+- `ProcessoService.confirmarRespostaSolicitante` criado como fonte única da
+  regra "Deferido exige comprovante SNT" (antes vivia duplicada em 3
+  lugares: só no controller, sem espelho no service, mais uma cópia inline
+  em `prepararEmailPronto`).
+- `MembroController.salvar` ganhou `@Transactional` (fechava a janela de
+  race condition ao desmarcar outros coordenadores CET-RS).
+- `atualizarStatusPorPareceres`/`tentarDecisaoAutomatica`/
+  `retomarAposInformacao` (ProcessoService) agora lançam
+  `IllegalStateException` em vez de no-op silencioso quando chamados sobre
+  processo já finalizado (todos os call-sites reais já garantiam isso
+  antes; só torna bugs futuros ruidosos em vez de mascarados).
+- `AvaliadorController.votar()` passou a expor `ProcessoVotoView`/
+  `ParecerVotoView` (DTOs projetados) ao template em vez da entidade
+  `Processo`/`Parecer` inteira, fechando por design o risco de um `th:text`
+  futuro vazar `pacienteNome` (quebraria a regra de imparcialidade).
+Suíte completa validada após as correções: **418 testes, 0 falhas** (JDK 21).
+
+Nota: o **deploy automático via GitHub Actions foi corrigido em 2026-07-10**
+(o secret `SAUR_ORACLE_SSH_KEY` estava vazio/malformado desde 21/07, todo
+`Deploy` falhava; corrigido + também corrigido um falso-negativo no
+health-check que tinha timeout curto demais pro boot real de ~76s contra o
+Neon). Confirmado funcionando ponta a ponta (CI -> Deploy) na época.
+**Atualização de 2026-08-03: voltou a ser pendência** — ver seção "Deploy"
+abaixo, o repositório foi migrado e o secret não acompanhou.
