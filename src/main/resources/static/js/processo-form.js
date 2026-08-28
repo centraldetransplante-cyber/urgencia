@@ -105,6 +105,21 @@
 // preemptivo). So UX/apresentacao - a regra de verdade (obrigatoriedade do
 // RGCT, formato/prefixo do numero) mora sempre no backend
 // (ProcessoDetalheController/ProcessoService), nunca so aqui. ===
+//
+// Rastreio da ULTIMA sugestao automatica mostrada no campo "numero"
+// (achado A1 da auditoria de 2026-08-27): o controller ja pre-preenche o
+// campo com a sugestao da serie inicial (regime manual, 2026), entao o
+// campo NUNCA fica vazio no primeiro toggle - "so preenche se vazio" nunca
+// disparava. Em vez disso, comparamos o valor atual com a ultima sugestao
+// que NOS mesmos colocamos ali: se ainda forem iguais, o operador nao
+// digitou nada por cima, entao e seguro re-sugerir na nova serie; se o
+// operador corrigiu manualmente, o valor diverge da ultima sugestao e
+// nunca sobrescrevemos.
+var ultimaSugestaoNumeroProcesso = (function () {
+    var campo = document.getElementById('numero');
+    return campo ? campo.value.trim() : null;
+})();
+
 function atualizarTipoProcesso(preemptivo) {
     var campoRgct = document.querySelector('[name="pacienteRgct"]');
     var blocoRgct = document.getElementById('blocoRgct');
@@ -140,12 +155,18 @@ function atualizarTipoProcesso(preemptivo) {
         textoAjudaObservacoes.textContent = "Pré-preenchido com '" + rotuloJustificativa
             + "' enviado(a) pelo solicitante — revise com atenção antes de cadastrar.";
     }
-    // Sugestao de numero: so preenche se o campo ainda estiver vazio (nunca
-    // sobrescreve algo ja digitado pelo operador - §5.7/§9.2 do plano).
-    if (campoNumero && !campoNumero.value.trim()) {
+    // Sugestao de numero: re-sugere ao trocar o tipo quando o campo esta
+    // vazio OU quando o valor atual ainda e exatamente a ULTIMA sugestao
+    // automatica que colocamos ali - nunca sobrescreve uma correcao manual
+    // do operador (achado A1 da auditoria de 2026-08-27, §5.7/§9.2 do plano).
+    if (campoNumero) {
         var sugestao = preemptivo
             ? (sugestaoPreemptivo ? sugestaoPreemptivo.textContent : '')
             : (sugestaoUrgencia ? sugestaoUrgencia.textContent : '');
-        campoNumero.value = sugestao;
+        var valorAtual = campoNumero.value.trim();
+        if (!valorAtual || valorAtual === ultimaSugestaoNumeroProcesso) {
+            campoNumero.value = sugestao;
+        }
+        ultimaSugestaoNumeroProcesso = sugestao;
     }
 }

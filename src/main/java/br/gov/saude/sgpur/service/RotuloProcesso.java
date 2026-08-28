@@ -126,4 +126,50 @@ public final class RotuloProcesso {
     public static String tipoPedido(Processo p) {
         return tipoPedido(p != null && p.isPreemptivo());
     }
+
+    /**
+     * Subtitulo em caixa alta, com acento, do cabecalho do Oficio (linha 2,
+     * logo abaixo do nome da instituicao) - "INSERÇÃO EM LISTA DE ESPERA
+     * RENAL" | "URGÊNCIA RENAL". Achado A6 da auditoria de 2026-08-27:
+     * {@code OficioService} tinha esse ternario inline, divergente do texto
+     * (com prefixo "PROCESSO DE") de {@link #tituloPdfCaixaAlta}.
+     */
+    public static String subtituloOficioCaixaAlta(boolean preemptivo) {
+        return preemptivo ? "INSERÇÃO EM LISTA DE ESPERA RENAL" : "URGÊNCIA RENAL";
+    }
+
+    public static String subtituloOficioCaixaAlta(Processo p) {
+        return subtituloOficioCaixaAlta(p != null && p.isPreemptivo());
+    }
+
+    /**
+     * Titulo em caixa alta, SEM acento (texto interno do dossie ZIP, mesmo
+     * padrao ja usado por esse documento), com o sufixo "(PREEMPTIVO)" -
+     * "PROCESSO DE INSERCAO EM LISTA DE ESPERA RENAL (PREEMPTIVO)" |
+     * "PROCESSO DE URGENCIA RENAL". Achado A6 da auditoria de 2026-08-27:
+     * {@code ExportacaoProcessoService} tinha esse ternario inline.
+     */
+    public static String tituloDossieCaixaAltaSemAcento(boolean preemptivo) {
+        return preemptivo
+            ? "PROCESSO DE INSERCAO EM LISTA DE ESPERA RENAL (PREEMPTIVO)"
+            : "PROCESSO DE URGENCIA RENAL";
+    }
+
+    public static String tituloDossieCaixaAltaSemAcento(Processo p) {
+        return tituloDossieCaixaAltaSemAcento(p != null && p.isPreemptivo());
+    }
+
+    /**
+     * Rotulo da data clinica, SEM acento (texto interno do dossie ZIP, mesmo
+     * padrao ja usado por esse documento) - "Data da solicitacao" | "Data de
+     * solicitacao da urgencia renal". Achado A6 da auditoria de 2026-08-27:
+     * {@code ExportacaoProcessoService} tinha esse ternario inline.
+     */
+    public static String rotuloDataClinicaSemAcento(boolean preemptivo) {
+        return preemptivo ? "Data da solicitacao" : "Data de solicitacao da urgencia renal";
+    }
+
+    public static String rotuloDataClinicaSemAcento(Processo p) {
+        return rotuloDataClinicaSemAcento(p != null && p.isPreemptivo());
+    }
 }

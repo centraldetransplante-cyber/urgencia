@@ -598,16 +598,22 @@ public class SolicitacaoOnlineService {
         }
         identificacao.append("Equipe solicitante: ").append(s.getSolicitanteEquipe());
 
+        // Achado A3 da auditoria de 2026-08-27: assunto/abertura usavam sempre
+        // "urgencia renal", mesmo em pedido preemptivo (o bloco de
+        // identificacao ja tinha a linha "Tipo:", mas a frase de abertura
+        // continuava contradizendo). RotuloProcesso e a fonte unica.
+        String tipoPedido = RotuloProcesso.tipoPedido(s.isPreemptivo());
+        String prefixoAssunto = RotuloProcesso.prefixoAssunto(s.isPreemptivo());
         String corpo = """
-            Uma nova solicitacao de urgencia renal foi enviada pelo Portal do Solicitante.
+            Uma nova solicitacao de %s foi enviada pelo Portal do Solicitante.
 
             %s
 
             Acesse a fila de triagem para revisar e prosseguir com o cadastro do processo:
             %s/processos/solicitacoes-online/%d
-            """.formatted(identificacao, baseUrl, s.getId());
+            """.formatted(tipoPedido, identificacao, baseUrl, s.getId());
         emailSenderService.enviar(emails, null,
-            "Nova solicitacao online aguardando triagem - " + s.getPacienteNome(), corpo);
+            prefixoAssunto + " - Nova solicitacao online aguardando triagem - " + s.getPacienteNome(), corpo);
     }
 
     /**

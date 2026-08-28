@@ -940,7 +940,12 @@ tr.linha-inativa > td:first-child {
 .stat-card-indeferido{ --stat-bg: var(--rs-red-light); --stat-border: var(--rs-red); --stat-text: var(--rs-red-dark); --stat-icon-bg: var(--rs-red-light); --stat-icon-color: var(--rs-red); }
 .stat-card-cancelado { --stat-bg: #fff; --stat-border: var(--rs-gray-300); --stat-text: var(--rs-gray-600); --stat-icon-bg: var(--rs-gray-100); --stat-icon-color: var(--rs-gray-500); }
 .stat-card-membros   { --stat-bg: var(--rs-blue-light); --stat-border: var(--rs-blue); --stat-text: var(--rs-blue); --stat-icon-bg: var(--rs-blue-light); --stat-icon-color: var(--rs-blue); }
-.stat-card-preemptivo{ --stat-bg: var(--rs-blue-light); --stat-border: var(--rs-blue); --stat-text: var(--rs-blue); --stat-icon-bg: var(--rs-blue-light); --stat-icon-color: var(--rs-blue); }
+/* Achado A4 da auditoria de 2026-08-27: tinha a MESMA cor de .stat-card-membros,
+   com quem fica lado a lado no Painel e no Portal do Avaliador ("Preemptivos
+   avaliados" x "Atribuidos a mim") - viola a regra fixa "cada opcao lado a
+   lado usa sua propria cor semantica". Trocado para dourado, coerente com o
+   badge de tipo "Preemptivo" (bg-warning text-dark, usado em ~11 telas). */
+.stat-card-preemptivo{ --stat-bg: var(--rs-gold-light); --stat-border: var(--rs-gold); --stat-text: var(--rs-gold-dark); --stat-icon-bg: var(--rs-gold-light); --stat-icon-color: var(--rs-gold); }
 .stat-card-tempo     { --stat-bg: #fff; --stat-border: var(--rs-gray-200); --stat-text: var(--rs-gray-800); --stat-icon-bg: var(--rs-gray-100); --stat-icon-color: var(--rs-gray-500); }
 
 /* Estilo base repetido inline nos cards de resumo do Portal do Solicitante
