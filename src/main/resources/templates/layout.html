@@ -19,8 +19,11 @@
            enviava o IP do usuario a um terceiro fora do pais, o que num sistema
            de secretaria estadual de saude e materia de LGPD - alem de ser uma
            folha render-blocking dependente de rede externa. */-->
-    <link rel="stylesheet" th:href="@{/webjars/bootstrap/5.3.8/css/bootstrap.min.css}">
-    <link rel="stylesheet" th:href="@{/webjars/bootstrap-icons/1.11.3/font/bootstrap-icons.css}">
+    <!--/* Caminho SEM a versao: o webjars-locator-lite (pom.xml) resolve para
+           a versao real no classpath. NAO voltar a hardcodear "5.3.8" aqui - um
+           upgrade no pom.xml que esqueca este arquivo derruba todo o CSS/JS. */-->
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap/css/bootstrap.min.css}">
+    <link rel="stylesheet" th:href="@{/webjars/bootstrap-icons/font/bootstrap-icons.css}">
     <!--/* Sem cache-buster manual: spring.web.resources.chain.strategy.content
            esta ativo (application.yml) e o proprio nome do arquivo ja carrega o
            hash do conteudo (app-<hash>.css), mudando sozinho quando o CSS muda.
@@ -702,7 +705,7 @@
     </div>
 </div>
 
-<script th:fragment="scripts" th:src="@{/webjars/bootstrap/5.3.8/js/bootstrap.bundle.min.js}"></script>
+<script th:fragment="scripts" th:src="@{/webjars/bootstrap/js/bootstrap.bundle.min.js}"></script>
 <script th:fragment="confirmarAcaoScript" th:src="@{/js/confirmar-acao.js}"></script>
 <script th:fragment="lockSubmitScript" th:src="@{/js/lock-submit.js}"></script>
 <script th:fragment="avisoSairScript" th:src="@{/js/aviso-sair-sem-salvar.js}"></script>

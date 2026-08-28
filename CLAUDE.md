@@ -1026,6 +1026,14 @@ flag chega aos templates só como `boolean preemptivo` nos records projetados
   migrado para Bootstrap + app.css.
 - Templates usam `layout.html` com fragments `head`, `navbar`, `flash`,
   `status(ok)`, `statusRotulo(ok, r)`, `statusNa(r)`, `footer`, `scripts`.
+  **Todo template de página precisa incluir `~{layout :: scripts}`** (carrega
+  o `bootstrap.bundle.js` — sem ele, dropdown da navbar/modais/collapse ficam
+  mortos naquela tela).
+- Bootstrap/bootstrap-icons vêm por WebJar. Os `@{/webjars/...}` no
+  `layout.html` são **sem número de versão** (`/webjars/bootstrap/css/...`) —
+  o `webjars-locator-lite` (pom.xml) resolve a versão real no classpath.
+  **Nunca hardcodear a versão no caminho**: um upgrade no `pom.xml` que
+  esqueça o template derruba todo o CSS/JS (já aconteceu: 5.3.3 → 5.3.8).
 - JavaScript específico fica em `static/js/*.js` (ex.: `processo-detalhe.js`),
   nunca inline nos templates. Feedback ao usuário usa `mostrarToast()` (toast
   estilizado), nunca `alert()`.

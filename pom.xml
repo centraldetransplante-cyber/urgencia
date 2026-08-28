@@ -73,6 +73,17 @@
             <artifactId>bootstrap-icons</artifactId>
             <version>1.11.3</version>
         </dependency>
+        <!-- Resolve /webjars/<lib>/... SEM a versao no caminho (o resolver
+             acha a versao real no classpath). Sem isso, o numero de versao
+             fica hardcoded no layout.html e um upgrade no pom.xml que esqueca
+             de atualizar o template derruba TODO o CSS/JS (incidente real:
+             bootstrap 5.3.3 -> 5.3.8, "App ficou sem CSS/JS no login").
+             Versao gerida pelo BOM do Spring Boot; auto-configura o
+             LiteWebJarsResourceResolver na resource chain. -->
+        <dependency>
+            <groupId>org.webjars</groupId>
+            <artifactId>webjars-locator-lite</artifactId>
+        </dependency>
 
         <!-- Geracao de PDF (Relatorio Final) -->
         <dependency>
