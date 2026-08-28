@@ -1577,6 +1577,24 @@ extração nunca foi de fato reproduzido).
   type of parameter`), incidente real em `/auditoria`. Sempre normalizar
   pra valor efetivo (string vazia, sentinela de data) antes de passar pro
   repositório, nunca `null`.
+- **`ORDER BY <expressão>` num `select distinct` do JPQL quebra no Postgres,
+  não no H2** (incidente real: **500 no Painel `/` e nos relatórios PDF para
+  qualquer ADMIN/OPERADOR**, produção, 2026-08-28). O Postgres exige que
+  **toda expressão do `ORDER BY` de um `SELECT DISTINCT` apareça na lista do
+  `SELECT`** — coluna crua de uma entidade já projetada passa (está em
+  `p.*`), mas `coalesce(p.preemptivo, false)`, `case when ...`, `lower(...)`
+  etc. **não**, e o banco responde `for SELECT DISTINCT, ORDER BY
+  expressions must appear in select list` (o H2 tolera → suíte 100% verde
+  mascara). Toda query com `left join fetch` de coleção é `select distinct`
+  obrigatório, então essa combinação é fácil de cair sem querer. Causa raiz
+  do incidente: o achado A8 da auditoria de preemptivo trocou o `order by
+  p.sequencial asc` de `ProcessoRepository.findByAnoComPareceres` por
+  `order by coalesce(p.preemptivo, false) asc, p.sequencial asc`. Corrigido
+  revertendo o `ORDER BY` para só a coluna crua e fazendo o agrupamento por
+  tipo **em Java** em quem consome a lista (`HomeController` já reordenava o
+  Painel; `RelatorioController.agruparPorTipoDepoisSequencial` para os
+  PDFs). Regra geral: **agrupamento/ordenação derivada de expressão em query
+  `select distinct` faz-se em Java, nunca no `ORDER BY`.**
 
 ## Auditoria — filtros e exportação
 

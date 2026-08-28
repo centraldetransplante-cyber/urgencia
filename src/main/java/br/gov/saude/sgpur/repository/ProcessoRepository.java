@@ -25,23 +25,33 @@ public interface ProcessoRepository extends JpaRepository<Processo, Long> {
 
     /**
      * Processos de um ano, ordenados por sequencial, ja com pareceres e medicos
-     * (fetch join) para o relatorio anual sem incorrer em N+1.
+     * (fetch join) para o Painel e o relatorio anual sem incorrer em N+1.
      *
-     * <p><b>Achado A8 da auditoria de 2026-08-27:</b> paciente preemptivo usa
-     * uma serie de numeracao SEPARADA ({@code P-NN/AAAA}), entao um "order by
-     * sequencial asc" puro intercalava as duas series no mesmo ano (dois "1",
-     * dois "2" etc.) - confuso visualmente, mesmo com a coluna "Tipo" ja
-     * desambiguando. Agora agrupa por tipo primeiro (urgencia renal comum
-     * antes de preemptivo - {@code coalesce(preemptivo,false)} trata o legado
-     * NULL como urgencia renal, mesmo criterio ja usado nos filtros/contadores)
-     * e so depois ordena por sequencial dentro de cada grupo.</p>
+     * <p><b>Ordenacao SO por {@code p.sequencial asc} de proposito - NAO por
+     * {@code coalesce(p.preemptivo, false)}.</b> Esta consulta e
+     * {@code select distinct} (obrigatorio por causa do {@code join fetch} de
+     * colecao); no PostgreSQL, {@code SELECT DISTINCT} exige que toda expressao
+     * do {@code ORDER BY} apareca na lista do {@code SELECT} - uma coluna crua
+     * de {@code p} passa (esta em {@code p.*}), mas {@code coalesce(p.preemptivo,
+     * false)} e uma EXPRESSAO e nao esta, entao o Postgres rejeita com
+     * <i>"for SELECT DISTINCT, ORDER BY expressions must appear in select
+     * list"</i> (500 no Painel/relatorio; o H2 dos testes tolera - mesma
+     * armadilha "H2 tolera, Postgres nao" ja documentada no CLAUDE.md).
+     *
+     * <p><b>Achado A8 da auditoria de 2026-08-27</b> (paciente preemptivo usa
+     * serie de numeracao SEPARADA {@code P-NN/AAAA}, que sob "sequencial asc"
+     * puro intercala as duas series no mesmo ano): o agrupamento "urgencia
+     * renal comum antes de preemptivo, depois por sequencial" e feito EM JAVA
+     * por quem consome a lista - {@code HomeController} ja reordena o Painel a
+     * seu criterio e {@code RelatorioController} aplica
+     * {@code coalesce(preemptivo,false)} + sequencial antes de gerar o PDF.</p>
      */
     @Query("""
         select distinct p from Processo p
         left join fetch p.pareceres par
         left join fetch par.membro
         where p.ano = :ano
-        order by coalesce(p.preemptivo, false) asc, p.sequencial asc
+        order by p.sequencial asc
         """)
     List<Processo> findByAnoComPareceres(@Param("ano") int ano);
 

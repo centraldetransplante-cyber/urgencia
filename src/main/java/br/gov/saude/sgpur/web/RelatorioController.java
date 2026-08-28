@@ -52,7 +52,8 @@ public class RelatorioController {
     @GetMapping("/anual/{ano}/pdf")
     public ResponseEntity<byte[]> anualPdf(@PathVariable int ano) {
         try {
-            List<Processo> processos = processoRepository.findByAnoComPareceres(ano);
+            List<Processo> processos = agruparPorTipoDepoisSequencial(
+                processoRepository.findByAnoComPareceres(ano));
             byte[] pdf = relatorioAnualService.gerar(ano, processos);
             String nome = "relatorio-" + ano + ".pdf";
             return ResponseEntity.ok()
@@ -87,7 +88,8 @@ public class RelatorioController {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Avaliador nao encontrado.");
         }
         try {
-            List<Processo> processos = processoRepository.findByAnoComPareceres(ano);
+            List<Processo> processos = agruparPorTipoDepoisSequencial(
+                processoRepository.findByAnoComPareceres(ano));
             byte[] pdf = relatorioAvaliadorService.gerar(ano, membro, processos);
             String nome = "relatorio-avaliador-" + ano + "-" + membroId + ".pdf";
             return ResponseEntity.ok()
@@ -98,5 +100,25 @@ public class RelatorioController {
             throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
                 "Erro ao gerar relatorio: " + e.getMessage());
         }
+    }
+
+    /**
+     * Agrupa "urgencia renal comum antes de preemptivo" e, dentro de cada
+     * grupo, ordena por {@code sequencial} (achado A8 da auditoria de
+     * 2026-08-27). Feito aqui, em Java, e nao no {@code ORDER BY} de
+     * {@link ProcessoRepository#findByAnoComPareceres} porque aquela consulta e
+     * {@code select distinct} e o PostgreSQL nao aceita expressao
+     * ({@code coalesce(preemptivo,false)}) no {@code ORDER BY} de um
+     * {@code SELECT DISTINCT} - so coluna crua (ver javadoc da consulta).
+     * {@code isPreemptivo()} e null-safe: legado {@code null} conta como
+     * urgencia renal comum, igual ao {@code coalesce} que substitui.
+     */
+    private static List<Processo> agruparPorTipoDepoisSequencial(List<Processo> processos) {
+        return processos.stream()
+            .sorted(java.util.Comparator
+                .comparing(Processo::isPreemptivo)
+                .thenComparing(Processo::getSequencial,
+                    java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())))
+            .toList();
     }
 }
