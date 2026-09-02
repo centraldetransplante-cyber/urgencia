@@ -38,10 +38,25 @@ jobs:
           scp -i ~/.ssh/deploy_key target/saur-0.0.1-SNAPSHOT.jar \
             ubuntu@163.176.30.222:/tmp/sgpur-novo.jar
 
+      - name: Enviar robo navegador para a VM
+        run: |
+          ssh -i ~/.ssh/deploy_key ubuntu@163.176.30.222 \
+            'rm -rf /tmp/robo-navegador-saur && mkdir -p /tmp/robo-navegador-saur'
+          scp -i ~/.ssh/deploy_key -r robo-navegador-saur/. \
+            ubuntu@163.176.30.222:/tmp/robo-navegador-saur/
+
       - name: Trocar jar e reiniciar o servico
         run: |
           ssh -i ~/.ssh/deploy_key ubuntu@163.176.30.222 '
             set -e
+            sudo mkdir -p /opt/sgpur/robo-navegador-saur
+            sudo cp -R /tmp/robo-navegador-saur/. /opt/sgpur/robo-navegador-saur/
+            if [ ! -f /opt/sgpur/robo-navegador-saur/robo.config ]; then
+              sudo cp /opt/sgpur/robo-navegador-saur/robo.config.production.template \
+                /opt/sgpur/robo-navegador-saur/robo.config
+            fi
+            sudo chown -R sgpur:sgpur /opt/sgpur/robo-navegador-saur
+            sudo chmod 750 /opt/sgpur/robo-navegador-saur/run.sh
             sudo cp /opt/sgpur/sgpur.jar /opt/sgpur/sgpur.jar.bak-$(date +%Y%m%d%H%M%S)
             sudo mv /tmp/sgpur-novo.jar /opt/sgpur/sgpur.jar
             sudo chown sgpur:sgpur /opt/sgpur/sgpur.jar

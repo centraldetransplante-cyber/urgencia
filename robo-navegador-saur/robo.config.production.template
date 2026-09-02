@@ -1,0 +1,21 @@
+# Configuracao de producao gerada no deploy automatico.
+base-url = https://urgenciarenal.duckdns.org
+permitir-remoto = true
+eu-entendo-os-riscos = true
+modo = seguro-remoto
+headless = true
+canal = chrome
+probes-interativas = false
+screenshots = false
+pausa-entre-paginas-ms = 700
+max-paginas-por-perfil = 60
+profundidade-max = 4
+timeout-ms = 15000
+saida = report
+campo-usuario = input[name=username]
+campo-senha = input[name=password]
+seletor-submit-login = button[type=submit], input[type=submit]
+credencial.1.perfil = ADMIN
+credencial.1.usuario = admin
+credencial.1.senha = ${SAUR_PROD_ADMIN}
+credencial.1.rota-inicial = /

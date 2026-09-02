@@ -1,0 +1,98 @@
+# Config do robô navegador SAUR.  Copie para "robo.config" e ajuste.
+#   cp robo.config.example robo.config
+# Linhas com # são ignoradas. Formato chave=valor.
+# Valores aceitam ${VAR} -> expandido de variável de ambiente (bom p/ senha).
+
+# =====================================================================
+# ALVO
+# =====================================================================
+# Local (dev):
+base-url = http://localhost:3000
+
+# Produção:
+# base-url = https://urgenciarenal.duckdns.org
+
+# O robô RECUSA um alvo que não seja localhost, a menos que AS DUAS estejam
+# true. Apontar para produção: cada página vira uma entrada no log de
+# auditoria (com IP), telas de operador carregam dados de paciente, e
+# qualquer endpoint de mutação por GET que escape da denylist roda de verdade.
+permitir-remoto = false
+eu-entendo-os-riscos = false
+
+# "local" ou "seguro-remoto". Fica "seguro-remoto" sozinho quando a base não
+# é localhost: nesse modo o robô SÓ NAVEGA (não clica em nada), sem
+# screenshot, com pausa entre páginas e limites menores. Você pode forçar
+# valores abaixo, mas pense duas vezes antes de ligar probes/screenshots
+# contra produção.
+# modo = seguro-remoto
+
+# =====================================================================
+# NAVEGADOR
+# =====================================================================
+headless = true          # false = abre a janela pra acompanhar
+slowmo-ms = 0
+
+# Vazio = tenta o Chromium do Playwright e, se não tiver (download falha
+# atrás de proxy com MITM de TLS), cai para o Chrome e depois o Edge DO
+# SISTEMA. Nesta máquina: "chrome" ou "msedge".
+# canal = chrome
+
+# =====================================================================
+# LIMITES DO CRAWL   (defaults entre parênteses: local / remoto)
+# =====================================================================
+# max-paginas-por-perfil = 150      # (150 / 60)
+# profundidade-max = 6              # (6 / 4)
+# pausa-entre-paginas-ms = 0        # (0 / 700)  -- não martelar produção
+# screenshots = true               # (true / false) -- false p/ não gravar dado de paciente no disco
+# probes-interativas = true        # (true / false) -- clicar em dropdown/aba/collapse
+timeout-ms = 15000
+
+# rotas absolutas extras a varrer, além das linkadas de / (vírgula separa):
+# rotas-extra = /alguma/tela, /outra
+# deep-links-por-lista = 3          # quantas telas /x/{id} visitar por prefixo (3 / 2)
+# tempo-max-min = 0                 # teto da varredura em minutos, 0 = sem teto (0 / 20)
+# req-lento-ms = 3000               # request acima disso -> achado "lento"
+# perf-limite-ms = 5000             # load da página acima disso -> achado "perf"
+# detectar-flaky = true             # roda cada página 2x p/ separar achado intermitente (só local)
+# so-regex =                        # se setado, só visita URLs que casam com a regex
+
+# regressão visual: compara o screenshot de cada página com um baseline salvo.
+# 1ª execução cria os baselines (sem achado); as seguintes comparam.
+# regressao-visual = false
+# visual-limite-pct = 1.0           # % de pixels mudados a partir do qual vira achado
+# baseline-dir = baseline           # pasta dos PNG de referência (gitignored)
+
+# Trechos de URL que o robô NUNCA abre, além dos embutidos (/logout,
+# /excluir, /decidir, /votar, /enviar, /exportar, /oficio, /ajax, ...).
+# denylist-url-extra = /algum-endpoint, /outro
+
+# =====================================================================
+# LOGIN  (defaults do Spring Security do SAUR)
+# =====================================================================
+campo-usuario = input[name=username]
+campo-senha = input[name=password]
+seletor-submit-login = button[type=submit], input[type=submit]
+
+# =====================================================================
+# SAÍDA
+# =====================================================================
+saida = report
+
+# =====================================================================
+# CREDENCIAIS (até 20). Se NENHUMA for definida, usa admin/Admin123! (dev).
+# Para produção NÃO deixe senha em texto aqui: use ${VAR} e exporte a
+# variável antes de rodar.   ex:  export SAUR_PROD_ADMIN='...'
+# =====================================================================
+credencial.1.perfil = ADMIN
+credencial.1.usuario = admin
+credencial.1.senha = Admin123!
+credencial.1.rota-inicial = /
+
+# --- produção (exemplo) ---
+# credencial.1.usuario = admin
+# credencial.1.senha = ${SAUR_PROD_ADMIN}
+
+# credencial.2.perfil = AVALIADOR
+# credencial.2.usuario = ${SAUR_PROD_AVALIADOR_USER}
+# credencial.2.senha = ${SAUR_PROD_AVALIADOR_PASS}
+# credencial.2.rota-inicial = /avaliador
