@@ -7,6 +7,7 @@ import org.springframework.stereotype.Service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Instant;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -21,6 +22,10 @@ public class RoboNavegadorService {
         return thread;
     });
     private final AtomicBoolean executando = new AtomicBoolean();
+    private volatile String status = "PARADO";
+    private volatile Instant iniciadoEm;
+    private volatile Instant finalizadoEm;
+    private volatile String mensagem = "Nenhuma execucao realizada.";
 
     public RoboNavegadorService(
             @Value("${app.robo.script:/opt/sgpur/robo-navegador-saur/run.sh}") String script) {
@@ -28,13 +33,38 @@ public class RoboNavegadorService {
     }
 
     public boolean iniciar() {
+        if (!Files.isRegularFile(script) || !Files.isExecutable(script)) {
+            status = "ERRO";
+            mensagem = "Script do robo nao encontrado ou sem permissao de execucao.";
+            return false;
+        }
         if (!executando.compareAndSet(false, true)) return false;
+        status = "EXECUTANDO";
+        iniciadoEm = Instant.now();
+        finalizadoEm = null;
+        mensagem = "Robo executando em modo producao com login ADMIN.";
         executor.submit(this::executar);
         return true;
     }
 
     public boolean estaExecutando() {
         return executando.get();
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public Instant getIniciadoEm() {
+        return iniciadoEm;
+    }
+
+    public Instant getFinalizadoEm() {
+        return finalizadoEm;
+    }
+
+    public String getMensagem() {
+        return mensagem;
     }
 
     private void executar() {
@@ -50,16 +80,25 @@ public class RoboNavegadorService {
                     .start();
             codigo = processo.waitFor();
             if (codigo == 0) {
+                status = "CONCLUIDO";
+                mensagem = "Robo concluido sem achados altos.";
                 System.out.println("Robo navegador SAUR concluido com sucesso.");
             } else {
+                status = "CONCLUIDO_COM_ACHADOS";
+                mensagem = "Robo concluido com codigo " + codigo + ". Consulte o relatorio no servidor.";
                 System.err.println("Robo navegador SAUR terminou com codigo " + codigo + ".");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            status = "ERRO";
+            mensagem = "Robo interrompido.";
             System.err.println("Robo navegador SAUR interrompido.");
         } catch (IOException e) {
+            status = "ERRO";
+            mensagem = "Nao foi possivel iniciar o robo.";
             System.err.println("Nao foi possivel iniciar o robo navegador SAUR: " + e.getMessage());
         } finally {
+            finalizadoEm = Instant.now();
             executando.set(false);
         }
     }

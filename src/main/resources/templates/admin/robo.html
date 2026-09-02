@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="pt-br" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Robô navegador')}"></head>
+<meta http-equiv="refresh" th:if="${status == 'EXECUTANDO'}" content="5">
+<body>
+<nav th:replace="~{layout :: navbar}"></nav>
+<div th:replace="~{layout :: flash}"></div>
+
+<main id="conteudo" class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0">Robô navegador</h1>
+        <a th:href="@{/usuarios}" class="btn btn-outline-secondary">
+            <i class="bi bi-people me-1"></i> Usuários
+        </a>
+    </div>
+
+    <section class="card border-0 shadow-sm">
+        <div class="card-body p-4">
+            <div class="d-flex align-items-center gap-3 mb-3">
+                <i class="bi bi-robot fs-1 text-primary"></i>
+                <div>
+                    <div class="text-muted small">Status atual</div>
+                    <h2 class="h4 mb-0" th:text="${status}">PARADO</h2>
+                </div>
+            </div>
+            <p class="mb-3" th:text="${mensagem}">Nenhuma execucao realizada.</p>
+            <dl class="row mb-4">
+                <dt class="col-sm-3">Início</dt>
+                <dd class="col-sm-9" th:text="${iniciadoEm ?: '-'}">-</dd>
+                <dt class="col-sm-3">Finalização</dt>
+                <dd class="col-sm-9" th:text="${finalizadoEm ?: '-'}">-</dd>
+            </dl>
+            <form th:action="@{/admin/robo/executar}" method="post"
+                  data-confirm-msg="Executar o robô em produção usando o login ADMIN?">
+                <button type="submit" class="btn btn-primary" th:disabled="${status == 'EXECUTANDO'}">
+                    <i class="bi bi-play-fill me-1"></i>
+                    <span th:text="${status == 'EXECUTANDO'} ? 'Robô em execução' : 'Executar robô em produção'">Executar robô em produção</span>
+                </button>
+            </form>
+        </div>
+    </section>
+</main>
+
+<div th:replace="~{layout :: confirmModal}"></div>
+<script th:replace="~{layout :: scripts}"></script>
+<script th:replace="~{layout :: confirmarAcaoScript}"></script>
+<div th:replace="~{layout :: footer}"></div>
+</body>
+</html>
