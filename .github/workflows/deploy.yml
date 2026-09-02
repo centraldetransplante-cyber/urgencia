@@ -1,6 +1,7 @@
 name: Deploy
 
 on:
+  workflow_dispatch:
   workflow_run:
     workflows: ["CI"]
     types: [completed]
@@ -12,7 +13,8 @@ concurrency:
 
 jobs:
   deploy:
-    if: github.event.workflow_run.conclusion == 'success'
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -47,7 +49,8 @@ jobs:
 
       - name: Enviar robo navegador para a VM
         run: |
-          ssh -i ~/.ssh/deploy_key ubuntu@163.176.30.222 \
+          timeout 30s ssh -i ~/.ssh/deploy_key -o ConnectTimeout=15 -o ServerAliveInterval=5 \
+            ubuntu@163.176.30.222 \
             'rm -rf /tmp/robo-navegador-saur && mkdir -p /tmp/robo-navegador-saur/target'
           timeout 120s scp -i ~/.ssh/deploy_key \
             robo-navegador-saur/pom.xml robo-navegador-saur/run.sh \
