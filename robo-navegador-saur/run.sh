@@ -48,6 +48,11 @@ if [ -z "${SAUR_PROD_ADMIN:-}" ] && [ -n "${SGPUR_ADMIN_PASSWORD:-}" ]; then
   export SAUR_PROD_ADMIN="$SGPUR_ADMIN_PASSWORD"
 fi
 
+# Em producao o workflow envia o fat JAR; a VM nao precisa ter Maven instalado.
+if [ -f target/robo-navegador-saur-jar-with-dependencies.jar ]; then
+  exec java -jar target/robo-navegador-saur-jar-with-dependencies.jar "$@"
+fi
+
 # Fallback: se o config precisa de ${SAUR_PROD_ADMIN} e ainda não veio de
 # lugar nenhum, pergunta (oculto). Só cai aqui se você não criou robo.env.
 if [ -f robo.config ] && grep -q 'SAUR_PROD_ADMIN' robo.config && [ -z "${SAUR_PROD_ADMIN:-}" ]; then

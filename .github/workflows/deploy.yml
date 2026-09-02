@@ -26,6 +26,9 @@ jobs:
       - name: Build jar (testes ja validados pelo workflow CI)
         run: mvn -B -ntp -DskipTests package
 
+      - name: Build robo navegador
+        run: mvn -B -ntp -f robo-navegador-saur/pom.xml -DskipTests package
+
       - name: Configurar chave SSH
         run: |
           mkdir -p ~/.ssh
@@ -41,9 +44,12 @@ jobs:
       - name: Enviar robo navegador para a VM
         run: |
           ssh -i ~/.ssh/deploy_key ubuntu@163.176.30.222 \
-            'rm -rf /tmp/robo-navegador-saur && mkdir -p /tmp/robo-navegador-saur'
+            'rm -rf /tmp/robo-navegador-saur && mkdir -p /tmp/robo-navegador-saur/target'
           scp -i ~/.ssh/deploy_key -r robo-navegador-saur/. \
             ubuntu@163.176.30.222:/tmp/robo-navegador-saur/
+          scp -i ~/.ssh/deploy_key \
+            robo-navegador-saur/target/robo-navegador-saur-jar-with-dependencies.jar \
+            ubuntu@163.176.30.222:/tmp/robo-navegador-saur/target/
 
       - name: Trocar jar e reiniciar o servico
         run: |
