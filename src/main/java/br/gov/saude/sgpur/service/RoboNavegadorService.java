@@ -76,9 +76,17 @@ public class RoboNavegadorService {
             Process processo = new ProcessBuilder("/bin/bash", script.toString(), "--headless")
                     .directory(script.getParent().toFile())
                     .redirectErrorStream(true)
-                    .inheritIO()
                     .start();
+            Thread leitura = Thread.startVirtualThread(() -> {
+                try (var leitor = processo.inputReader()) {
+                    leitor.lines().filter(linha -> !linha.isBlank()).forEach(linha -> {
+                        mensagem = linha;
+                    });
+                } catch (IOException ignored) {
+                }
+            });
             codigo = processo.waitFor();
+            leitura.join();
             if (codigo == 0) {
                 status = "CONCLUIDO";
                 mensagem = "Robo concluido sem achados altos.";
