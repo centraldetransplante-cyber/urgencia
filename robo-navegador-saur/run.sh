@@ -9,6 +9,7 @@
 # Precisa de JDK 21 + Maven.
 set -euo pipefail
 cd "$(dirname "$0")"
+export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$PWD/.playwright}"
 
 # --- JDK 21 ---
 for j in "${JAVA_HOME:-}" \

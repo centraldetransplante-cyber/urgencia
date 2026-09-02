@@ -35,6 +35,14 @@ jobs:
       - name: Build robo navegador
         run: mvn -B -ntp -f robo-navegador-saur/pom.xml -DskipTests package
 
+      - name: Instalar Chromium no pacote do robo
+        env:
+          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/robo-navegador-saur/.playwright
+        run: mvn -B -ntp -f robo-navegador-saur/pom.xml compile exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
+
+      - name: Empacotar robo sem artefatos de build
+        run: tar -czf /tmp/robo-navegador-saur.tgz --exclude='target' --exclude='report' --exclude='*.log' -C robo-navegador-saur .
+
       - name: Configurar chave SSH
         run: |
           mkdir -p ~/.ssh
@@ -51,24 +59,24 @@ jobs:
         run: |
           timeout 30s ssh -i ~/.ssh/deploy_key -o ConnectTimeout=15 -o ServerAliveInterval=5 \
             ubuntu@163.176.30.222 \
-            'rm -rf /tmp/robo-navegador-saur && mkdir -p /tmp/robo-navegador-saur/target'
-          timeout 120s scp -i ~/.ssh/deploy_key \
-            robo-navegador-saur/pom.xml robo-navegador-saur/run.sh \
-            robo-navegador-saur/robo.config.production.template \
-            ubuntu@163.176.30.222:/tmp/robo-navegador-saur/
-          timeout 120s scp -i ~/.ssh/deploy_key -r \
-            robo-navegador-saur/src \
-            ubuntu@163.176.30.222:/tmp/robo-navegador-saur/
+            'rm -f /tmp/robo-navegador-saur.tgz'
+          timeout 120s scp -i ~/.ssh/deploy_key /tmp/robo-navegador-saur.tgz \
+            ubuntu@163.176.30.222:/tmp/robo-navegador-saur.tgz
           timeout 120s scp -i ~/.ssh/deploy_key \
             robo-navegador-saur/target/robo-navegador-saur-jar-with-dependencies.jar \
-            ubuntu@163.176.30.222:/tmp/robo-navegador-saur/target/
+            ubuntu@163.176.30.222:/tmp/robo-navegador-saur.jar
 
       - name: Trocar jar e reiniciar o servico
         run: |
           ssh -i ~/.ssh/deploy_key ubuntu@163.176.30.222 '
             set -e
-            sudo mkdir -p /opt/sgpur/robo-navegador-saur
-            sudo cp -R /tmp/robo-navegador-saur/. /opt/sgpur/robo-navegador-saur/
+            sudo rm -rf /opt/sgpur/robo-navegador-saur.new
+            sudo mkdir -p /opt/sgpur/robo-navegador-saur.new/target
+            sudo tar -xzf /tmp/robo-navegador-saur.tgz -C /opt/sgpur/robo-navegador-saur.new
+            sudo mv /tmp/robo-navegador-saur.jar /opt/sgpur/robo-navegador-saur.new/target/robo-navegador-saur-jar-with-dependencies.jar
+            sudo rm -rf /opt/sgpur/robo-navegador-saur.old
+            if [ -d /opt/sgpur/robo-navegador-saur ]; then sudo mv /opt/sgpur/robo-navegador-saur /opt/sgpur/robo-navegador-saur.old; fi
+            sudo mv /opt/sgpur/robo-navegador-saur.new /opt/sgpur/robo-navegador-saur
             if [ ! -f /opt/sgpur/robo-navegador-saur/robo.config ]; then
               sudo cp /opt/sgpur/robo-navegador-saur/robo.config.production.template \
                 /opt/sgpur/robo-navegador-saur/robo.config
