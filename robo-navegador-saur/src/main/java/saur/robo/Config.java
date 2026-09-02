@@ -36,6 +36,7 @@ public final class Config {
     public final int pausaEntrePaginasMs;
     /** Tirar screenshot das páginas com achado. Em alvo remoto vem FALSE por padrão (dados de paciente no disco). */
     public final boolean screenshots;
+    public final boolean liveScreenshot;
     /** Clicar em dropdown/aba/collapse pra ver se respondem. Em alvo remoto vem FALSE (só navega). */
     public final boolean probesInterativas;
     public final List<String> denylistUrl;
@@ -89,6 +90,7 @@ public final class Config {
         this.slowMoMs = Integer.parseInt(valor(p, "slowmo-ms", "0"));
         this.pausaEntrePaginasMs = Integer.parseInt(valor(p, "pausa-entre-paginas-ms", remoto ? "700" : "0"));
         this.screenshots = Boolean.parseBoolean(valor(p, "screenshots", remoto ? "false" : "true"));
+        this.liveScreenshot = Boolean.parseBoolean(valor(p, "live-screenshot", "false"));
         this.probesInterativas = Boolean.parseBoolean(valor(p, "probes-interativas", remoto ? "false" : "true"));
 
         this.campoUsuario = valor(p, "campo-usuario", "input[name=username]");

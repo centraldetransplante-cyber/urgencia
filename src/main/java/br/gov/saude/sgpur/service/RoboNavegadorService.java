@@ -67,6 +67,10 @@ public class RoboNavegadorService {
         return mensagem;
     }
 
+    public Path getLiveScreenshot() {
+        return script.getParent().resolve("live").resolve("latest.png");
+    }
+
     private void executar() {
         int codigo = -1;
         try {

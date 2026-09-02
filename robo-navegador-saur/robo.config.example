@@ -44,6 +44,7 @@ slowmo-ms = 0
 # profundidade-max = 6              # (6 / 4)
 # pausa-entre-paginas-ms = 0        # (0 / 700)  -- não martelar produção
 # screenshots = true               # (true / false) -- false p/ não gravar dado de paciente no disco
+# live-screenshot = false          # captura a viewport atual para o monitor ADMIN
 # probes-interativas = true        # (true / false) -- clicar em dropdown/aba/collapse
 timeout-ms = 15000
 

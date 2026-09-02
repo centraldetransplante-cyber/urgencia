@@ -7,6 +7,7 @@ headless = true
 canal = chrome
 probes-interativas = false
 screenshots = false
+live-screenshot = true
 pausa-entre-paginas-ms = 700
 max-paginas-por-perfil = 60
 profundidade-max = 4

@@ -178,6 +178,13 @@ final class Rastreador {
             return;
         }
         s.statusNavegacao = resp.status();
+        if (cfg.liveScreenshot) {
+            try {
+                Path live = dirScreenshots.resolveSibling("live");
+                java.nio.file.Files.createDirectories(live);
+                page.screenshot(new Page.ScreenshotOptions().setPath(live.resolve("latest.png")));
+            } catch (RuntimeException | java.io.IOException ignore) {}
+        }
         try { page.waitForLoadState(LoadState.NETWORKIDLE,
                 new Page.WaitForLoadStateOptions().setTimeout(4000)); } catch (RuntimeException ignore) {}
 

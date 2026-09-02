@@ -7,6 +7,9 @@ import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
 import java.security.Principal;
@@ -30,6 +33,17 @@ public class RoboNavegadorController {
         model.addAttribute("finalizadoEm", robo.getFinalizadoEm());
         model.addAttribute("mensagem", robo.getMensagem());
         return "admin/robo";
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/live.png")
+    public ResponseEntity<byte[]> liveScreenshot() {
+        try {
+            return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                    .contentType(MediaType.IMAGE_PNG)
+                    .body(java.nio.file.Files.readAllBytes(robo.getLiveScreenshot()));
+        } catch (java.io.IOException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 
     @PostMapping("/executar")
