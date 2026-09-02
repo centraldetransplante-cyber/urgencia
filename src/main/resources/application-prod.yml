@@ -44,6 +44,9 @@ server:
         same-site: lax
 
 app:
+  robo:
+    # Script externo do robo, executado pelo servico web com argumentos fixos.
+    script: ${SGPUR_ROBO_SCRIPT:/opt/sgpur/robo-navegador-saur/run.sh}
   admin:
     # Sem default aqui de proposito: se SGPUR_ADMIN_PASSWORD nao estiver
     # setada no ambiente, a resolucao deste placeholder falha e o boot

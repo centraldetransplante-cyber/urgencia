@@ -6,6 +6,7 @@ After=network.target
 User=sgpur
 WorkingDirectory=/opt/sgpur
 EnvironmentFile=/opt/sgpur/sgpur.env
+Environment=SGPUR_ROBO_SCRIPT=/opt/sgpur/robo-navegador-saur/run.sh
 ExecStart=/usr/bin/java -jar /opt/sgpur/sgpur.jar
 SuccessExitStatus=143
 Restart=on-failure

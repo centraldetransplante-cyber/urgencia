@@ -173,6 +173,7 @@ public class SecurityConfig {
                 // TTL curto (PasswordResetService), nao por autenticacao.
                 auth.requestMatchers("/usuarios/esqueci-senha", "/usuarios/redefinir-senha").permitAll()
                     .requestMatchers("/login").permitAll()
+                    .requestMatchers("/admin/robo/**").hasRole("ADMIN")
                     // Troca da propria senha: qualquer usuario logado (ADMIN/OPERADOR/
                     // AVALIADOR). Precisa vir ANTES da regra /usuarios/** (ADMIN), senao
                     // OPERADOR/AVALIADOR ficariam sem como trocar a propria senha.
