@@ -45,9 +45,14 @@ jobs:
         run: |
           ssh -i ~/.ssh/deploy_key ubuntu@163.176.30.222 \
             'rm -rf /tmp/robo-navegador-saur && mkdir -p /tmp/robo-navegador-saur/target'
-          scp -i ~/.ssh/deploy_key -r robo-navegador-saur/. \
+          timeout 120s scp -i ~/.ssh/deploy_key \
+            robo-navegador-saur/pom.xml robo-navegador-saur/run.sh \
+            robo-navegador-saur/robo.config.production.template \
             ubuntu@163.176.30.222:/tmp/robo-navegador-saur/
-          scp -i ~/.ssh/deploy_key \
+          timeout 120s scp -i ~/.ssh/deploy_key -r \
+            robo-navegador-saur/src \
+            ubuntu@163.176.30.222:/tmp/robo-navegador-saur/
+          timeout 120s scp -i ~/.ssh/deploy_key \
             robo-navegador-saur/target/robo-navegador-saur-jar-with-dependencies.jar \
             ubuntu@163.176.30.222:/tmp/robo-navegador-saur/target/
 
