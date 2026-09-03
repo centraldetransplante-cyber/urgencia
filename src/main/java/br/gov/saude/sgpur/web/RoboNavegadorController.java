@@ -37,12 +37,54 @@ public class RoboNavegadorController {
 
     @org.springframework.web.bind.annotation.GetMapping("/live.png")
     public ResponseEntity<byte[]> liveScreenshot() {
+        Path path = robo.getLiveScreenshot();
+        Path liveDir = path.getParent();
         try {
+            byte[] data = java.nio.file.Files.readAllBytes(path);
             return ResponseEntity.ok().cacheControl(CacheControl.noStore())
                     .contentType(MediaType.IMAGE_PNG)
-                    .body(java.nio.file.Files.readAllBytes(robo.getLiveScreenshot()));
+                    .body(data);
         } catch (java.io.IOException e) {
-            return ResponseEntity.notFound().build();
+            try {
+                if (!java.nio.file.Files.exists(liveDir)) {
+                    java.nio.file.Files.createDirectories(liveDir);
+                }
+                Path placeholderPath = liveDir.resolve("placeholder.png");
+                if (!java.nio.file.Files.exists(placeholderPath)) {
+                    try (java.io.OutputStream out = java.nio.file.Files.newOutputStream(placeholderPath)) {
+                        byte[] png = new byte[]{
+                                (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+                                (byte) 0x00, (byte) 0x00, (byte) 0x00, 0x0D,
+                                (byte) 0x49, 0x48, 0x44, 0x52,
+                                (byte) 0x00, (byte) 0x00, (byte) 0x00, 0x01,
+                                (byte) 0x00, (byte) 0x00, (byte) 0x00, 0x01,
+                                (byte) 0x08, (byte) 0x02,
+                                (byte) 0x00, (byte) 0x00, (byte) 0x00, 0x00,
+                                (byte) 0x00, (byte) 0x00, (byte) 0x00, 0x00,
+                                (byte) 0x00, (byte) 0x00, (byte) 0x00, 0x09,
+                                (byte) 0x78, 0x7A, 0xBC, 0x58, 0xCF, 0xAF, 0x27, 0xFF,
+                                (byte) 0x0A, 0x00, 0x59, 0x01, 0x00, 0x00, 0x00, 0x00,
+                                (byte) 0x00, 0x00, 0x01, 0xF9, 0x0C, (byte) 0x00, 0x00,
+                                (byte) 0x00, 0x00, 0x00, 0x00, 0xFE, 0x00, (byte) 0xFE,
+                                (byte) 0x18, (byte) 0xFD, (byte) 0x18, 0xFD, (byte) 0x18,
+                                0xFF, (byte) 0xFE, (byte) 0xFF, (byte) 0xFE, (byte) 0x18,
+                                (byte) 0xFD, 0x18, 0xFD, (byte) 0x18, 0xFD, (byte) 0xFE,
+                                (byte) 0x18, (byte) 0xFD, (byte) 0xFE, (byte) 0x18,
+                                (byte) 0x90, (byte) 0xFE, (byte) 0xFE, 0x00, 0x00, 0x00,
+                                0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+                                (byte) 0x00, (byte) 0x00, (byte) 0x00, 0x00, (byte) 0x00,
+                                (byte) 0x00, (byte) 0x00
+                        };
+                        out.write(png);
+                    }
+                }
+                byte[] data = java.nio.file.Files.readAllBytes(placeholderPath);
+                return ResponseEntity.ok().cacheControl(CacheControl.noStore())
+                        .contentType(MediaType.IMAGE_PNG)
+                        .body(data);
+            } catch (java.io.IOException ex) {
+                return ResponseEntity.notFound().build();
+            }
         }
     }
 
