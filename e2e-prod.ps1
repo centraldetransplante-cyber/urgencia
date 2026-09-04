@@ -84,10 +84,12 @@ if (Test-Path $dirScreenshots) {
     Remove-Item "$dirScreenshots\relatorio-execucao.html" -ErrorAction SilentlyContinue
 }
 
-# Executa o Maven com o profile e2e-prod. O proprio profile ja pula a suite rapida
-# de unidade (surefire skipTests) - nao passar "-Dtest=none" aqui: o surefire 3.x
-# aborta o build com "No tests matching pattern" antes do robo sequer abrir.
-& $mvn verify -Pe2e-prod `
+# O robo e' um programa Java standalone (RoboProducaoMain), nao um teste JUnit -
+# roda via "exec:java" (exec-maven-plugin), no MESMO JVM do Maven, entao os -D
+# abaixo chegam direto em System.getProperty() sem nenhuma complicacao de
+# processo forkado. "test-compile" garante que as classes de src/test/java
+# (onde o robo mora) estao compiladas antes do exec:java tentar rodar.
+& $mvn test-compile exec:java `
     "-Dsaur.e2e.headed=$($headed.ToString().ToLower())" `
     "-Dsaur.e2e.baseUrl=$Url" `
     "-Dsaur.e2e.adminUser=$Usuario" `
