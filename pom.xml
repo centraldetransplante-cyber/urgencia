@@ -169,8 +169,62 @@
                             <!-- Failsafe forka um processo Java separado para rodar os
                                  *IT.java; sem isso, "-Dsaur.e2e.headed=true" passado no
                                  mvn nao chega la e o browser sempre roda headless. -->
+                            <!-- O robo de inspecao de PRODUCAO mora em e2e/prod/ e nunca
+                                 deve rodar junto do E2E local (ele exige senha real e
+                                 aponta para o servidor no ar). O padrao casa QUALQUER
+                                 *IT.java dessa pasta - nao amarrar ao sufixo do nome da
+                                 classe, foi assim que o robo ficou sem rodar nenhuma vez. -->
+                            <excludes>
+                                <exclude>**/e2e/prod/*IT.java</exclude>
+                            </excludes>
                             <systemPropertyVariables>
                                 <saur.e2e.headed>${saur.e2e.headed}</saur.e2e.headed>
+                            </systemPropertyVariables>
+                        </configuration>
+                        <executions>
+                            <execution>
+                                <goals>
+                                    <goal>integration-test</goal>
+                                    <goal>verify</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+
+        <!-- Ativado com "mvn verify -Pe2e-prod" ou via ".\e2e-prod.ps1": roda a
+             auditoria/inspeção visual em produção (*ProdIT.java) apontando para o servidor
+             remoto com o Playwright puro, sem subir Spring/H2 localmente. -->
+        <profile>
+            <id>e2e-prod</id>
+            <build>
+                <plugins>
+                    <!-- Este profile e' so' a inspecao do servidor no ar: a suite rapida
+                         (*Test.java) nao tem nada a ver com ela e so' atrasaria o robo.
+                         Pular aqui, e nao com "-Dtest=none" na linha de comando, que o
+                         surefire 3.x trata como erro ("No tests matching pattern"). -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <skipTests>true</skipTests>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <configuration>
+                            <includes>
+                                <include>**/e2e/prod/*IT.java</include>
+                            </includes>
+                            <systemPropertyVariables>
+                                <saur.e2e.headed>${saur.e2e.headed}</saur.e2e.headed>
+                                <saur.e2e.baseUrl>${saur.e2e.baseUrl}</saur.e2e.baseUrl>
+                                <saur.e2e.adminUser>${saur.e2e.adminUser}</saur.e2e.adminUser>
+                                <saur.e2e.adminPassword>${saur.e2e.adminPassword}</saur.e2e.adminPassword>
+                                <saur.e2e.slowMo>${saur.e2e.slowMo}</saur.e2e.slowMo>
                             </systemPropertyVariables>
                         </configuration>
                         <executions>
