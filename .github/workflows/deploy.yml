@@ -75,7 +75,8 @@ jobs:
             sudo tar -xzf /tmp/robo-navegador-saur.tgz -C /opt/sgpur/robo-navegador-saur.new
             sudo mv /tmp/robo-navegador-saur.jar /opt/sgpur/robo-navegador-saur.new/target/robo-navegador-saur-jar-with-dependencies.jar
             sudo rm -rf /opt/sgpur/robo-navegador-saur.old
-            if [ -d /opt/sgpur/robo-navegador-saur ]; then sudo mv /opt/sgpur/robo-navegador-saur /opt/sgpur/robo-navegador-saur.old; fi
+            sudo mv /opt/sgpur/robo-navegador-saur /opt/sgpur/robo-navegador-saur.old 2>/dev/null || true
+            sudo rm -rf /opt/sgpur/robo-navegador-saur
             sudo mv /opt/sgpur/robo-navegador-saur.new /opt/sgpur/robo-navegador-saur
             if [ ! -f /opt/sgpur/robo-navegador-saur/robo.config ]; then
               sudo cp /opt/sgpur/robo-navegador-saur/robo.config.production.template \
