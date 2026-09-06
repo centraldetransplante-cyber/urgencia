@@ -46,7 +46,13 @@
                 <span class="badge bg-danger" th:if="${status == 'EXECUTANDO'}">AO VIVO</span>
             </div>
             <img id="robo-live" th:src="@{/admin/robo/live.png}" class="img-fluid border rounded"
-                 alt="Viewport atual do navegador do robô">
+                 alt="Viewport atual do navegador do robô"
+                 onerror="this.classList.add('d-none'); document.getElementById('robo-live-aguardando').classList.remove('d-none');"
+                 onload="this.classList.remove('d-none'); document.getElementById('robo-live-aguardando').classList.add('d-none');">
+            <p id="robo-live-aguardando" class="text-muted small mb-0 d-none">
+                <i class="bi bi-hourglass-split me-1"></i>
+                Aguardando a primeira captura de tela do robô (ainda abrindo o navegador/fazendo login)...
+            </p>
         </div>
     </section>
 </main>

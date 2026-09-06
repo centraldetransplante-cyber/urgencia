@@ -68,7 +68,13 @@ public class RoboNavegadorService {
     }
 
     public Path getLiveScreenshot() {
-        return script.getParent().resolve("live").resolve("latest.png");
+        // O robô roda com CWD = script.getParent() (ver ProcessBuilder abaixo) e grava o
+        // screenshot em <saida>/live/latest.png, onde <saida> é a config "saida" do robô
+        // (default "report", ver robo-navegador-saur/src/main/java/saur/robo/Config.java e
+        // Rastreador.java: "dirScreenshots.resolveSibling(\"live\")", com dirScreenshots =
+        // <saida>/screenshots). Sem o prefixo "report/" aqui, o arquivo nunca é encontrado
+        // (404 permanente em /admin/robo/live.png, bug real relatado em produção).
+        return script.getParent().resolve("report").resolve("live").resolve("latest.png");
     }
 
     private void executar() {
