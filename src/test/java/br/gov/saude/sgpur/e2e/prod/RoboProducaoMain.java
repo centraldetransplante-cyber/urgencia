@@ -33,16 +33,29 @@ public final class RoboProducaoMain {
         System.out.println();
 
         RoboProducao robo = new RoboProducao(config);
+        Throwable falhaInesperada = null;
         try {
             robo.iniciar();
             robo.executarInspecaoCompleta();
+        } catch (Throwable t) {
+            // Captura em vez de deixar propagar direto para o finally: sem
+            // isso, uma falha (ex.: login com senha errada) fechava a janela
+            // do Chromium imediatamente, sem segurar na tela nem dar tempo
+            // de um humano perceber que o robô sequer chegou a rodar (achado
+            // real: execução completa em ~8s num incidente de produção).
+            falhaInesperada = t;
         } finally {
+            robo.segurarNaTelaAntesDeFechar(falhaInesperada);
             robo.close();
             Path relatorioPath = robo.gerarRelatorio();
             System.out.println();
             System.out.println("===============================================================================");
             System.out.println("==> RELATÓRIO VISUAL HTML GERADO: " + relatorioPath);
             System.out.println("===============================================================================");
+        }
+
+        if (falhaInesperada != null) {
+            throw falhaInesperada instanceof Exception e ? e : new RuntimeException(falhaInesperada);
         }
 
         if (robo.relatorio().houveFalha()) {

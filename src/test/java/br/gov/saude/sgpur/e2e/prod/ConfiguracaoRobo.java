@@ -18,7 +18,8 @@ public record ConfiguracaoRobo(
     String usuarioAdmin,
     String senhaAdmin,
     boolean headed,
-    int slowMoMs
+    int slowMoMs,
+    int holdAoFinalSegundos
 ) {
 
     public static ConfiguracaoRobo lerDoAmbiente() {
@@ -39,8 +40,16 @@ public record ConfiguracaoRobo(
 
         boolean headed = Boolean.parseBoolean(propriedadeOuEnv("saur.e2e.headed", "SAUR_E2E_HEADED", "true"));
         int slowMo = Integer.parseInt(propriedadeOuEnv("saur.e2e.slowMo", "SAUR_E2E_SLOWMO", headed ? "1000" : "0"));
+        // Sem essa pausa, uma execucao que falha cedo (ex.: login com senha
+        // errada) fecha a janela do Chromium em poucos segundos - tempo
+        // insuficiente para um humano perceber que o robo sequer rodou.
+        // So se aplica em modo headed (sem janela pra segurar, nao ha o que
+        // esperar).
+        int holdFinal = headed
+            ? Integer.parseInt(propriedadeOuEnv("saur.e2e.holdSegundos", "SAUR_E2E_HOLD_SEGUNDOS", "8"))
+            : 0;
 
-        return new ConfiguracaoRobo(baseUrl, usuario, senha, headed, slowMo);
+        return new ConfiguracaoRobo(baseUrl, usuario, senha, headed, slowMo, holdFinal);
     }
 
     private static String propriedadeOuEnv(String propriedade, String variavelAmbiente, String padrao) {

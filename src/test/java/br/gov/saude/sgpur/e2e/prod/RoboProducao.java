@@ -1,6 +1,5 @@
 package br.gov.saude.sgpur.e2e.prod;
 
-import br.gov.saude.sgpur.e2e.Legenda;
 import com.microsoft.playwright.Browser;
 import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
@@ -17,7 +16,9 @@ import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Robô de Inspeção e Auditoria E2E em PRODUÇÃO com perfil de Administrador.
@@ -40,20 +41,43 @@ public final class RoboProducao implements AutoCloseable {
     private static final Path SCREENSHOT_DIR = Paths.get("target", "e2e-prod-screenshots");
     private static final DateTimeFormatter FORMATO_ARQUIVO = DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss");
 
+    /**
+     * Roteiro fixo das etapas, na ordem em que {@link #executarInspecaoCompleta()}
+     * as executa — fonte única para o checklist do {@link PainelProducao}. Os
+     * títulos aqui precisam bater exatamente com o {@code titulo} passado a
+     * {@link #registrarEtapa} em cada etapa (ver {@link #iniciarEtapa}).
+     */
+    private static final List<String> ROTEIRO_ETAPAS = List.of(
+        "Autenticação de Administrador",
+        "Painel Principal / Processos",
+        "Fila de Triagem de Solicitações Online",
+        "Gestão de Membros Avaliadores",
+        "Gestão de Usuários",
+        "Trilha de Auditoria",
+        "Módulo de Relatórios",
+        "Controle de Urgências",
+        "Inspeção de Processo Existente",
+        "Encerramento de Sessão (Logout)"
+    );
+
     private final ConfiguracaoRobo config;
     private final RelatorioProducao relatorio;
+    private final Map<String, PainelProducao.StatusEtapa> statusEtapas = new LinkedHashMap<>();
 
     private Playwright playwright;
     private Browser browser;
     private BrowserContext context;
     private Page page;
-    private String ultimaLegenda;
+    private String ultimaLegenda = "Iniciando o robô...";
 
     private final List<String> errosConsole = new ArrayList<>();
 
     public RoboProducao(ConfiguracaoRobo config) {
         this.config = config;
         this.relatorio = new RelatorioProducao(config.baseUrl(), config.usuarioAdmin());
+        for (String titulo : ROTEIRO_ETAPAS) {
+            statusEtapas.put(titulo, PainelProducao.StatusEtapa.PENDENTE);
+        }
     }
 
     public RelatorioProducao relatorio() {
@@ -63,12 +87,24 @@ public final class RoboProducao implements AutoCloseable {
     public void iniciar() throws IOException {
         Files.createDirectories(SCREENSHOT_DIR);
 
-        // "--start-maximized" força a janela a abrir maximizada e em primeiro
-        // plano - sem isso o Chromium abre do tamanho do viewport numa posicao
-        // arbitraria da tela, facil de ficar escondida atras de outras janelas
-        // ja abertas (era o motivo real de "nao dar pra ver o robo trabalhando").
+        // "--start-maximized" força a janela a abrir maximizada - mas sozinho
+        // NAO garante que ela apareca em primeiro plano nem dentro da area
+        // visivel: se o Chromium "lembrar" uma posicao de um monitor externo
+        // ja desconectado, ele maximiza fora da tela, invisivel mesmo com a
+        // janela "aberta". "--window-position=0,0" ancora no canto superior
+        // esquerdo do monitor primario ANTES de maximizar, cobrindo esse caso.
+        // Isso sozinho tambem nao resolve o "foco": o Windows restringe
+        // SetForegroundWindow de processos que nao tiveram input recente (o
+        // robo pode levar alguns segundos so compilando/subindo o Maven antes
+        // do Chromium abrir, o que ja e tempo suficiente pro SO negar o
+        // foco automatico) - por isso chamamos page.bringToFront() logo a
+        // seguir e a cada nova acao (ver legenda()/irPara()), que usa o
+        // proprio protocolo do Chromium (CDP Target.activateTarget) para
+        // pedir ativacao da janela, um caminho mais confiavel que so contar
+        // com o SO conceder foco a uma janela nova sozinho.
         List<String> args = new ArrayList<>(List.of("--disable-gpu", "--disable-dev-shm-usage"));
         if (config.headed()) {
+            args.add("--window-position=0,0");
             args.add("--start-maximized");
         }
 
@@ -97,6 +133,56 @@ public final class RoboProducao implements AutoCloseable {
                 errosConsole.add("[" + msg.type().toUpperCase() + "] " + msg.text());
             }
         });
+
+        trazerParaFrente();
+        legenda("Robô iniciado. Autenticando em produção em instantes...");
+
+        if (config.headed()) {
+            System.out.println("==> A janela do Chromium deve aparecer AGORA (maximizada). Se não vir, confira a barra de");
+            System.out.println("    tarefas — o Windows pode não trazer a janela para frente automaticamente.");
+        }
+    }
+
+    /**
+     * Pede ao Chromium para ativar/trazer a janela para frente via CDP —
+     * mais confiável que depender só do sistema operacional conceder foco a
+     * uma janela recém-criada (ver comentário em {@link #iniciar()}).
+     * Silencioso em qualquer falha: é reforço de UX, nunca deve interromper
+     * a inspeção.
+     */
+    private void trazerParaFrente() {
+        if (!config.headed() || page == null) return;
+        try {
+            page.bringToFront();
+        } catch (RuntimeException ignored) {
+            // melhor esforço - segue sem travar a inspeção.
+        }
+    }
+
+    /**
+     * Mantém a janela aberta por {@link ConfiguracaoRobo#holdAoFinalSegundos()}
+     * segundos antes de fechar, mostrando um aviso final — sem isso, uma
+     * execução que falha cedo (ex.: login com senha errada, ~8s de duração
+     * total observados num incidente real) fecha o Chromium tão rápido que
+     * não dá tempo de perceber que o robô sequer chegou a rodar. Chamado
+     * pelo {@link RoboProducaoMain} sempre, sucesso ou falha, ANTES de
+     * {@link #close()}. Sem efeito em modo headless (nada para segurar na
+     * tela) ou se a página já não existir mais.
+     */
+    public void segurarNaTelaAntesDeFechar(Throwable falha) {
+        int segundos = config.holdAoFinalSegundos();
+        if (segundos <= 0 || page == null) return;
+        try {
+            for (int restante = segundos; restante > 0; restante--) {
+                String motivo = falha != null
+                    ? "Inspeção interrompida por erro: " + falha.getMessage()
+                    : "Inspeção concluída";
+                legenda(motivo + " — janela fecha em " + restante + "s...");
+                page.waitForTimeout(1000);
+            }
+        } catch (RuntimeException ignored) {
+            // pagina/contexto ja instavel no fim da execucao - nao e critico segurar.
+        }
     }
 
     @Override
@@ -128,6 +214,7 @@ public final class RoboProducao implements AutoCloseable {
 
     private void loginAdmin() {
         long inicio = System.currentTimeMillis();
+        iniciarEtapa("Autenticação de Administrador");
         legenda("Acessando tela de login do SAUR em Produção...");
         irPara("/login");
 
@@ -159,6 +246,7 @@ public final class RoboProducao implements AutoCloseable {
 
     private void verificarPainelPrincipal() {
         long inicio = System.currentTimeMillis();
+        iniciarEtapa("Painel Principal / Processos");
         legenda("Navegando para o Painel Principal (/)...");
         irPara("/");
 
@@ -207,6 +295,7 @@ public final class RoboProducao implements AutoCloseable {
 
     private void verificarRelatorios() {
         long inicio = System.currentTimeMillis();
+        iniciarEtapa("Módulo de Relatórios");
         legenda("Acessando Módulo de Relatórios (/relatorios)...");
         irPara("/relatorios");
 
@@ -222,6 +311,7 @@ public final class RoboProducao implements AutoCloseable {
 
     private void verificarControleUrgencias() {
         long inicio = System.currentTimeMillis();
+        iniciarEtapa("Controle de Urgências");
         legenda("Acessando Controle de Urgências (/controle-urgencias)...");
         irPara("/controle-urgencias");
 
@@ -237,6 +327,7 @@ public final class RoboProducao implements AutoCloseable {
 
     private void inspecionarProcessoExistenteSeHouver() {
         long inicio = System.currentTimeMillis();
+        iniciarEtapa("Inspeção de Processo Existente");
         legenda("Retornando ao Painel para verificar se há algum processo para inspecionar...");
         irPara("/processos");
 
@@ -265,6 +356,7 @@ public final class RoboProducao implements AutoCloseable {
 
     private void logout() {
         long inicio = System.currentTimeMillis();
+        iniciarEtapa("Encerramento de Sessão (Logout)");
         legenda("Efetuando logout de encerramento...");
         try {
             var btnSair = page.locator("form[action$='/logout'] button, a[href$='/logout']");
@@ -288,6 +380,7 @@ public final class RoboProducao implements AutoCloseable {
     private void verificarTelaSimples(String caminho, String titulo, String legendaNavegacao, String legendaInspecao,
                                        String nomeScreenshot, String detalheFormato) {
         long inicio = System.currentTimeMillis();
+        iniciarEtapa(titulo);
         legenda(legendaNavegacao);
         irPara(caminho);
 
@@ -315,24 +408,44 @@ public final class RoboProducao implements AutoCloseable {
             urlAtual = page != null ? page.url() : "";
         } catch (Exception ignored) {}
         relatorio.registrar(titulo, urlAtual, detalhe, sucesso, screenshotArquivo, duracaoMs);
+
+        // Fecha o checklist dessa etapa (a mesma que iniciarEtapa marcou como
+        // EM_ANDAMENTO) - se o título não bater com nenhum item do roteiro
+        // fixo, statusEtapas.computeIfPresent simplesmente não faz nada.
+        statusEtapas.computeIfPresent(titulo, (t, statusAtual) ->
+            sucesso ? PainelProducao.StatusEtapa.CONCLUIDA : PainelProducao.StatusEtapa.FALHA);
+        atualizarPainel();
+    }
+
+    /** Marca a etapa como "em andamento" no checklist visível — chamado no início de cada etapa, antes de qualquer navegação. */
+    private void iniciarEtapa(String titulo) {
+        statusEtapas.computeIfPresent(titulo, (t, statusAtual) -> PainelProducao.StatusEtapa.EM_ANDAMENTO);
+        atualizarPainel();
     }
 
     private void legenda(String texto) {
         ultimaLegenda = texto;
-        Legenda.mostrar(page, texto);
+        atualizarPainel();
+    }
+
+    /** Redesenha o overlay (selo de identificação + ação atual + checklist) com o estado atual. */
+    private void atualizarPainel() {
+        trazerParaFrente();
+        List<PainelProducao.ItemChecklist> itens = ROTEIRO_ETAPAS.stream()
+            .map(t -> new PainelProducao.ItemChecklist(t, statusEtapas.getOrDefault(t, PainelProducao.StatusEtapa.PENDENTE)))
+            .toList();
+        PainelProducao.renderizar(page, ultimaLegenda, itens);
     }
 
     /**
-     * Navega e reaplica a legenda na página que acabou de abrir. Uma legenda
-     * injetada antes do {@code navigate} morre junto com o documento antigo.
+     * Navega e reaplica o overlay na página que acabou de abrir. Um overlay
+     * injetado antes do {@code navigate} morre junto com o documento antigo.
      */
     private void irPara(String caminho) {
         page.navigate(caminho);
         page.waitForLoadState();
         aguardarPaginaEstavel();
-        if (ultimaLegenda != null) {
-            Legenda.mostrar(page, ultimaLegenda);
-        }
+        atualizarPainel();
     }
 
     /** Espera a página assentar antes de fotografar (o layout do SAUR entra com fade-in). */
