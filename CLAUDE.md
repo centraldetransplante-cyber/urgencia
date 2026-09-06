@@ -1060,7 +1060,10 @@ escala ser migrado — falha esperada e documentada, não um bug).
   AVALIADOR/SOLICITANTE/anônimo = `confortavel`. `[data-densidade="..."]`
   redefine `--saur-font-md`/`--saur-space-4`/`--saur-radius-md`.
 - **Tom em vez de classe Bootstrap**: vocabulário fixo `"ok"|"danger"|
-  "attention"|"neutral"`, exposto por `StatusProcesso.getTom()`,
+  "attention"|"neutral"|"aguardando"` (5 valores — `"aguardando"` é o tom de
+  `StatusProcesso.ENVIADO`, tratado em `layout.html :: tomBadge` e em todo
+  consumidor; ao adicionar um `th:switch`/case novo sobre tom, tratar os 5,
+  não só os 4 primeiros), exposto por `StatusProcesso.getTom()`,
   `SituacaoPedidoView.tom()`, `PainelLinha.CelulaMedico.tom()` e
   `EtapaFluxo.tom()` (os antigos `getBootstrapBadge()`/`classeCor()`/`cor()`
   continuam funcionando, só `@Deprecated`). Fragment
