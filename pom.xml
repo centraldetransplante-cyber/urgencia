@@ -152,6 +152,24 @@
             </plugin>
             <!-- mvn test / .\test.ps1 continuam rodando so *Test.java (surefire padrao),
                  sem tocar nos testes E2E (*IT.java), que sao lentos e exigem browser. -->
+
+            <!-- Robo de inspecao E2E em PRODUCAO (RoboProducaoMain, src/test/.../e2e/prod/):
+                 programa Java standalone, nao teste JUnit. Sem <executions>/<phase> aqui de
+                 proposito - so' roda quando invocado explicitamente via
+                 "mvn test-compile exec:java" (ver e2e-prod.ps1), nunca durante mvn
+                 test/package/verify normais. Roda NO MESMO JVM do Maven (forked=false,
+                 default do goal "java") - um "-Dsaur.e2e.adminPassword=..." na linha de
+                 comando do mvn ja chega direto em System.getProperty(), sem a complicacao
+                 de propagacao pra processo forkado que o Failsafe (*IT.java) tem. -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <configuration>
+                    <mainClass>br.gov.saude.sgpur.e2e.prod.RoboProducaoMain</mainClass>
+                    <classpathScope>test</classpathScope>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 
@@ -169,6 +187,10 @@
                             <!-- Failsafe forka um processo Java separado para rodar os
                                  *IT.java; sem isso, "-Dsaur.e2e.headed=true" passado no
                                  mvn nao chega la e o browser sempre roda headless. -->
+                            <!-- O robo de inspecao de PRODUCAO mora em e2e/prod/ mas NAO
+                                 sao classes *IT.java (nao e' JUnit) - roda so' via
+                                 "exec:java" (ver RoboProducaoMain), nunca pego pelo
+                                 Failsafe. Nao precisa de exclude aqui por causa disso. -->
                             <systemPropertyVariables>
                                 <saur.e2e.headed>${saur.e2e.headed}</saur.e2e.headed>
                             </systemPropertyVariables>
@@ -185,5 +207,6 @@
                 </plugins>
             </build>
         </profile>
+
     </profiles>
 </project>
