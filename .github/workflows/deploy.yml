@@ -84,6 +84,7 @@ jobs:
             fi
             sudo chown -R sgpur:sgpur /opt/sgpur/robo-navegador-saur
             sudo chmod 750 /opt/sgpur/robo-navegador-saur/run.sh
+            sudo java -cp /opt/sgpur/robo-navegador-saur/target/robo-navegador-saur-jar-with-dependencies.jar com.microsoft.playwright.CLI install-deps chromium
             sudo cp /opt/sgpur/sgpur.jar /opt/sgpur/sgpur.jar.bak-$(date +%Y%m%d%H%M%S)
             sudo mv /tmp/sgpur-novo.jar /opt/sgpur/sgpur.jar
             sudo chown sgpur:sgpur /opt/sgpur/sgpur.jar
