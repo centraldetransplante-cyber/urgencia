@@ -11,15 +11,6 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$PWD/.playwright}"
 
-# --- JDK 21 ---
-for j in "${JAVA_HOME:-}" \
-         "/c/Users/rafael-ioppi/.vscode/extensions/redhat.java-1.55.0-win32-x64/jre/21.0.11-win32-x86_64" \
-         "/c/Users/rafae/Tools/jdk-21.0.11+10"; do
-  if [ -n "$j" ] && [ -x "$j/bin/java" ]; then export JAVA_HOME="$j"; break; fi
-done
-[ -x "${JAVA_HOME:-/nao}/bin/java" ] || { echo "JDK 21 nao encontrado (defina JAVA_HOME)."; exit 1; }
-export PATH="$JAVA_HOME/bin:$PATH"
-
 # Carrega robo.env (gitignored) se existir: um KEY=VALOR por linha.
 # Coloque aqui  SAUR_PROD_ADMIN=suasenha  UMA vez e nunca mais digite nada.
 if [ -f robo.env ]; then
@@ -33,16 +24,33 @@ if [ -z "${SAUR_PROD_ADMIN:-}" ] && [ -n "${SGPUR_ADMIN_PASSWORD:-}" ]; then
 fi
 
 # Em producao o workflow envia o fat JAR pronto; a VM NAO precisa ter Maven
-# instalado. Essa checagem tem que vir ANTES de qualquer coisa relacionada a
-# Maven: se o jar ja existe, roda ele direto e nem olha pra Maven (bug real
-# de producao ja corrigido - o script morria em "Maven nao encontrado" mesmo
-# com o jar certo do lado, porque a checagem de Maven vinha primeiro).
+# NEM JAVA_HOME configurado - so precisa de um "java" utilizavel no PATH
+# (o proprio sgpur.service e' uma app Java, entao isso ja e garantido pelo
+# ambiente). Essa checagem tem que vir ANTES de QUALQUER coisa relacionada a
+# Maven OU a JAVA_HOME: se o jar ja existe, roda ele direto com o "java" do
+# PATH e nem olha pra essas outras exigencias (bug real de producao ja
+# corrigido 2x - primeiro a checagem de Maven vinha primeiro, depois,
+# corrigida essa, a checagem de JAVA_HOME - com uma lista de caminhos so' de
+# Windows, inutil na VM Linux - ainda vinha ANTES desta, quebrando com "JDK
+# 21 nao encontrado" mesmo com o jar certo do lado e o "java" do sistema
+# funcionando normalmente).
 if [ -f target/robo-navegador-saur-jar-with-dependencies.jar ]; then
   exec java -jar target/robo-navegador-saur-jar-with-dependencies.jar "$@"
 fi
 
 # A partir daqui so se aplica ao fluxo de desenvolvimento local (sem o jar
-# pre-empacotado do deploy): precisa de Maven para compilar/rodar via exec:java.
+# pre-empacotado do deploy): precisa de JDK 21 especifico + Maven para
+# compilar/rodar via exec:java.
+
+# --- JDK 21 ---
+for j in "${JAVA_HOME:-}" \
+         "/c/Users/rafael-ioppi/.vscode/extensions/redhat.java-1.55.0-win32-x64/jre/21.0.11-win32-x86_64" \
+         "/c/Users/rafae/Tools/jdk-21.0.11+10"; do
+  if [ -n "$j" ] && [ -x "$j/bin/java" ]; then export JAVA_HOME="$j"; break; fi
+done
+[ -x "${JAVA_HOME:-/nao}/bin/java" ] || { echo "JDK 21 nao encontrado (defina JAVA_HOME)."; exit 1; }
+export PATH="$JAVA_HOME/bin:$PATH"
+
 MVN="$(command -v mvn || true)"
 [ -z "$MVN" ] && for m in "/c/Users/rafael-ioppi/apache-maven-3.9.9/bin/mvn" \
                           "/c/Users/rafae/Tools/apache-maven-3.9.6/bin/mvn"; do

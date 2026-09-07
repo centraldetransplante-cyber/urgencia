@@ -1311,7 +1311,23 @@ sequência — cada correção revelou a próxima):**
    encontrado" mesmo com o jar certo presente (a VM nunca teve Maven, não
    precisa: só roda o jar já buildado). Corrigido invertendo a ordem: usa
    o jar pronto se existir, só cai na checagem de Maven como fallback de
-   dev local.
+   dev local. **Recaída na MESMA linha de raciocínio, achada em
+   2026-09-07 depois do deploy: a checagem de `JAVA_HOME` (bloco "JDK 21",
+   com uma lista de caminhos SÓ DE WINDOWS, pra dev local) ainda vinha
+   ANTES do `if [ -f target/...jar ]; then exec java -jar ...; fi` —
+   produção morria com "JDK 21 nao encontrado (defina JAVA_HOME)." mesmo
+   com o jar certo do lado e um `java` funcional em `/usr/bin/java` (o
+   próprio `sgpur.service` roda `ExecStart=/usr/bin/java -jar sgpur.jar`,
+   então o PATH padrão do systemd já resolve `java` sem precisar de
+   `JAVA_HOME` nenhum).** Corrigido movendo TODO o bloco de busca de
+   JDK 21 (não só o de Maven) pra depois do `exec` do jar pronto — o
+   fast path de produção agora não depende de `JAVA_HOME` nem de Maven,
+   só do `java` do PATH. **Lição reforçada pela segunda vez: qualquer
+   checagem de ferramenta (`mvn`, `JAVA_HOME`, o que for) escrita pra o
+   fluxo de DEV LOCAL tem que vir DEPOIS do fast path de produção
+   (`if [ -f target/...jar ]; then exec ...; fi`), nunca antes — não
+   basta corrigir uma checagem por vez, revisar TODAS de uma vez ao
+   mexer nesse arquivo.**
 3. `robo.env` perdido no deploy seguinte à configuração manual (ver
    acima) — corrigido com a preservação explícita.
 
