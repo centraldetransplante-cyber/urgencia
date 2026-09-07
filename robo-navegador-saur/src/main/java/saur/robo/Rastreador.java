@@ -262,8 +262,20 @@ final class Rastreador {
         try {
             page.fill(cfg.campoUsuario, cred.usuario());
             page.fill(cfg.campoSenha, cred.senha());
+            // setNoWaitAfter(true): o click() do Playwright tem uma etapa INTERNA de
+            // espera por navegacao ("waiting for scheduled navigations to finish"),
+            // contida dentro do MESMO timeout do click - numa VM pequena essa espera
+            // interna estourava primeiro (TimeoutException do proprio click), caindo
+            // no catch abaixo com a mensagem enganosa "nao achei os campos" mesmo com
+            // os campos achados e preenchidos normalmente, e ANTES de chegar nas
+            // esperas explicitas (waitForURL/waitForLoadState) logo abaixo, que já
+            // usam o timeout configuravel certo mas nunca eram alcançadas por causa
+            // dessa espera interna do proprio click. noWaitAfter faz o click() so
+            // executar o clique e retornar na hora, deixando TODA a espera de
+            // navegacao pos-login pras duas chamadas explicitas abaixo.
             page.locator(cfg.seletorSubmitLogin).first().click(
-                    new com.microsoft.playwright.Locator.ClickOptions().setTimeout(cfg.timeoutMs));
+                    new com.microsoft.playwright.Locator.ClickOptions()
+                            .setTimeout(cfg.timeoutMs).setNoWaitAfter(true));
         } catch (RuntimeException e) {
             System.out.println("  login: não achei os campos do formulário (" + e.getMessage() + ")");
             return false;
