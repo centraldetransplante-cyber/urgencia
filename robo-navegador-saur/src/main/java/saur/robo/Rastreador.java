@@ -268,10 +268,18 @@ final class Rastreador {
             System.out.println("  login: não achei os campos do formulário (" + e.getMessage() + ")");
             return false;
         }
+        // Timeout do redirect pos-login era fixo em 8s (bem menor que cfg.timeoutMs,
+        // default 15s) - numa VM pequena (Oracle Free, 512MB), com o proprio robo
+        // consumindo CPU/memoria ao mesmo tempo que o servidor processa o POST de
+        // login, 8s podia nao ser suficiente mesmo com o login tendo sucesso de
+        // verdade no servidor (confirmado real: LoginAttemptService registrava
+        // "Login bem-sucedido" no log da aplicacao, mas o robo ja tinha desistido
+        // e marcado "login-falhou" por timeout). Usa cfg.timeoutMs (configuravel),
+        // nao um valor fixo menor.
         try { page.waitForURL(u -> !u.contains("/login"),
-                new Page.WaitForURLOptions().setTimeout(8000)); } catch (RuntimeException ignore) {}
+                new Page.WaitForURLOptions().setTimeout(cfg.timeoutMs)); } catch (RuntimeException ignore) {}
         try { page.waitForLoadState(LoadState.NETWORKIDLE,
-                new Page.WaitForLoadStateOptions().setTimeout(4000)); } catch (RuntimeException ignore) {}
+                new Page.WaitForLoadStateOptions().setTimeout(cfg.timeoutMs)); } catch (RuntimeException ignore) {}
         boolean ok = !page.url().contains("/login");
         if (!ok) {
             boolean alerta = safeVisible(page, ".alert-danger, .alert.alert-danger");
