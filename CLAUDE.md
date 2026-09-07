@@ -1274,6 +1274,108 @@ Artefatos em `deploy/` (systemd, nginx, env de exemplo, guia). Host alvo:
 A **Vercel não hospeda o app Java** (histórico: só servia como front pro
 Neon, que nem é mais o banco de produção — ver status abaixo).
 
+**Robô navegador SAUR (`robo-navegador-saur/`, módulo Maven próprio) —
+segundo artefato do mesmo deploy, desde ~2026-09-02.** Acionado pela
+própria tela `/admin/robo` em produção (diferente do robô de inspeção
+E2E standalone `RoboProducaoMain`/`.\e2e-prod.ps1`, que roda local —
+não confundir os dois, ver bug de deploy que só afetava este). O
+`deploy.yml` empacota o jar (`robo-navegador-saur-jar-with-dependencies.jar`)
+e o `.tgz` do projeto pra `/opt/sgpur/robo-navegador-saur/`. **Dois
+arquivos ali são ESTADO PERSISTENTE, não artefato de build — nunca devem
+ser sobrescritos/perdidos num redeploy:**
+- `robo.config` — config geral (não-segredo), o deploy já recria a
+  partir de `robo.config.production.template` se estiver ausente.
+- `robo.env` — credencial `SAUR_PROD_ADMIN` (senha do mesmo admin do
+  SAUR, copiada manualmente uma vez de `SGPUR_ADMIN_PASSWORD` em
+  `/opt/sgpur/sgpur.env` — nunca digitada/gerada nova). O deploy troca o
+  diretório inteiro a cada versão (`mv` pra `.old`, extrai o novo); sem
+  uma preservação explícita esse arquivo se perde toda vez (bug real:
+  configuramos a credencial em 2026-09-06, funcionou uma vez, sumiu no
+  deploy seguinte). Corrigido copiando de `robo-navegador-saur.old/robo.env`
+  pro diretório novo ANTES do `chown` final, se existir — nunca recriar
+  a partir de template (apagaria a credencial real).
+
+**Bug real corrigido em 2026-09-06/07 (mesmo incidente, 3 causas em
+sequência — cada correção revelou a próxima):**
+1. Chromium do robô nunca conseguia LANÇAR na VM: faltavam libs de
+   sistema (`libatk-1.0.so.0`, `libcairo.so.2`, `libpango-1.0.so.0`,
+   `libgbm.so.1` etc.) — o deploy só baixa o binário do Chromium
+   (`install chromium`), nunca as dependências de SO da VM (diferente do
+   `ci.yml`, que já usa `install --with-deps chromium`, mas isso só afeta
+   o runner efêmero do Actions, nunca a VM persistente). Corrigido
+   adicionando `sudo java -cp .../robo-navegador-saur-jar-with-dependencies.jar
+   com.microsoft.playwright.CLI install-deps chromium` no passo de deploy
+   (mesmo mecanismo do Playwright, sem lista de pacote apt mantida à mão).
+2. `robo-navegador-saur/run.sh` checava `mvn` disponível **antes** de
+   checar se o jar pré-empacotado existia — morria com "Maven nao
+   encontrado" mesmo com o jar certo presente (a VM nunca teve Maven, não
+   precisa: só roda o jar já buildado). Corrigido invertendo a ordem: usa
+   o jar pronto se existir, só cai na checagem de Maven como fallback de
+   dev local.
+3. `robo.env` perdido no deploy seguinte à configuração manual (ver
+   acima) — corrigido com a preservação explícita.
+
+Além disso, `RoboNavegadorService` escondia do admin a mensagem de erro
+real do processo (sempre um texto genérico "Robo concluido com codigo N.
+Consulte o relatorio no servidor.", mesmo tendo capturado a última linha
+real de stdout/stderr) — corrigido para expor essa linha real na mensagem
+final, evitando ter que investigar por SSH um erro que já estava
+disponível no próprio processo. E a tela `/admin/robo` parecia "travada"
+mostrando "Aguardando a primeira captura..." mesmo com o robô já
+terminado: o navegador aplica throttling/freeze no `setInterval` de
+reload quando a aba fica em segundo plano — corrigido com um listener
+`visibilitychange` que força reload ao a aba voltar a ficar visível.
+
+**Vistoria completa do módulo em 2026-09-07 achou mais 6 problemas reais,
+todos corrigidos na mesma leva:**
+1. **Travamento permanente sem timeout** se a senha não resolver:
+   `RoboNavegadorService.executar` subia o `ProcessBuilder` sem fechar
+   stdin e chamava `processo.waitFor()` sem prazo — se `SAUR_PROD_ADMIN`
+   resolvesse pra string vazia, `Robo.pedirSenha` caía no fallback de ler
+   `System.in` via `BufferedReader.readLine()`, que nunca recebia dado nem
+   EOF (stdin do processo filho nunca foi redirecionado/fechado pelo pai)
+   e bloqueava pra sempre, com o status preso em "EXECUTANDO" (executor
+   single-thread, `iniciar()` passa a sempre devolver `false`). Corrigido
+   em duas camadas: `processo.getOutputStream().close()` logo após o
+   `start()` (força EOF imediato em qualquer leitura de stdin do robô) **e**
+   `processo.waitFor(15, TimeUnit.MINUTES)` com `destroyForcibly()` +
+   mensagem de erro clara se estourar (o robô completo leva ~33s num teste
+   manual; 15 min dá folga generosa sem travar pra sempre). O `finally` já
+   zera `executando` mesmo no caminho de timeout.
+2. **`report/` não sobrevivia a um deploy** — só `robo.env` tinha
+   preservação explícita contra o `mv` pra `.old`/extração do novo
+   diretório; o histórico de achados (`findings.json`/`history.csv`, usado
+   por `RelatorioHtml.lerAnteriores` pra calcular NOVO/PERSISTE/CORRIGIDO)
+   se perdia a cada deploy. Corrigido copiando `report/` inteiro de
+   `robo-navegador-saur.old/` pro diretório novo (se existir), mesmo padrão
+   já usado pra `robo.env`, antes do `chown -R` final.
+3. **Chromium inteiro reempacotado/reenviado por SCP em todo deploy**,
+   contra um `timeout 120s` — o Chromium era baixado no runner do CI
+   (`PLAYWRIGHT_BROWSERS_PATH` apontando pro workspace), empacotado no
+   `.tgz` e reenviado pra VM toda vez, mesmo sem ter mudado. Corrigido
+   excluindo `.playwright` do `tar` (`--exclude='.playwright'`), removendo
+   o step de instalar Chromium no CI, e baixando o Chromium **direto na
+   VM** (`install chromium`, como usuário `sgpur`, logo antes do já
+   existente `install-deps chromium`) — Playwright é idempotente, não
+   rebaixa se a versão já for a certa.
+4. **`canal = chrome` no `robo.config.production.template` nunca
+   funcionava** — a VM nunca instala o Google Chrome de verdade (só libs de
+   sistema + o Chromium embutido do Playwright), então cada execução
+   perdia ~3s numa tentativa de canal que sempre falhava antes de cair no
+   fallback. Corrigido deixando `canal` vazio (usa o Chromium embutido
+   direto), com comentário explicando o motivo.
+5. **Downloads escapavam da denylist por singular/plural** — a denylist só
+   tinha `/anexos` (plural, com barra), então `/{id}/anexo/{anexoId}`
+   (`SolicitacaoOnlineTriagemController`) e `/{id}/processo-anexo/{anexoId}`
+   (`SolicitanteController`, casa `-anexo-`, não `/anexo`) escapavam e
+   viravam ruído no relatório ("download-pulado" desnecessário, não risco
+   de mutação — são GETs). Corrigido trocando por um único padrão genérico
+   `anexo` (sem barra), que casa singular, plural e o caso com hífen.
+6. **JS morto em `admin/robo.html`** — a linha que atualizava `imagem.src`
+   antes do `window.location.reload()` nunca tinha efeito (o reload
+   acontece antes do navegador buscar a imagem nova). Removida, mantendo
+   só o reload.
+
 **RESOLVIDO em 2026-08-21: IP público efêmero mudou, deploy automático
 quebrado desde antes de 2026-08-17.** A pendência "Reservar o IP público"
 (mais abaixo neste arquivo) nunca foi resolvida pelo usuário, e o IP mudou

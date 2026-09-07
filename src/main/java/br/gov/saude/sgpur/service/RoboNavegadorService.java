@@ -10,6 +10,7 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 @Service
@@ -25,7 +26,18 @@ public class RoboNavegadorService {
     private volatile String status = "PARADO";
     private volatile Instant iniciadoEm;
     private volatile Instant finalizadoEm;
+    private static final String MENSAGEM_INICIANDO = "Robo executando em modo producao com login ADMIN.";
+
     private volatile String mensagem = "Nenhuma execucao realizada.";
+
+    /**
+     * Teto rígido de execução: se o processo do robô travar (ex.: senha vazia caindo no
+     * fallback de leitura de stdin em Robo.pedirSenha, ou qualquer outro bloqueio inesperado),
+     * `waitFor` sem timeout deixava o status preso em "EXECUTANDO" para sempre (executor
+     * single-thread, iniciar() sempre retorna false depois disso). O robô completo levou ~33s
+     * num teste manual; 15 minutos dá folga generosa sem deixar travar indefinidamente.
+     */
+    private static final long TIMEOUT_MINUTOS = 15;
 
     public RoboNavegadorService(
             @Value("${app.robo.script:/opt/sgpur/robo-navegador-saur/run.sh}") String script) {
@@ -42,7 +54,7 @@ public class RoboNavegadorService {
         status = "EXECUTANDO";
         iniciadoEm = Instant.now();
         finalizadoEm = null;
-        mensagem = "Robo executando em modo producao com login ADMIN.";
+        mensagem = MENSAGEM_INICIANDO;
         executor.submit(this::executar);
         return true;
     }
@@ -87,6 +99,15 @@ public class RoboNavegadorService {
                     .directory(script.getParent().toFile())
                     .redirectErrorStream(true)
                     .start();
+            // Fecha o stdin do processo filho imediatamente: força EOF em qualquer leitura de
+            // stdin dentro do robô (ex.: Robo.pedirSenha, acionado quando SAUR_PROD_ADMIN
+            // resolve para string vazia/ausente) em vez de bloquear pra sempre esperando uma
+            // entrada que nunca chega - sem isso o fallback de leitura de senha travava a
+            // execução indefinidamente.
+            try {
+                processo.getOutputStream().close();
+            } catch (IOException ignored) {
+            }
             Thread leitura = Thread.startVirtualThread(() -> {
                 try (var leitor = processo.inputReader()) {
                     leitor.lines().filter(linha -> !linha.isBlank()).forEach(linha -> {
@@ -95,15 +116,36 @@ public class RoboNavegadorService {
                 } catch (IOException ignored) {
                 }
             });
-            codigo = processo.waitFor();
+            boolean terminouNoPrazo = processo.waitFor(TIMEOUT_MINUTOS, TimeUnit.MINUTES);
+            if (!terminouNoPrazo) {
+                processo.destroyForcibly();
+                leitura.join();
+                status = "ERRO";
+                mensagem = "Robo excedeu o tempo maximo de " + TIMEOUT_MINUTOS
+                        + " minutos e foi encerrado a forca. Verifique a credencial (SAUR_PROD_ADMIN)"
+                        + " e os logs no servidor.";
+                System.err.println("Robo navegador SAUR excedeu " + TIMEOUT_MINUTOS
+                        + " minutos e foi encerrado a forca.");
+                return;
+            }
+            codigo = processo.exitValue();
             leitura.join();
+            // Antes de sobrescrever `mensagem` com o texto generico abaixo, guarda a
+            // ultima linha real de stdout/stderr do processo (capturada pela thread de
+            // leitura acima) - sem isso o motivo real de uma falha (ex. "Maven nao
+            // encontrado.") ficava escondido do admin, so visivel investigando na mao
+            // via SSH/journalctl, mesmo ja estando disponivel no proprio processo.
+            String ultimaLinha = mensagem;
+            boolean temSaidaReal = ultimaLinha != null && !ultimaLinha.equals(MENSAGEM_INICIANDO);
             if (codigo == 0) {
                 status = "CONCLUIDO";
                 mensagem = "Robo concluido sem achados altos.";
                 System.out.println("Robo navegador SAUR concluido com sucesso.");
             } else {
                 status = "CONCLUIDO_COM_ACHADOS";
-                mensagem = "Robo concluido com codigo " + codigo + ". Consulte o relatorio no servidor.";
+                mensagem = "Robo concluido com codigo " + codigo
+                        + (temSaidaReal ? ": " + ultimaLinha : "")
+                        + ". Consulte o relatorio no servidor.";
                 System.err.println("Robo navegador SAUR terminou com codigo " + codigo + ".");
             }
         } catch (InterruptedException e) {

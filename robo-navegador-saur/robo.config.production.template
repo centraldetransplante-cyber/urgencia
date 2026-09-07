@@ -4,7 +4,11 @@ permitir-remoto = true
 eu-entendo-os-riscos = true
 modo = seguro-remoto
 headless = true
-canal = chrome
+# canal: deixado vazio de proposito - usa o Chromium embutido do Playwright (baixado direto na
+# VM pelo deploy). "canal = chrome" so funcionaria se o Google Chrome de verdade estivesse
+# instalado na VM (nao esta, so as libs de sistema + o Chromium do Playwright), entao so
+# desperdicaria ~3s de tentativa/fallback em toda execucao (ver Robo.abrirNavegador).
+canal =
 probes-interativas = false
 screenshots = false
 live-screenshot = true

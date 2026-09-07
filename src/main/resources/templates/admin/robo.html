@@ -61,11 +61,30 @@
 <script th:replace="~{layout :: scripts}"></script>
 <script th:replace="~{layout :: confirmarAcaoScript}"></script>
 <script th:if="${status == 'EXECUTANDO'}">
-    setInterval(function () {
-        var imagem = document.getElementById('robo-live');
-        if (imagem) imagem.src = '/admin/robo/live.png?t=' + Date.now();
-        window.location.reload();
-    }, 5000);
+    (function () {
+        // Atualizar imagem.src antes do reload nao tem efeito nenhum: o reload acontece
+        // antes do navegador terminar de buscar a imagem nova (a pagina recarregada ja traz
+        // uma <img> nova via o HTML recem-servido) - era codigo morto (achado real de
+        // vistoria), removido.
+        setInterval(function () {
+            window.location.reload();
+        }, 5000);
+
+        // Se o usuario deixar a aba em segundo plano enquanto o robo roda (o que pode
+        // levar varios minutos), o navegador pode suspender/atrasar drasticamente o
+        // setInterval acima (throttling/"freeze" de aba em background do Chrome/Edge) —
+        // a pagina fica parada mostrando "Aguardando a primeira captura..." mesmo depois
+        // do robo ja ter terminado, exigindo F5 manual (bug real relatado). Ao voltar
+        // para a aba, forca um reload imediato: se o robo ja tiver saido de EXECUTANDO,
+        // esse reload mostra o resultado final e nao reagenda mais nada (o th:if acima
+        // deixa de renderizar este script); se ainda estiver executando, o reload so
+        // atualiza a tela e o setInterval de uma pagina nova recomeca a contagem.
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible') {
+                window.location.reload();
+            }
+        });
+    })();
 </script>
 <div th:replace="~{layout :: footer}"></div>
 </body>

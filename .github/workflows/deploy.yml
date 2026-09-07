@@ -35,13 +35,15 @@ jobs:
       - name: Build robo navegador
         run: mvn -B -ntp -f robo-navegador-saur/pom.xml -DskipTests package
 
-      - name: Instalar Chromium no pacote do robo
-        env:
-          PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/robo-navegador-saur/.playwright
-        run: mvn -B -ntp -f robo-navegador-saur/pom.xml compile exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
-
       - name: Empacotar robo sem artefatos de build
-        run: tar -czf /tmp/robo-navegador-saur.tgz --exclude='target' --exclude='report' --exclude='*.log' -C robo-navegador-saur .
+        # O Chromium do Playwright NAO e mais baixado/empacotado aqui - baixar e reenviar por
+        # SCP dezenas/centenas de MB toda vez, contra uma VM com rede possivelmente instavel,
+        # estourava o timeout de 120s do step seguinte. Agora e baixado DIRETO NA VM (step
+        # "Trocar jar e reiniciar o servico", junto do install-deps que ja rodava la) - o
+        # Playwright e idempotente, entao rodar "install chromium" de novo num deploy que ja
+        # tem a versao certa nao rebaixa nada. --exclude='.playwright' e defensivo (o diretorio
+        # nem deveria existir aqui, ja que nao ha mais step de build que o crie).
+        run: tar -czf /tmp/robo-navegador-saur.tgz --exclude='target' --exclude='report' --exclude='.playwright' --exclude='*.log' -C robo-navegador-saur .
 
       - name: Configurar chave SSH
         run: |
@@ -82,9 +84,25 @@ jobs:
               sudo cp /opt/sgpur/robo-navegador-saur/robo.config.production.template \
                 /opt/sgpur/robo-navegador-saur/robo.config
             fi
+            if [ -f /opt/sgpur/robo-navegador-saur.old/robo.env ]; then
+              sudo cp /opt/sgpur/robo-navegador-saur.old/robo.env /opt/sgpur/robo-navegador-saur/robo.env
+            fi
+            if [ -d /opt/sgpur/robo-navegador-saur.old/report ]; then
+              sudo cp -r /opt/sgpur/robo-navegador-saur.old/report /opt/sgpur/robo-navegador-saur/report
+            fi
             sudo chown -R sgpur:sgpur /opt/sgpur/robo-navegador-saur
             sudo chmod 750 /opt/sgpur/robo-navegador-saur/run.sh
+            echo "Baixando Chromium do Playwright direto na VM (idempotente, nao rebaixa se ja estiver na versao certa)..."
+            sudo -u sgpur env PLAYWRIGHT_BROWSERS_PATH=/opt/sgpur/robo-navegador-saur/.playwright \
+              java -cp /opt/sgpur/robo-navegador-saur/target/robo-navegador-saur-jar-with-dependencies.jar \
+              com.microsoft.playwright.CLI install chromium
             sudo java -cp /opt/sgpur/robo-navegador-saur/target/robo-navegador-saur-jar-with-dependencies.jar com.microsoft.playwright.CLI install-deps chromium
+            echo "Smoke test: Chromium consegue abrir e navegar de verdade na VM..."
+            sudo -u sgpur env PLAYWRIGHT_BROWSERS_PATH=/opt/sgpur/robo-navegador-saur/.playwright \
+              java -cp /opt/sgpur/robo-navegador-saur/target/robo-navegador-saur-jar-with-dependencies.jar \
+              com.microsoft.playwright.CLI screenshot --browser chromium https://example.com /tmp/smoke-chromium.png
+            sudo rm -f /tmp/smoke-chromium.png
+            echo "Smoke test do Chromium OK."
             sudo cp /opt/sgpur/sgpur.jar /opt/sgpur/sgpur.jar.bak-$(date +%Y%m%d%H%M%S)
             sudo mv /tmp/sgpur-novo.jar /opt/sgpur/sgpur.jar
             sudo chown sgpur:sgpur /opt/sgpur/sgpur.jar
