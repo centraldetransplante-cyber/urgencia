@@ -1376,6 +1376,25 @@ todos corrigidos na mesma leva:**
    acontece antes do navegador buscar a imagem nova). Removida, mantendo
    só o reload.
 
+**Recaída no MESMO deploy que corrigiu o item acima (`robo.env`/`report/`
+preservados): as duas novas checagens `if [ -f .../robo.env ]`/`if [ -d
+.../report ]` foram escritas SEM `sudo`** — exatamente o padrão de bug já
+documentado (achado #1) pra checagem de diretório do próprio
+`robo-navegador-saur`. Resultado: no deploy seguinte, `.old/robo.env`
+existia de verdade (confirmado por SSH com `sudo test -f`), mas o teste
+sem privilégio (rodando como `ubuntu`) não enxergou o arquivo num
+diretório `sgpur:sgpur`, pulou a cópia silenciosamente, e a credencial
+sumiu de novo — precisou ser restaurada manualmente PELA SEGUNDA VEZ.
+Corrigido trocando os 3 testes de existência desse bloco inteiro
+(`robo.config`, `robo.env`, `report/`) para `sudo test -f`/`sudo test -d`,
+mais um `echo` de aviso explícito no caso "não achou" (visível no log do
+Actions, pra nunca mais falhar silenciosamente). **Lição reforçada: TODO
+teste de existência (`[ -f ]`/`[ -d ]`) dentro do bloco SSH deste deploy
+tem que rodar com `sudo test`, nunca a forma sem privilégio — não importa
+se parece "só uma checagem inofensiva", o dono `sgpur:sgpur` dos arquivos
+que esse bloco mexe torna qualquer teste sem sudo uma fonte de falso
+negativo silencioso.**
+
 **RESOLVIDO em 2026-08-21: IP público efêmero mudou, deploy automático
 quebrado desde antes de 2026-08-17.** A pendência "Reservar o IP público"
 (mais abaixo neste arquivo) nunca foi resolvida pelo usuário, e o IP mudou

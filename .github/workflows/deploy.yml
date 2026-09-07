@@ -80,15 +80,19 @@ jobs:
             sudo mv /opt/sgpur/robo-navegador-saur /opt/sgpur/robo-navegador-saur.old 2>/dev/null || true
             sudo rm -rf /opt/sgpur/robo-navegador-saur
             sudo mv /opt/sgpur/robo-navegador-saur.new /opt/sgpur/robo-navegador-saur
-            if [ ! -f /opt/sgpur/robo-navegador-saur/robo.config ]; then
+            if ! sudo test -f /opt/sgpur/robo-navegador-saur/robo.config; then
               sudo cp /opt/sgpur/robo-navegador-saur/robo.config.production.template \
                 /opt/sgpur/robo-navegador-saur/robo.config
             fi
-            if [ -f /opt/sgpur/robo-navegador-saur.old/robo.env ]; then
+            if sudo test -f /opt/sgpur/robo-navegador-saur.old/robo.env; then
               sudo cp /opt/sgpur/robo-navegador-saur.old/robo.env /opt/sgpur/robo-navegador-saur/robo.env
+              echo "robo.env preservado do deploy anterior."
+            else
+              echo "AVISO: robo.env nao encontrado em .old - credencial do robo pode precisar ser reconfigurada manualmente."
             fi
-            if [ -d /opt/sgpur/robo-navegador-saur.old/report ]; then
+            if sudo test -d /opt/sgpur/robo-navegador-saur.old/report; then
               sudo cp -r /opt/sgpur/robo-navegador-saur.old/report /opt/sgpur/robo-navegador-saur/report
+              echo "report/ preservado do deploy anterior."
             fi
             sudo chown -R sgpur:sgpur /opt/sgpur/robo-navegador-saur
             sudo chmod 750 /opt/sgpur/robo-navegador-saur/run.sh
