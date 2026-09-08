@@ -1411,6 +1411,50 @@ se parece "só uma checagem inofensiva", o dono `sgpur:sgpur` dos arquivos
 que esse bloco mexe torna qualquer teste sem sudo uma fonte de falso
 negativo silencioso.**
 
+**Capítulo final do mesmo incidente (2026-09-07): robô nunca completava
+o LOGIN em produção, mesmo com tudo acima já corrigido.** Log da própria
+aplicação (`journalctl -u sgpur`) confirmava repetidas vezes
+`LoginAttemptService: Login bem-sucedido para usuario 'admin'`, mas o
+robô mesmo assim reportava `login-falhou`. Três correções em sequência
+no código de espera pós-login (`robo-navegador-saur/src/main/java/saur/
+robo/Rastreador.java`, método `logar`) **mudaram ONDE o timeout batia,
+nunca resolveram de verdade**:
+1. `run.sh` ainda exigia `JAVA_HOME` (bloco "JDK 21", só caminhos de
+   Windows) **antes** do fast path do jar de produção — mesmo bug de
+   ordem do achado #2 acima, só que numa checagem diferente (JDK em vez
+   de Maven). Corrigido movendo TODO o bloco JDK 21 pra depois do `exec`
+   do jar pronto (produção só precisa do `java` do PATH, já garantido —
+   `sgpur.service` roda `ExecStart=/usr/bin/java -jar sgpur.jar`).
+2. `waitForURL`/`waitForLoadState` pós-clique tinham timeout FIXO de
+   8s/4s, menor que o timeout geral configurável (`cfg.timeoutMs`,
+   15s). Trocado pra usar `cfg.timeoutMs`.
+3. O próprio `click()` do Playwright tem uma espera INTERNA de
+   navegação, contida no MESMO timeout do clique — estourava antes de
+   chegar nas esperas explícitas do item 2, com mensagem enganosa ("não
+   achei os campos", quando os campos foram achados normalmente).
+   Corrigido com `ClickOptions.setNoWaitAfter(true)`.
+
+**Causa raiz real, só descoberta depois dessas 3 tentativas (a lição
+principal deste capítulo): não era bug de lógica nenhum — 15 segundos
+não é tempo suficiente nesta VM pequena (Oracle Always Free) com o
+próprio robô consumindo CPU/memória ao mesmo tempo que testa a
+aplicação.** O ciclo POST de login + redirect passava de 15s de
+verdade sob essa contenção de recursos, mesmo com o servidor
+processando e autenticando com sucesso. **`timeout-ms` aumentado de
+`15000` pra `45000`** em `robo.config` (produção, tanto no
+`robo.config.production.template` do repo quanto no arquivo já
+existente na VM) — com isso o robô completou 44 páginas com
+`loginStatus: 1`, 0 achados altos. **Lição: quando uma correção de
+timeout "quase funciona" mas continua falhando de formas ligeiramente
+diferentes a cada tentativa, suspeitar do VALOR do timeout antes de
+continuar mexendo em ONDE ele é aplicado** — sintoma clássico de
+recurso genuinamente lento, não de bug de sincronização.
+
+Achados médios de performance nessa mesma execução (`/`, `/processos`
+acima de ~5s) são esperados nesse cenário de robô+app disputando
+recursos na mesma VM pequena — não é regressão nova, só reforça o
+motivo do timeout ter precisado subir.
+
 **RESOLVIDO em 2026-08-21: IP público efêmero mudou, deploy automático
 quebrado desde antes de 2026-08-17.** A pendência "Reservar o IP público"
 (mais abaixo neste arquivo) nunca foi resolvida pelo usuário, e o IP mudou
