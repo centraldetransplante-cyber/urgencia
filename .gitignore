@@ -55,6 +55,10 @@ client_secret_*.json
 ### Pacote distribuivel (gerado) ###
 /dist/
 
+### Instaladores/binarios baixados manualmente (nao pertencem ao repo) ###
+*.msi
+*.exe
+
 ### Node / Bun (nao versionar dependencias) ###
 node_modules/
 package-lock.json
