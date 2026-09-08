@@ -32,6 +32,14 @@ import java.util.Map;
  * por avaliador). Mantem o mesmo padrao visual e o mesmo cabecalho estampado
  * pagina a pagina via {@link PdfCabecalhoStamper}. O calculo de tempo reusa o
  * {@link TempoRespostaService} para nao divergir dos indicadores de /membros.
+ *
+ * <p><b>Dados x layout separados (2026-09):</b> {@link #calcularDados(int,
+ * MembroUrgenciaRenal, List)} calcula tudo que as 2 secoes do relatorio
+ * precisam (resumo do avaliador, detalhe processo a processo) num objeto
+ * {@link DadosRelatorioAvaliador}, sem nenhuma dependencia de PDF/OpenPDF -
+ * reaproveitado pelo PDF (este servico), pelo CSV e pela visualizacao HTML
+ * (ambos em {@code RelatorioController}), mesmo padrao do
+ * {@link RelatorioAnualService}.</p>
  */
 @Service
 public class RelatorioAvaliadorService {
@@ -55,6 +63,55 @@ public class RelatorioAvaliadorService {
         this.tempoRespostaService = tempoRespostaService;
     }
 
+    // -----------------------------------------------------------------------
+    // Dados calculados (compartilhados entre PDF, CSV e HTML)
+    // -----------------------------------------------------------------------
+
+    /** Uma linha da tabela "Tempo de resposta por processo" do avaliador. */
+    public record LinhaDetalheAvaliador(String numero, String paciente, String parecer,
+                                         String envio, String resposta, long dias, boolean foraDoPrazo) {}
+
+    /** Todos os dados do Relatorio do Avaliador, ja calculados e traduzidos. */
+    public record DadosRelatorioAvaliador(int ano, MembroUrgenciaRenal membro, ResumoTempo resumo,
+                                           List<LinhaDetalheAvaliador> detalhes) {}
+
+    /**
+     * Calcula os dados do Relatorio do Avaliador para o {@code membro} no
+     * {@code ano}, a partir dos {@code processos} ja carregados (mesma
+     * consulta usada pelo PDF/CSV/HTML).
+     */
+    public DadosRelatorioAvaliador calcularDados(int ano, MembroUrgenciaRenal membro, List<Processo> processos) {
+        List<Parecer> pareceresDoMembro = new ArrayList<>();
+        Map<Long, Processo> processoPorParecer = new LinkedHashMap<>();
+        for (Processo p : processos) {
+            for (Parecer par : p.getPareceres()) {
+                if (par.getMembro() != null && membro.getId().equals(par.getMembro().getId())
+                    && par.getResultado() != null && par.getDataEnvio() != null
+                    && par.getDataResposta() != null) {
+                    pareceresDoMembro.add(par);
+                    processoPorParecer.put(par.getId(), p);
+                }
+            }
+        }
+        ResumoTempo resumo = tempoRespostaService.calcularDe(pareceresDoMembro);
+        List<DetalheParecer> detalhesBrutos = tempoRespostaService.detalharDe(pareceresDoMembro);
+
+        List<LinhaDetalheAvaliador> detalhes = new ArrayList<>();
+        for (DetalheParecer d : detalhesBrutos) {
+            Parecer par = d.parecer();
+            Processo p = processoPorParecer.get(par.getId());
+            detalhes.add(new LinhaDetalheAvaliador(
+                p != null ? nvl(p.getNumero()) : "-",
+                p != null ? nvl(p.getPacienteNome()) : "-",
+                par.getResultado() != null ? PdfRelatorioBuilder.descricaoResultado(par.getResultado()) : "-",
+                par.getDataEnvio().format(DATA),
+                par.getDataResposta().format(DATA),
+                d.dias(), d.foraDoPrazo()));
+        }
+
+        return new DadosRelatorioAvaliador(ano, membro, resumo, detalhes);
+    }
+
     /**
      * Gera o PDF do relatorio individual do avaliador.
      *
@@ -70,22 +127,7 @@ public class RelatorioAvaliadorService {
     }
 
     private byte[] gerarSemCabecalho(int ano, MembroUrgenciaRenal membro, List<Processo> processos) {
-        // Pareceres respondidos DESTE membro no ano + o processo de cada um
-        // (para exibir numero/paciente na tabela detalhada).
-        List<Parecer> pareceresDoMembro = new ArrayList<>();
-        Map<Long, Processo> processoPorParecer = new LinkedHashMap<>();
-        for (Processo p : processos) {
-            for (Parecer par : p.getPareceres()) {
-                if (par.getMembro() != null && membro.getId().equals(par.getMembro().getId())
-                    && par.getResultado() != null && par.getDataEnvio() != null
-                    && par.getDataResposta() != null) {
-                    pareceresDoMembro.add(par);
-                    processoPorParecer.put(par.getId(), p);
-                }
-            }
-        }
-        ResumoTempo resumo = tempoRespostaService.calcularDe(pareceresDoMembro);
-        List<DetalheParecer> detalhes = tempoRespostaService.detalharDe(pareceresDoMembro);
+        DadosRelatorioAvaliador dados = calcularDados(ano, membro, processos);
 
         Document doc = new Document(PageSize.A4, 36, 36, 46, 36);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -93,18 +135,18 @@ public class RelatorioAvaliadorService {
             PdfWriter.getInstance(doc, out);
             doc.open();
 
-            adicionarCapa(doc, ano, membro, detalhes.size());
+            adicionarCapa(doc, ano, membro, dados.detalhes().size());
             doc.newPage();
 
             Font fSecao = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, Color.WHITE);
 
             // 1. Resumo do avaliador no ano
             secao(doc, fSecao, "1. Resumo do avaliador no ano " + ano);
-            doc.add(tabelaResumo(resumo));
+            doc.add(tabelaResumo(dados.resumo()));
 
             // 2. Detalhe processo a processo (tempo de cada resposta)
             secao(doc, fSecao, "2. Tempo de resposta por processo");
-            doc.add(tabelaDetalhe(detalhes, processoPorParecer));
+            doc.add(tabelaDetalhe(dados.detalhes()));
 
             Paragraph rodape = new Paragraph(
                 "Documento gerado automaticamente pelo " + PdfCabecalhoStamper.NOME_SISTEMA + " em "
@@ -215,7 +257,7 @@ public class RelatorioAvaliadorService {
     // Detalhe processo a processo
     // -----------------------------------------------------------------------
 
-    private PdfPTable tabelaDetalhe(List<DetalheParecer> detalhes, Map<Long, Processo> processoPorParecer) {
+    private PdfPTable tabelaDetalhe(List<LinhaDetalheAvaliador> detalhes) {
         PdfPTable t = new PdfPTable(new float[]{1.6f, 3.4f, 2.2f, 1.8f, 1.8f, 1.4f, 1.8f});
         t.setWidthPercentage(100);
         t.setSpacingBefore(6);
@@ -233,14 +275,12 @@ public class RelatorioAvaliadorService {
             return t;
         }
 
-        for (DetalheParecer d : detalhes) {
-            Parecer par = d.parecer();
-            Processo p = processoPorParecer.get(par.getId());
-            celula(t, p != null ? nvl(p.getNumero()) : "-");
-            celula(t, p != null ? nvl(p.getPacienteNome()) : "-");
-            celula(t, par.getResultado() != null ? PdfRelatorioBuilder.descricaoResultado(par.getResultado()) : "-");
-            celula(t, par.getDataEnvio().format(DATA));
-            celula(t, par.getDataResposta().format(DATA));
+        for (LinhaDetalheAvaliador d : detalhes) {
+            celula(t, d.numero());
+            celula(t, d.paciente());
+            celula(t, d.parecer());
+            celula(t, d.envio());
+            celula(t, d.resposta());
             celula(t, String.valueOf(d.dias()));
             celulaPrazo(t, d.foraDoPrazo());
         }
@@ -311,7 +351,7 @@ public class RelatorioAvaliadorService {
         t.addCell(c);
     }
 
-    private String nvl(String s) {
+    private static String nvl(String s) {
         return (s == null || s.isBlank()) ? "-" : s;
     }
 }

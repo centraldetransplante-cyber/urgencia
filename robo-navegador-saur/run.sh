@@ -11,6 +11,37 @@ set -euo pipefail
 cd "$(dirname "$0")"
 export PLAYWRIGHT_BROWSERS_PATH="${PLAYWRIGHT_BROWSERS_PATH:-$PWD/.playwright}"
 
+# Carrega robo.env (gitignored) se existir: um KEY=VALOR por linha.
+# Coloque aqui  SAUR_PROD_ADMIN=suasenha  UMA vez e nunca mais digite nada.
+if [ -f robo.env ]; then
+  set -a; . ./robo.env; set +a
+fi
+
+# A aplicacao web fornece a mesma senha pelo EnvironmentFile do systemd.
+# Nao grava nem imprime o valor.
+if [ -z "${SAUR_PROD_ADMIN:-}" ] && [ -n "${SGPUR_ADMIN_PASSWORD:-}" ]; then
+  export SAUR_PROD_ADMIN="$SGPUR_ADMIN_PASSWORD"
+fi
+
+# Em producao o workflow envia o fat JAR pronto; a VM NAO precisa ter Maven
+# NEM JAVA_HOME configurado - so precisa de um "java" utilizavel no PATH
+# (o proprio sgpur.service e' uma app Java, entao isso ja e garantido pelo
+# ambiente). Essa checagem tem que vir ANTES de QUALQUER coisa relacionada a
+# Maven OU a JAVA_HOME: se o jar ja existe, roda ele direto com o "java" do
+# PATH e nem olha pra essas outras exigencias (bug real de producao ja
+# corrigido 2x - primeiro a checagem de Maven vinha primeiro, depois,
+# corrigida essa, a checagem de JAVA_HOME - com uma lista de caminhos so' de
+# Windows, inutil na VM Linux - ainda vinha ANTES desta, quebrando com "JDK
+# 21 nao encontrado" mesmo com o jar certo do lado e o "java" do sistema
+# funcionando normalmente).
+if [ -f target/robo-navegador-saur-jar-with-dependencies.jar ]; then
+  exec java -jar target/robo-navegador-saur-jar-with-dependencies.jar "$@"
+fi
+
+# A partir daqui so se aplica ao fluxo de desenvolvimento local (sem o jar
+# pre-empacotado do deploy): precisa de JDK 21 especifico + Maven para
+# compilar/rodar via exec:java.
+
 # --- JDK 21 ---
 for j in "${JAVA_HOME:-}" \
          "/c/Users/rafael-ioppi/.vscode/extensions/redhat.java-1.55.0-win32-x64/jre/21.0.11-win32-x86_64" \
@@ -20,7 +51,6 @@ done
 [ -x "${JAVA_HOME:-/nao}/bin/java" ] || { echo "JDK 21 nao encontrado (defina JAVA_HOME)."; exit 1; }
 export PATH="$JAVA_HOME/bin:$PATH"
 
-# --- Maven ---
 MVN="$(command -v mvn || true)"
 [ -z "$MVN" ] && for m in "/c/Users/rafael-ioppi/apache-maven-3.9.9/bin/mvn" \
                           "/c/Users/rafae/Tools/apache-maven-3.9.6/bin/mvn"; do
@@ -35,23 +65,6 @@ if [ "${1:-}" = "--install-browser" ]; then
   # Proxy corporativo com MITM de TLS quebra o downloader (Node) do Playwright.
   export NODE_TLS_REJECT_UNAUTHORIZED=0
   exec "$MVN" -q compile exec:java -Dexec.mainClass=com.microsoft.playwright.CLI -Dexec.args="install chromium"
-fi
-
-# Carrega robo.env (gitignored) se existir: um KEY=VALOR por linha.
-# Coloque aqui  SAUR_PROD_ADMIN=suasenha  UMA vez e nunca mais digite nada.
-if [ -f robo.env ]; then
-  set -a; . ./robo.env; set +a
-fi
-
-# A aplicacao web fornece a mesma senha pelo EnvironmentFile do systemd.
-# Nao grava nem imprime o valor.
-if [ -z "${SAUR_PROD_ADMIN:-}" ] && [ -n "${SGPUR_ADMIN_PASSWORD:-}" ]; then
-  export SAUR_PROD_ADMIN="$SGPUR_ADMIN_PASSWORD"
-fi
-
-# Em producao o workflow envia o fat JAR; a VM nao precisa ter Maven instalado.
-if [ -f target/robo-navegador-saur-jar-with-dependencies.jar ]; then
-  exec java -jar target/robo-navegador-saur-jar-with-dependencies.jar "$@"
 fi
 
 # Fallback: se o config precisa de ${SAUR_PROD_ADMIN} e ainda não veio de

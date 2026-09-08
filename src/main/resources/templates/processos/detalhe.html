@@ -1072,9 +1072,13 @@
                                 aria-controls="historicoPareceres">
                             <i class="bi bi-clock-history"></i>
                             Histórico de pareceres sobrepostos (<span th:text="${historicoParecer.size()}">0</span>)
+                            <i class="bi bi-chevron-up chevron-collapse ms-1"></i>
                         </button>
                         <div class="collapse mt-2" id="historicoPareceres">
-                            <div class="alert alert-light border mb-0" th:each="h : ${historicoParecer}">
+                            <!-- th:each com mb-2 (nao mb-0) entre os itens: sem gap aqui as
+                                 bordas de dois pareceres arquivados consecutivos ficavam
+                                 encostadas uma na outra, parecendo um bloco so. -->
+                            <div class="alert alert-light border mb-2" th:each="h : ${historicoParecer}">
                                 <p class="small text-muted mb-1">
                                     <strong th:text="${h.membro.rotulo}">Médico</strong> pediu
                                     <span th:switch="${h.resultado?.name()}">
@@ -1087,10 +1091,20 @@
                                     - análise retomada em
                                     <span th:text="${#temporals.format(h.arquivadoEm, 'dd/MM/yyyy HH:mm')}"></span>.
                                 </p>
-                                <p class="small text-body mb-0" style="white-space: pre-wrap"
+                                <!-- BUG REAL corrigido (2026-09): "white-space: pre-wrap" estava no
+                                     <p> pai, que tambem contem o icone <i> como irmao do <span> de
+                                     texto - o Thymeleaf renderiza literalmente a indentacao/quebras
+                                     de linha do PROPRIO template entre as tags, e o pre-wrap preservava
+                                     esses espacos/newlines como se fossem conteudo real, jogando o
+                                     icone e o texto em linhas/colunas sobrepostas visualmente. Mesma
+                                     causa-raiz do padrao seguro ja usado alhures na pagina (ex. o
+                                     <pre th:text="..."> da Resposta ao solicitante): pre-wrap so pode
+                                     ir no elemento cujo CONTEUDO INTEIRO e' o th:text, nunca num
+                                     ancestral que tambem tem outros filhos/irmaos no template. -->
+                                <p class="small text-body mb-0"
                                    th:if="${h.justificativa != null and !h.justificativa.isBlank()}">
                                     <i class="bi bi-chat-left-quote text-secondary"></i>
-                                    <span th:text="${h.justificativa}">Justificativa original</span>
+                                    <span style="white-space: pre-wrap" th:text="${h.justificativa}">Justificativa original</span>
                                 </p>
                             </div>
                         </div>

@@ -262,16 +262,36 @@ final class Rastreador {
         try {
             page.fill(cfg.campoUsuario, cred.usuario());
             page.fill(cfg.campoSenha, cred.senha());
+            // setNoWaitAfter(true): o click() do Playwright tem uma etapa INTERNA de
+            // espera por navegacao ("waiting for scheduled navigations to finish"),
+            // contida dentro do MESMO timeout do click - numa VM pequena essa espera
+            // interna estourava primeiro (TimeoutException do proprio click), caindo
+            // no catch abaixo com a mensagem enganosa "nao achei os campos" mesmo com
+            // os campos achados e preenchidos normalmente, e ANTES de chegar nas
+            // esperas explicitas (waitForURL/waitForLoadState) logo abaixo, que já
+            // usam o timeout configuravel certo mas nunca eram alcançadas por causa
+            // dessa espera interna do proprio click. noWaitAfter faz o click() so
+            // executar o clique e retornar na hora, deixando TODA a espera de
+            // navegacao pos-login pras duas chamadas explicitas abaixo.
             page.locator(cfg.seletorSubmitLogin).first().click(
-                    new com.microsoft.playwright.Locator.ClickOptions().setTimeout(cfg.timeoutMs));
+                    new com.microsoft.playwright.Locator.ClickOptions()
+                            .setTimeout(cfg.timeoutMs).setNoWaitAfter(true));
         } catch (RuntimeException e) {
             System.out.println("  login: não achei os campos do formulário (" + e.getMessage() + ")");
             return false;
         }
+        // Timeout do redirect pos-login era fixo em 8s (bem menor que cfg.timeoutMs,
+        // default 15s) - numa VM pequena (Oracle Free, 512MB), com o proprio robo
+        // consumindo CPU/memoria ao mesmo tempo que o servidor processa o POST de
+        // login, 8s podia nao ser suficiente mesmo com o login tendo sucesso de
+        // verdade no servidor (confirmado real: LoginAttemptService registrava
+        // "Login bem-sucedido" no log da aplicacao, mas o robo ja tinha desistido
+        // e marcado "login-falhou" por timeout). Usa cfg.timeoutMs (configuravel),
+        // nao um valor fixo menor.
         try { page.waitForURL(u -> !u.contains("/login"),
-                new Page.WaitForURLOptions().setTimeout(8000)); } catch (RuntimeException ignore) {}
+                new Page.WaitForURLOptions().setTimeout(cfg.timeoutMs)); } catch (RuntimeException ignore) {}
         try { page.waitForLoadState(LoadState.NETWORKIDLE,
-                new Page.WaitForLoadStateOptions().setTimeout(4000)); } catch (RuntimeException ignore) {}
+                new Page.WaitForLoadStateOptions().setTimeout(cfg.timeoutMs)); } catch (RuntimeException ignore) {}
         boolean ok = !page.url().contains("/login");
         if (!ok) {
             boolean alerta = safeVisible(page, ".alert-danger, .alert.alert-danger");

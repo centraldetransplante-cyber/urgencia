@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-br" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{layout :: head('Relatório anual - Visualização')}"></head>
+<body>
+<nav th:replace="~{layout :: navbar}"></nav>
+<div th:replace="~{layout :: flash}"></div>
+
+<!--/* Visualizacao HTML imprimivel do Relatorio Anual (2026-09): reusa os
+       MESMOS dados ja calculados por RelatorioAnualService.calcularDados
+       (nao recalcula nada aqui) - o PDF continua sendo o documento oficial,
+       esta tela e so para o operador usar Ctrl+P / "Salvar como PDF" do
+       navegador quando quiser algo rapido sem abrir o visualizador de PDF.
+       O @media print global (app.css) ja esconde navbar/botoes/form. */-->
+<main id="conteudo" class="container my-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0">Relatório anual - Ano <span th:text="${ano}">2026</span></h1>
+        <div class="d-flex gap-2">
+            <button type="button" class="btn btn-outline-primary" onclick="window.print()">
+                <i class="bi bi-printer"></i> Imprimir / Salvar PDF
+            </button>
+            <a th:href="@{/relatorios/anual}" class="btn btn-outline-secondary">
+                <i class="bi bi-arrow-left me-1"></i> Voltar
+            </a>
+        </div>
+    </div>
+
+    <div class="text-center mb-4">
+        <div class="fw-bold">Central de Transplantes do Estado do Rio Grande do Sul</div>
+        <div>SECRETARIA DE SAÚDE</div>
+        <div class="text-primary fw-bold">URGÊNCIA RENAL</div>
+        <hr class="w-25 mx-auto">
+        <div class="h4">RELATÓRIO GERAL DE URGÊNCIA RENAL - ANO <span th:text="${ano}">2026</span></div>
+        <div class="text-muted small">
+            Emitido em <span th:text="${#temporals.format(emitidoEm, 'dd/MM/yyyy HH:mm')}">01/01/2026 00:00</span>
+        </div>
+    </div>
+
+    <h2 class="h5 bg-primary text-white p-2">1. Resumo do ano <span th:text="${ano}">2026</span></h2>
+    <table class="table table-sm table-bordered w-auto mb-4">
+        <tbody>
+        <tr><td>Total de processos</td><td class="text-end fw-bold" th:text="${dados.resumo().total()}">0</td></tr>
+        <tr><td>Solicitados (aguardando envio)</td><td class="text-end" th:text="${dados.resumo().solicitado()}">0</td></tr>
+        <tr><td>Em andamento (enviados / em análise)</td><td class="text-end" th:text="${dados.resumo().emAndamento()}">0</td></tr>
+        <tr><td>Solicita informação</td><td class="text-end" th:text="${dados.resumo().solicitaInfo()}">0</td></tr>
+        <tr><td>Deferidos</td><td class="text-end" th:text="${dados.resumo().deferido()}">0</td></tr>
+        <tr><td>Indeferidos</td><td class="text-end" th:text="${dados.resumo().indeferido()}">0</td></tr>
+        <tr><td>Cancelados</td><td class="text-end" th:text="${dados.resumo().cancelado()}">0</td></tr>
+        <tr>
+            <td>Preemptivos (inserção em lista de espera)</td>
+            <td class="text-end">
+                <span th:text="${dados.resumo().preemptivos()}">0</span>
+                <span th:if="${dados.resumo().preemptivos() > 0}"
+                      th:text="'(dos quais ' + ${dados.resumo().preemptivosDeferidos()} + ' deferido(s))'"></span>
+            </td>
+        </tr>
+        <tr><td>% de deferimento (sobre os decididos)</td><td class="text-end fw-bold" th:text="${dados.resumo().percentDeferimento()}">-</td></tr>
+        <tr>
+            <td>Tempo médio de resposta dos avaliadores</td>
+            <td class="text-end fw-bold"
+                th:text="${T(br.gov.saude.sgpur.service.TempoRespostaService).formatarDias(dados.tempoAno().mediaGeralDias())}">—</td>
+        </tr>
+        <tr>
+            <td th:text="'Pareceres fora do prazo (meta ' + ${dados.tempoAno().prazoDias()} + ' dias corridos)'"></td>
+            <td class="text-end" th:text="${dados.tempoAno().foraDoPrazo()} + ' de ' + ${dados.tempoAno().totalAvaliados()}">0 de 0</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <h2 class="h5 bg-primary text-white p-2">2. Tempo de resposta por avaliador</h2>
+    <table class="table table-sm table-bordered mb-4">
+        <thead class="table-light">
+        <tr><th>Avaliador</th><th>Respondidos</th><th>Tempo médio</th><th>Fora do prazo</th></tr>
+        </thead>
+        <tbody>
+        <tr th:if="${dados.temposPorAvaliador().isEmpty()}">
+            <td colspan="4" class="text-center text-muted">Nenhum parecer respondido neste ano.</td>
+        </tr>
+        <tr th:each="l : ${dados.temposPorAvaliador()}">
+            <td th:text="${l.avaliador()}">Avaliador</td>
+            <td th:text="${l.respondidos()}">0</td>
+            <td th:text="${l.tempoMedioFormatado()}">—</td>
+            <td th:text="${l.foraDoPrazo()}">0</td>
+        </tr>
+        </tbody>
+    </table>
+
+    <h2 class="h5 bg-primary text-white p-2">3. Lista de processos do ano <span th:text="${ano}">2026</span></h2>
+    <div class="table-responsive mb-4">
+        <table class="table table-sm table-bordered">
+            <thead class="table-light">
+            <tr>
+                <th>Nº/Ano</th><th>Paciente</th><th>RGCT</th><th>Tipo</th><th>Status</th>
+                <th>Médico 1</th><th>Médico 2</th><th>Médico 3</th><th>Cadastro</th><th>Decisão</th>
+            </tr>
+            </thead>
+            <tbody>
+            <tr th:if="${dados.processos().isEmpty()}">
+                <td colspan="10" class="text-center text-muted">Nenhum processo neste ano.</td>
+            </tr>
+            <tr th:each="l : ${dados.processos()}">
+                <td th:text="${l.numero()}">-</td>
+                <td th:text="${l.paciente()}">-</td>
+                <td th:text="${l.rgct()}">-</td>
+                <td th:text="${l.tipo()}">-</td>
+                <td th:text="${l.status()}">-</td>
+                <td th:text="${l.medico1()}">-</td>
+                <td th:text="${l.medico2()}">-</td>
+                <td th:text="${l.medico3()}">-</td>
+                <td th:text="${l.cadastro()}">-</td>
+                <td th:text="${l.decisao()}">-</td>
+            </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <p class="text-muted fst-italic text-center small">
+        Documento gerado automaticamente pelo SAUR - Sistema de Gestão de Processos de Urgência Renal em
+        <span th:text="${#temporals.format(emitidoEm, 'dd/MM/yyyy')}">01/01/2026</span>.
+    </p>
+</main>
+
+<script th:replace="~{layout :: scripts}"></script>
+<div th:replace="~{layout :: footer}"></div>
+</body>
+</html>

@@ -18,6 +18,7 @@ import java.awt.Color;
 import java.io.ByteArrayOutputStream;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,6 +33,14 @@ import java.util.Map;
  * cabecalho estampado em toda pagina (logo + 2 linhas + numeracao "Pagina X de
  * Y"), via {@link PdfCabecalhoStamper} - documento gerado normalmente e depois
  * estampado como pos-processamento, igual ao Relatorio Final.
+ *
+ * <p><b>Dados x layout separados (2026-09):</b> {@link #calcularDados(int, List)}
+ * calcula TUDO que as 3 secoes do relatorio precisam (resumo do ano, tempo por
+ * avaliador, lista de processos) num objeto {@link DadosRelatorioAnual}, sem
+ * nenhuma dependencia de PDF/OpenPDF - reaproveitado pelo PDF (este servico),
+ * pelo CSV e pela visualizacao HTML (ambos em {@code RelatorioController}),
+ * para nao duplicar a logica de calculo (traducao de status/resultado, tempo
+ * de resposta, contagem de preemptivos etc.) em 3 lugares.</p>
  */
 @Service
 public class RelatorioAnualService {
@@ -56,6 +65,111 @@ public class RelatorioAnualService {
         this.tempoRespostaService = tempoRespostaService;
     }
 
+    // -----------------------------------------------------------------------
+    // Dados calculados (compartilhados entre PDF, CSV e HTML)
+    // -----------------------------------------------------------------------
+
+    /** Contagem por status + recorte de preemptivos, para a secao "Resumo do ano". */
+    public record ResumoContagemAno(int total, int solicitado, int emAndamento, int solicitaInfo,
+                                     int deferido, int indeferido, int cancelado,
+                                     String percentDeferimento, long preemptivos, long preemptivosDeferidos) {}
+
+    /** Uma linha da tabela "Tempo de resposta por avaliador". */
+    public record LinhaTempoAvaliador(String avaliador, long respondidos, String tempoMedioFormatado,
+                                       long foraDoPrazo) {}
+
+    /** Uma linha da tabela "Lista de processos do ano". */
+    public record LinhaProcessoAno(String numero, String paciente, String rgct, String tipo, String status,
+                                    String medico1, String medico2, String medico3, String cadastro,
+                                    String decisao) {}
+
+    /** Todos os dados do Relatorio Anual, ja calculados e traduzidos - sem nada de layout de PDF/HTML. */
+    public record DadosRelatorioAnual(int ano, int totalProcessos, ResumoContagemAno resumo, ResumoTempo tempoAno,
+                                       List<LinhaTempoAvaliador> temposPorAvaliador,
+                                       List<LinhaProcessoAno> processos) {}
+
+    /**
+     * Calcula os dados do Relatorio Anual para o {@code ano} a partir dos
+     * {@code processos} ja carregados (mesma consulta usada pelo PDF/CSV/HTML,
+     * ver {@code ProcessoRepository.findByAnoComPareceres}).
+     */
+    public DadosRelatorioAnual calcularDados(int ano, List<Processo> processos) {
+        Map<StatusProcesso, Integer> contagem = new EnumMap<>(StatusProcesso.class);
+        for (Processo p : processos) {
+            contagem.merge(p.getStatus(), 1, Integer::sum);
+        }
+        int total = processos.size();
+        int solicitado = contagem.getOrDefault(StatusProcesso.SOLICITADO, 0);
+        int emAndamento = contagem.getOrDefault(StatusProcesso.ENVIADO, 0);
+        int solicitaInfo = contagem.getOrDefault(StatusProcesso.SOLICITA_INFORMACAO, 0);
+        int deferido = contagem.getOrDefault(StatusProcesso.DEFERIDO, 0);
+        int indeferido = contagem.getOrDefault(StatusProcesso.INDEFERIDO, 0);
+        int cancelado = contagem.getOrDefault(StatusProcesso.CANCELADO, 0);
+        int decididos = deferido + indeferido;
+        String percentDeferimento = decididos == 0 ? "-" : Math.round(deferido * 100.0 / decididos) + "%";
+        long preemptivos = processos.stream().filter(Processo::isPreemptivo).count();
+        long preemptivosDeferidos = processos.stream()
+            .filter(Processo::isPreemptivo)
+            .filter(p -> p.getStatus() == StatusProcesso.DEFERIDO)
+            .count();
+        ResumoContagemAno resumo = new ResumoContagemAno(total, solicitado, emAndamento, solicitaInfo,
+            deferido, indeferido, cancelado, percentDeferimento, preemptivos, preemptivosDeferidos);
+
+        // Pareceres respondidos do ano (mesmo criterio da query
+        // findRespondidosComDatas: resultado, dataEnvio e dataResposta
+        // preenchidos), para o indicador de tempo de resposta.
+        Map<Long, String> nomePorMembro = new LinkedHashMap<>();
+        List<Parecer> pareceresRespondidos = new ArrayList<>();
+        for (Processo p : processos) {
+            for (Parecer par : p.getPareceres()) {
+                if (par.getResultado() != null && par.getDataEnvio() != null && par.getDataResposta() != null) {
+                    pareceresRespondidos.add(par);
+                    MembroUrgenciaRenal m = par.getMembro();
+                    if (m != null) {
+                        nomePorMembro.putIfAbsent(m.getId(), m.getRotulo());
+                    }
+                }
+            }
+        }
+        ResumoTempo tempoAno = tempoRespostaService.calcularDe(pareceresRespondidos);
+
+        List<LinhaTempoAvaliador> temposPorAvaliador = new ArrayList<>();
+        for (var e : tempoAno.porMembro().entrySet()) {
+            TempoMembro tm = e.getValue();
+            temposPorAvaliador.add(new LinhaTempoAvaliador(
+                nomePorMembro.getOrDefault(e.getKey(), "Membro #" + e.getKey()),
+                tm.avaliados(), TempoRespostaService.formatarDias(tm.mediaDias()), tm.foraDoPrazo()));
+        }
+
+        List<LinhaProcessoAno> linhas = new ArrayList<>();
+        for (Processo p : processos) {
+            String medico1 = "-";
+            String medico2 = "-";
+            String medico3 = "-";
+            List<Parecer> pareceres = p.getPareceres();
+            String[] medicos = {medico1, medico2, medico3};
+            for (int i = 0; i < 3; i++) {
+                if (i < pareceres.size()) {
+                    Parecer par = pareceres.get(i);
+                    String res = par.getResultado() != null
+                        ? PdfRelatorioBuilder.descricaoResultado(par.getResultado()) : "Aguardando";
+                    medicos[i] = par.getMembro().getRotulo() + " (" + res + ")";
+                }
+            }
+            linhas.add(new LinhaProcessoAno(
+                nvl(p.getNumero()),
+                nvl(p.getPacienteNome()),
+                p.isPreemptivo() ? "-" : nvl(p.getPacienteRgct()),
+                RotuloProcesso.tipoCurto(p),
+                PdfRelatorioBuilder.descricaoStatus(p.getStatus()),
+                medicos[0], medicos[1], medicos[2],
+                p.getDataCadastro() != null ? p.getDataCadastro().format(DATA) : "-",
+                p.getDataDecisao() != null ? p.getDataDecisao().format(DATA) : "-"));
+        }
+
+        return new DadosRelatorioAnual(ano, total, resumo, tempoAno, temposPorAvaliador, linhas);
+    }
+
     /**
      * Gera o PDF do relatorio anual.
      *
@@ -70,47 +184,30 @@ public class RelatorioAnualService {
     }
 
     private byte[] gerarSemCabecalho(int ano, List<Processo> processos) {
+        DadosRelatorioAnual dados = calcularDados(ano, processos);
+
         Document doc = new Document(PageSize.A4, 36, 36, 46, 36);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
             PdfWriter.getInstance(doc, out);
             doc.open();
 
-            adicionarCapa(doc, ano, processos);
+            adicionarCapa(doc, ano, processos, dados);
             doc.newPage();
 
             Font fSecao = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 11, Color.WHITE);
 
-            // Pareceres respondidos do ano (mesmo criterio da query
-            // findRespondidosComDatas: resultado, dataEnvio e dataResposta
-            // preenchidos), para o indicador de tempo de resposta.
-            Map<Long, String> nomePorMembro = new LinkedHashMap<>();
-            List<Parecer> pareceresRespondidos = new java.util.ArrayList<>();
-            for (Processo p : processos) {
-                for (Parecer par : p.getPareceres()) {
-                    if (par.getResultado() != null && par.getDataEnvio() != null
-                        && par.getDataResposta() != null) {
-                        pareceresRespondidos.add(par);
-                        MembroUrgenciaRenal m = par.getMembro();
-                        if (m != null) {
-                            nomePorMembro.putIfAbsent(m.getId(), m.getRotulo());
-                        }
-                    }
-                }
-            }
-            ResumoTempo tempoAno = tempoRespostaService.calcularDe(pareceresRespondidos);
-
             // 1. Resumo do ano
             secao(doc, fSecao, "1. Resumo do ano " + ano);
-            doc.add(tabelaResumo(processos, tempoAno));
+            doc.add(tabelaResumo(dados));
 
             // 2. Tempo de resposta por avaliador
             secao(doc, fSecao, "2. Tempo de resposta por avaliador");
-            doc.add(tabelaTempoPorAvaliador(tempoAno, nomePorMembro));
+            doc.add(tabelaTempoPorAvaliador(dados));
 
             // 3. Lista completa
             secao(doc, fSecao, "3. Lista de processos do ano " + ano);
-            doc.add(tabelaLista(processos));
+            doc.add(tabelaLista(dados));
 
             Paragraph rodape = new Paragraph(
                 "Documento gerado automaticamente pelo " + PdfCabecalhoStamper.NOME_SISTEMA + " em "
@@ -131,7 +228,8 @@ public class RelatorioAnualService {
     // Capa
     // -----------------------------------------------------------------------
 
-    private void adicionarCapa(Document doc, int ano, List<Processo> processos) throws DocumentException {
+    private void adicionarCapa(Document doc, int ano, List<Processo> processos, DadosRelatorioAnual dados)
+            throws DocumentException {
         Font fOrgao = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 13, Color.BLACK);
         Font fSubOrgao = FontFactory.getFont(FontFactory.HELVETICA, 12, Color.BLACK);
         Font fUrgencia = FontFactory.getFont(FontFactory.HELVETICA_BOLD, 14, AZUL);
@@ -186,7 +284,7 @@ public class RelatorioAnualService {
         tituloDoc.setSpacingAfter(16);
         doc.add(tituloDoc);
 
-        long preemptivosCapa = processos.stream().filter(Processo::isPreemptivo).count();
+        long preemptivosCapa = dados.resumo().preemptivos();
         Paragraph resumoCapa = new Paragraph(
             "Total de processos no ano: " + processos.size()
                 + (preemptivosCapa == 0 ? "" : "  (" + preemptivosCapa + " preemptivo(s))")
@@ -199,47 +297,26 @@ public class RelatorioAnualService {
     // Resumo (contagem por status)
     // -----------------------------------------------------------------------
 
-    private PdfPTable tabelaResumo(List<Processo> processos, ResumoTempo tempoAno) {
-        Map<StatusProcesso, Integer> contagem = new EnumMap<>(StatusProcesso.class);
-        for (Processo p : processos) {
-            contagem.merge(p.getStatus(), 1, Integer::sum);
-        }
-        int total = processos.size();
-        int solicitado = contagem.getOrDefault(StatusProcesso.SOLICITADO, 0);
-        int emAndamento = contagem.getOrDefault(StatusProcesso.ENVIADO, 0);
-        int solicitaInfo = contagem.getOrDefault(StatusProcesso.SOLICITA_INFORMACAO, 0);
-        int deferido = contagem.getOrDefault(StatusProcesso.DEFERIDO, 0);
-        int indeferido = contagem.getOrDefault(StatusProcesso.INDEFERIDO, 0);
-        int cancelado = contagem.getOrDefault(StatusProcesso.CANCELADO, 0);
-
-        int decididos = deferido + indeferido;
-        String percentDeferimento = decididos == 0
-            ? "-" : Math.round(deferido * 100.0 / decididos) + "%";
-
-        // Paciente preemptivo (insercao em lista de espera renal): recorte do
-        // total, mais o quanto desses ja foi deferido. A coluna "Tipo" da
-        // tabela de processos logo abaixo detalha caso a caso.
-        long preemptivos = processos.stream().filter(Processo::isPreemptivo).count();
-        long preemptivosDeferidos = processos.stream()
-            .filter(Processo::isPreemptivo)
-            .filter(p -> p.getStatus() == StatusProcesso.DEFERIDO)
-            .count();
+    private PdfPTable tabelaResumo(DadosRelatorioAnual dados) {
+        ResumoContagemAno r = dados.resumo();
+        ResumoTempo tempoAno = dados.tempoAno();
 
         PdfPTable t = new PdfPTable(new float[]{6, 2});
         t.setWidthPercentage(60);
         t.setSpacingBefore(6);
         t.setHorizontalAlignment(Element.ALIGN_LEFT);
 
-        linhaResumo(t, "Total de processos", String.valueOf(total), true);
-        linhaResumo(t, "Solicitados (aguardando envio)", String.valueOf(solicitado), false);
-        linhaResumo(t, "Em andamento (enviados / em análise)", String.valueOf(emAndamento), false);
-        linhaResumo(t, "Solicita informação", String.valueOf(solicitaInfo), false);
-        linhaResumo(t, "Deferidos", String.valueOf(deferido), false);
-        linhaResumo(t, "Indeferidos", String.valueOf(indeferido), false);
-        linhaResumo(t, "Cancelados", String.valueOf(cancelado), false);
+        linhaResumo(t, "Total de processos", String.valueOf(r.total()), true);
+        linhaResumo(t, "Solicitados (aguardando envio)", String.valueOf(r.solicitado()), false);
+        linhaResumo(t, "Em andamento (enviados / em análise)", String.valueOf(r.emAndamento()), false);
+        linhaResumo(t, "Solicita informação", String.valueOf(r.solicitaInfo()), false);
+        linhaResumo(t, "Deferidos", String.valueOf(r.deferido()), false);
+        linhaResumo(t, "Indeferidos", String.valueOf(r.indeferido()), false);
+        linhaResumo(t, "Cancelados", String.valueOf(r.cancelado()), false);
         linhaResumo(t, "Preemptivos (inserção em lista de espera)",
-            preemptivos + (preemptivos == 0 ? "" : " (dos quais " + preemptivosDeferidos + " deferido(s))"), false);
-        linhaResumo(t, "% de deferimento (sobre os decididos)", percentDeferimento, true);
+            r.preemptivos() + (r.preemptivos() == 0 ? "" : " (dos quais " + r.preemptivosDeferidos() + " deferido(s))"),
+            false);
+        linhaResumo(t, "% de deferimento (sobre os decididos)", r.percentDeferimento(), true);
         linhaResumo(t, "Tempo médio de resposta dos avaliadores",
             TempoRespostaService.formatarDias(tempoAno.mediaGeralDias()), true);
         linhaResumo(t, "Pareceres fora do prazo (meta " + tempoAno.prazoDias() + " dias corridos)",
@@ -251,14 +328,14 @@ public class RelatorioAnualService {
     // Tempo de resposta por avaliador
     // -----------------------------------------------------------------------
 
-    private PdfPTable tabelaTempoPorAvaliador(ResumoTempo tempoAno, Map<Long, String> nomePorMembro) {
+    private PdfPTable tabelaTempoPorAvaliador(DadosRelatorioAnual dados) {
         PdfPTable t = new PdfPTable(new float[]{4, 2, 2, 2});
         t.setWidthPercentage(80);
         t.setSpacingBefore(6);
         t.setHeaderRows(1);
         cabecalho(t, "Avaliador", "Respondidos", "Tempo médio", "Fora do prazo");
 
-        if (tempoAno.porMembro().isEmpty()) {
+        if (dados.temposPorAvaliador().isEmpty()) {
             PdfPCell vazio = new PdfPCell(new Phrase("Nenhum parecer respondido neste ano.",
                 FontFactory.getFont(FontFactory.HELVETICA_OBLIQUE, 9, CINZA)));
             vazio.setColspan(4);
@@ -269,12 +346,11 @@ public class RelatorioAnualService {
             return t;
         }
 
-        for (var e : tempoAno.porMembro().entrySet()) {
-            TempoMembro tm = e.getValue();
-            celula(t, nomePorMembro.getOrDefault(e.getKey(), "Membro #" + e.getKey()));
-            celula(t, String.valueOf(tm.avaliados()));
-            celula(t, TempoRespostaService.formatarDias(tm.mediaDias()));
-            celula(t, String.valueOf(tm.foraDoPrazo()));
+        for (LinhaTempoAvaliador l : dados.temposPorAvaliador()) {
+            celula(t, l.avaliador());
+            celula(t, String.valueOf(l.respondidos()));
+            celula(t, l.tempoMedioFormatado());
+            celula(t, String.valueOf(l.foraDoPrazo()));
         }
         return t;
     }
@@ -298,7 +374,7 @@ public class RelatorioAnualService {
     // Lista completa
     // -----------------------------------------------------------------------
 
-    private PdfPTable tabelaLista(List<Processo> processos) {
+    private PdfPTable tabelaLista(DadosRelatorioAnual dados) {
         // Coluna "Tipo" (paciente preemptivo, 2026-08-27): UM relatorio unico
         // cobrindo os dois tipos (Urgencia Renal / Preemptivo), decisao de
         // produto - nunca duas secoes nem dois PDFs (ver §9.5 do plano).
@@ -309,7 +385,7 @@ public class RelatorioAnualService {
         cabecalho(t, "Nº/Ano", "Paciente", "RGCT", "Tipo", "Status",
             "Médico 1", "Médico 2", "Médico 3", "Cadastro", "Decisão");
 
-        if (processos.isEmpty()) {
+        if (dados.processos().isEmpty()) {
             PdfPCell vazio = new PdfPCell(new Phrase("Nenhum processo neste ano.",
                 FontFactory.getFont(FontFactory.HELVETICA_OBLIQUE, 9, CINZA)));
             vazio.setColspan(10);
@@ -320,28 +396,17 @@ public class RelatorioAnualService {
             return t;
         }
 
-        for (Processo p : processos) {
-            celula(t, nvl(p.getNumero()));
-            celula(t, nvl(p.getPacienteNome()));
-            // RGCT fica vazio no preemptivo (nunca tem, ver Processo.pacienteRgct).
-            celula(t, p.isPreemptivo() ? "-" : nvl(p.getPacienteRgct()));
-            celula(t, RotuloProcesso.tipoCurto(p));
-            celula(t, PdfRelatorioBuilder.descricaoStatus(p.getStatus()));
-
-            List<Parecer> pareceres = p.getPareceres();
-            for (int i = 0; i < 3; i++) {
-                if (i < pareceres.size()) {
-                    Parecer par = pareceres.get(i);
-                    String res = par.getResultado() != null
-                        ? PdfRelatorioBuilder.descricaoResultado(par.getResultado()) : "Aguardando";
-                    celula(t, par.getMembro().getRotulo() + " (" + res + ")");
-                } else {
-                    celula(t, "-");
-                }
-            }
-
-            celula(t, p.getDataCadastro() != null ? p.getDataCadastro().format(DATA) : "-");
-            celula(t, p.getDataDecisao() != null ? p.getDataDecisao().format(DATA) : "-");
+        for (LinhaProcessoAno l : dados.processos()) {
+            celula(t, l.numero());
+            celula(t, l.paciente());
+            celula(t, l.rgct());
+            celula(t, l.tipo());
+            celula(t, l.status());
+            celula(t, l.medico1());
+            celula(t, l.medico2());
+            celula(t, l.medico3());
+            celula(t, l.cadastro());
+            celula(t, l.decisao());
         }
         return t;
     }
@@ -383,7 +448,7 @@ public class RelatorioAnualService {
         t.addCell(c);
     }
 
-    private String nvl(String s) {
+    private static String nvl(String s) {
         return (s == null || s.isBlank()) ? "-" : s;
     }
 }

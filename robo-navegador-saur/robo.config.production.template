@@ -4,14 +4,24 @@ permitir-remoto = true
 eu-entendo-os-riscos = true
 modo = seguro-remoto
 headless = true
-canal = chrome
+# canal: deixado vazio de proposito - usa o Chromium embutido do Playwright (baixado direto na
+# VM pelo deploy). "canal = chrome" so funcionaria se o Google Chrome de verdade estivesse
+# instalado na VM (nao esta, so as libs de sistema + o Chromium do Playwright), entao so
+# desperdicaria ~3s de tentativa/fallback em toda execucao (ver Robo.abrirNavegador).
+canal =
 probes-interativas = false
 screenshots = false
 live-screenshot = true
 pausa-entre-paginas-ms = 700
 max-paginas-por-perfil = 60
 profundidade-max = 4
-timeout-ms = 15000
+# 15s (default do robo) nao e suficiente nesta VM pequena (Oracle Free,
+# recursos limitados) com o proprio robo consumindo CPU/memoria ao mesmo
+# tempo que testa a aplicacao - 3 tentativas de fix na espera pos-login
+# (2026-09-07) mudaram ONDE o timeout batia, nunca resolveram porque o
+# problema real e' o VALOR: o ciclo POST de login + redirect as vezes
+# passa de 15s de verdade sob essa contencao de recursos.
+timeout-ms = 45000
 saida = report
 campo-usuario = input[name=username]
 campo-senha = input[name=password]

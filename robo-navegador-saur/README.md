@@ -56,7 +56,8 @@ diff NOVO/persiste/corrigidos) · `report.md` (colar em issue/PR) · `junit.xml`
   gatilhos seguros (dropdown / aba / collapse), sempre apertando `Esc`
   depois. **Nunca** preenche nem envia formulário, nunca confirma modal.
 - Denylist embutida: `/logout`, `/excluir`, `/reabrir`, `/decidir`,
-  `/votar`, `/cancelar`, `/enviar`, `/anexos`, `/comprovante-snt`,
+  `/votar`, `/cancelar`, `/enviar`, `anexo` (casa singular, plural e o caso
+  `-anexo-` de `/processo-anexo/{id}`), `/comprovante-snt`,
   `/documento-clinico`, `/exportar`, `/oficio`, `/ajax`, `/marcar`,
   `/nao-lidas`, `/h2-console`, … (extensível: `denylist-url-extra`).
 - **Recusa alvo que não seja `localhost`** a menos que **as duas** estejam no

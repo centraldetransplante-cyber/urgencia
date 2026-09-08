@@ -1060,7 +1060,10 @@ escala ser migrado — falha esperada e documentada, não um bug).
   AVALIADOR/SOLICITANTE/anônimo = `confortavel`. `[data-densidade="..."]`
   redefine `--saur-font-md`/`--saur-space-4`/`--saur-radius-md`.
 - **Tom em vez de classe Bootstrap**: vocabulário fixo `"ok"|"danger"|
-  "attention"|"neutral"`, exposto por `StatusProcesso.getTom()`,
+  "attention"|"neutral"|"aguardando"` (5 valores — `"aguardando"` é o tom de
+  `StatusProcesso.ENVIADO`, tratado em `layout.html :: tomBadge` e em todo
+  consumidor; ao adicionar um `th:switch`/case novo sobre tom, tratar os 5,
+  não só os 4 primeiros), exposto por `StatusProcesso.getTom()`,
   `SituacaoPedidoView.tom()`, `PainelLinha.CelulaMedico.tom()` e
   `EtapaFluxo.tom()` (os antigos `getBootstrapBadge()`/`classeCor()`/`cor()`
   continuam funcionando, só `@Deprecated`). Fragment
@@ -1270,6 +1273,187 @@ Artefatos em `deploy/` (systemd, nginx, env de exemplo, guia). Host alvo:
 **Oracle Always Free (São Paulo)** — ver `deploy/README-deploy.md`.
 A **Vercel não hospeda o app Java** (histórico: só servia como front pro
 Neon, que nem é mais o banco de produção — ver status abaixo).
+
+**Robô navegador SAUR (`robo-navegador-saur/`, módulo Maven próprio) —
+segundo artefato do mesmo deploy, desde ~2026-09-02.** Acionado pela
+própria tela `/admin/robo` em produção (diferente do robô de inspeção
+E2E standalone `RoboProducaoMain`/`.\e2e-prod.ps1`, que roda local —
+não confundir os dois, ver bug de deploy que só afetava este). O
+`deploy.yml` empacota o jar (`robo-navegador-saur-jar-with-dependencies.jar`)
+e o `.tgz` do projeto pra `/opt/sgpur/robo-navegador-saur/`. **Dois
+arquivos ali são ESTADO PERSISTENTE, não artefato de build — nunca devem
+ser sobrescritos/perdidos num redeploy:**
+- `robo.config` — config geral (não-segredo), o deploy já recria a
+  partir de `robo.config.production.template` se estiver ausente.
+- `robo.env` — credencial `SAUR_PROD_ADMIN` (senha do mesmo admin do
+  SAUR, copiada manualmente uma vez de `SGPUR_ADMIN_PASSWORD` em
+  `/opt/sgpur/sgpur.env` — nunca digitada/gerada nova). O deploy troca o
+  diretório inteiro a cada versão (`mv` pra `.old`, extrai o novo); sem
+  uma preservação explícita esse arquivo se perde toda vez (bug real:
+  configuramos a credencial em 2026-09-06, funcionou uma vez, sumiu no
+  deploy seguinte). Corrigido copiando de `robo-navegador-saur.old/robo.env`
+  pro diretório novo ANTES do `chown` final, se existir — nunca recriar
+  a partir de template (apagaria a credencial real).
+
+**Bug real corrigido em 2026-09-06/07 (mesmo incidente, 3 causas em
+sequência — cada correção revelou a próxima):**
+1. Chromium do robô nunca conseguia LANÇAR na VM: faltavam libs de
+   sistema (`libatk-1.0.so.0`, `libcairo.so.2`, `libpango-1.0.so.0`,
+   `libgbm.so.1` etc.) — o deploy só baixa o binário do Chromium
+   (`install chromium`), nunca as dependências de SO da VM (diferente do
+   `ci.yml`, que já usa `install --with-deps chromium`, mas isso só afeta
+   o runner efêmero do Actions, nunca a VM persistente). Corrigido
+   adicionando `sudo java -cp .../robo-navegador-saur-jar-with-dependencies.jar
+   com.microsoft.playwright.CLI install-deps chromium` no passo de deploy
+   (mesmo mecanismo do Playwright, sem lista de pacote apt mantida à mão).
+2. `robo-navegador-saur/run.sh` checava `mvn` disponível **antes** de
+   checar se o jar pré-empacotado existia — morria com "Maven nao
+   encontrado" mesmo com o jar certo presente (a VM nunca teve Maven, não
+   precisa: só roda o jar já buildado). Corrigido invertendo a ordem: usa
+   o jar pronto se existir, só cai na checagem de Maven como fallback de
+   dev local. **Recaída na MESMA linha de raciocínio, achada em
+   2026-09-07 depois do deploy: a checagem de `JAVA_HOME` (bloco "JDK 21",
+   com uma lista de caminhos SÓ DE WINDOWS, pra dev local) ainda vinha
+   ANTES do `if [ -f target/...jar ]; then exec java -jar ...; fi` —
+   produção morria com "JDK 21 nao encontrado (defina JAVA_HOME)." mesmo
+   com o jar certo do lado e um `java` funcional em `/usr/bin/java` (o
+   próprio `sgpur.service` roda `ExecStart=/usr/bin/java -jar sgpur.jar`,
+   então o PATH padrão do systemd já resolve `java` sem precisar de
+   `JAVA_HOME` nenhum).** Corrigido movendo TODO o bloco de busca de
+   JDK 21 (não só o de Maven) pra depois do `exec` do jar pronto — o
+   fast path de produção agora não depende de `JAVA_HOME` nem de Maven,
+   só do `java` do PATH. **Lição reforçada pela segunda vez: qualquer
+   checagem de ferramenta (`mvn`, `JAVA_HOME`, o que for) escrita pra o
+   fluxo de DEV LOCAL tem que vir DEPOIS do fast path de produção
+   (`if [ -f target/...jar ]; then exec ...; fi`), nunca antes — não
+   basta corrigir uma checagem por vez, revisar TODAS de uma vez ao
+   mexer nesse arquivo.**
+3. `robo.env` perdido no deploy seguinte à configuração manual (ver
+   acima) — corrigido com a preservação explícita.
+
+Além disso, `RoboNavegadorService` escondia do admin a mensagem de erro
+real do processo (sempre um texto genérico "Robo concluido com codigo N.
+Consulte o relatorio no servidor.", mesmo tendo capturado a última linha
+real de stdout/stderr) — corrigido para expor essa linha real na mensagem
+final, evitando ter que investigar por SSH um erro que já estava
+disponível no próprio processo. E a tela `/admin/robo` parecia "travada"
+mostrando "Aguardando a primeira captura..." mesmo com o robô já
+terminado: o navegador aplica throttling/freeze no `setInterval` de
+reload quando a aba fica em segundo plano — corrigido com um listener
+`visibilitychange` que força reload ao a aba voltar a ficar visível.
+
+**Vistoria completa do módulo em 2026-09-07 achou mais 6 problemas reais,
+todos corrigidos na mesma leva:**
+1. **Travamento permanente sem timeout** se a senha não resolver:
+   `RoboNavegadorService.executar` subia o `ProcessBuilder` sem fechar
+   stdin e chamava `processo.waitFor()` sem prazo — se `SAUR_PROD_ADMIN`
+   resolvesse pra string vazia, `Robo.pedirSenha` caía no fallback de ler
+   `System.in` via `BufferedReader.readLine()`, que nunca recebia dado nem
+   EOF (stdin do processo filho nunca foi redirecionado/fechado pelo pai)
+   e bloqueava pra sempre, com o status preso em "EXECUTANDO" (executor
+   single-thread, `iniciar()` passa a sempre devolver `false`). Corrigido
+   em duas camadas: `processo.getOutputStream().close()` logo após o
+   `start()` (força EOF imediato em qualquer leitura de stdin do robô) **e**
+   `processo.waitFor(15, TimeUnit.MINUTES)` com `destroyForcibly()` +
+   mensagem de erro clara se estourar (o robô completo leva ~33s num teste
+   manual; 15 min dá folga generosa sem travar pra sempre). O `finally` já
+   zera `executando` mesmo no caminho de timeout.
+2. **`report/` não sobrevivia a um deploy** — só `robo.env` tinha
+   preservação explícita contra o `mv` pra `.old`/extração do novo
+   diretório; o histórico de achados (`findings.json`/`history.csv`, usado
+   por `RelatorioHtml.lerAnteriores` pra calcular NOVO/PERSISTE/CORRIGIDO)
+   se perdia a cada deploy. Corrigido copiando `report/` inteiro de
+   `robo-navegador-saur.old/` pro diretório novo (se existir), mesmo padrão
+   já usado pra `robo.env`, antes do `chown -R` final.
+3. **Chromium inteiro reempacotado/reenviado por SCP em todo deploy**,
+   contra um `timeout 120s` — o Chromium era baixado no runner do CI
+   (`PLAYWRIGHT_BROWSERS_PATH` apontando pro workspace), empacotado no
+   `.tgz` e reenviado pra VM toda vez, mesmo sem ter mudado. Corrigido
+   excluindo `.playwright` do `tar` (`--exclude='.playwright'`), removendo
+   o step de instalar Chromium no CI, e baixando o Chromium **direto na
+   VM** (`install chromium`, como usuário `sgpur`, logo antes do já
+   existente `install-deps chromium`) — Playwright é idempotente, não
+   rebaixa se a versão já for a certa.
+4. **`canal = chrome` no `robo.config.production.template` nunca
+   funcionava** — a VM nunca instala o Google Chrome de verdade (só libs de
+   sistema + o Chromium embutido do Playwright), então cada execução
+   perdia ~3s numa tentativa de canal que sempre falhava antes de cair no
+   fallback. Corrigido deixando `canal` vazio (usa o Chromium embutido
+   direto), com comentário explicando o motivo.
+5. **Downloads escapavam da denylist por singular/plural** — a denylist só
+   tinha `/anexos` (plural, com barra), então `/{id}/anexo/{anexoId}`
+   (`SolicitacaoOnlineTriagemController`) e `/{id}/processo-anexo/{anexoId}`
+   (`SolicitanteController`, casa `-anexo-`, não `/anexo`) escapavam e
+   viravam ruído no relatório ("download-pulado" desnecessário, não risco
+   de mutação — são GETs). Corrigido trocando por um único padrão genérico
+   `anexo` (sem barra), que casa singular, plural e o caso com hífen.
+6. **JS morto em `admin/robo.html`** — a linha que atualizava `imagem.src`
+   antes do `window.location.reload()` nunca tinha efeito (o reload
+   acontece antes do navegador buscar a imagem nova). Removida, mantendo
+   só o reload.
+
+**Recaída no MESMO deploy que corrigiu o item acima (`robo.env`/`report/`
+preservados): as duas novas checagens `if [ -f .../robo.env ]`/`if [ -d
+.../report ]` foram escritas SEM `sudo`** — exatamente o padrão de bug já
+documentado (achado #1) pra checagem de diretório do próprio
+`robo-navegador-saur`. Resultado: no deploy seguinte, `.old/robo.env`
+existia de verdade (confirmado por SSH com `sudo test -f`), mas o teste
+sem privilégio (rodando como `ubuntu`) não enxergou o arquivo num
+diretório `sgpur:sgpur`, pulou a cópia silenciosamente, e a credencial
+sumiu de novo — precisou ser restaurada manualmente PELA SEGUNDA VEZ.
+Corrigido trocando os 3 testes de existência desse bloco inteiro
+(`robo.config`, `robo.env`, `report/`) para `sudo test -f`/`sudo test -d`,
+mais um `echo` de aviso explícito no caso "não achou" (visível no log do
+Actions, pra nunca mais falhar silenciosamente). **Lição reforçada: TODO
+teste de existência (`[ -f ]`/`[ -d ]`) dentro do bloco SSH deste deploy
+tem que rodar com `sudo test`, nunca a forma sem privilégio — não importa
+se parece "só uma checagem inofensiva", o dono `sgpur:sgpur` dos arquivos
+que esse bloco mexe torna qualquer teste sem sudo uma fonte de falso
+negativo silencioso.**
+
+**Capítulo final do mesmo incidente (2026-09-07): robô nunca completava
+o LOGIN em produção, mesmo com tudo acima já corrigido.** Log da própria
+aplicação (`journalctl -u sgpur`) confirmava repetidas vezes
+`LoginAttemptService: Login bem-sucedido para usuario 'admin'`, mas o
+robô mesmo assim reportava `login-falhou`. Três correções em sequência
+no código de espera pós-login (`robo-navegador-saur/src/main/java/saur/
+robo/Rastreador.java`, método `logar`) **mudaram ONDE o timeout batia,
+nunca resolveram de verdade**:
+1. `run.sh` ainda exigia `JAVA_HOME` (bloco "JDK 21", só caminhos de
+   Windows) **antes** do fast path do jar de produção — mesmo bug de
+   ordem do achado #2 acima, só que numa checagem diferente (JDK em vez
+   de Maven). Corrigido movendo TODO o bloco JDK 21 pra depois do `exec`
+   do jar pronto (produção só precisa do `java` do PATH, já garantido —
+   `sgpur.service` roda `ExecStart=/usr/bin/java -jar sgpur.jar`).
+2. `waitForURL`/`waitForLoadState` pós-clique tinham timeout FIXO de
+   8s/4s, menor que o timeout geral configurável (`cfg.timeoutMs`,
+   15s). Trocado pra usar `cfg.timeoutMs`.
+3. O próprio `click()` do Playwright tem uma espera INTERNA de
+   navegação, contida no MESMO timeout do clique — estourava antes de
+   chegar nas esperas explícitas do item 2, com mensagem enganosa ("não
+   achei os campos", quando os campos foram achados normalmente).
+   Corrigido com `ClickOptions.setNoWaitAfter(true)`.
+
+**Causa raiz real, só descoberta depois dessas 3 tentativas (a lição
+principal deste capítulo): não era bug de lógica nenhum — 15 segundos
+não é tempo suficiente nesta VM pequena (Oracle Always Free) com o
+próprio robô consumindo CPU/memória ao mesmo tempo que testa a
+aplicação.** O ciclo POST de login + redirect passava de 15s de
+verdade sob essa contenção de recursos, mesmo com o servidor
+processando e autenticando com sucesso. **`timeout-ms` aumentado de
+`15000` pra `45000`** em `robo.config` (produção, tanto no
+`robo.config.production.template` do repo quanto no arquivo já
+existente na VM) — com isso o robô completou 44 páginas com
+`loginStatus: 1`, 0 achados altos. **Lição: quando uma correção de
+timeout "quase funciona" mas continua falhando de formas ligeiramente
+diferentes a cada tentativa, suspeitar do VALOR do timeout antes de
+continuar mexendo em ONDE ele é aplicado** — sintoma clássico de
+recurso genuinamente lento, não de bug de sincronização.
+
+Achados médios de performance nessa mesma execução (`/`, `/processos`
+acima de ~5s) são esperados nesse cenário de robô+app disputando
+recursos na mesma VM pequena — não é regressão nova, só reforça o
+motivo do timeout ter precisado subir.
 
 **RESOLVIDO em 2026-08-21: IP público efêmero mudou, deploy automático
 quebrado desde antes de 2026-08-17.** A pendência "Reservar o IP público"

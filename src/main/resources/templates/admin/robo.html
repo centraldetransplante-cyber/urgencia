@@ -8,9 +8,14 @@
 <main id="conteudo" class="container my-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1 class="h3 mb-0">Robô navegador</h1>
-        <a th:href="@{/usuarios}" class="btn btn-outline-secondary">
-            <i class="bi bi-people me-1"></i> Usuários
-        </a>
+        <div class="d-flex gap-2">
+            <a th:href="@{/admin/robo/relatorio}" target="_blank" class="btn btn-outline-secondary">
+                <i class="bi bi-file-earmark-text me-1"></i> Ver relatório
+            </a>
+            <a th:href="@{/usuarios}" class="btn btn-outline-secondary">
+                <i class="bi bi-people me-1"></i> Usuários
+            </a>
+        </div>
     </div>
 
     <section class="card border-0 shadow-sm mb-4">
@@ -29,13 +34,21 @@
                 <dt class="col-sm-3">Finalização</dt>
                 <dd class="col-sm-9" th:text="${finalizadoEm ?: '-'}">-</dd>
             </dl>
-            <form th:action="@{/admin/robo/executar}" method="post"
-                  data-confirm-msg="Executar o robô em produção usando o login ADMIN?">
-                <button type="submit" class="btn btn-primary" th:disabled="${status == 'EXECUTANDO'}">
-                    <i class="bi bi-play-fill me-1"></i>
-                    <span th:text="${status == 'EXECUTANDO'} ? 'Robô em execução' : 'Executar robô em produção'">Executar robô em produção</span>
-                </button>
-            </form>
+            <div class="d-flex gap-2">
+                <form th:action="@{/admin/robo/executar}" method="post"
+                      data-confirm-msg="Executar o robô em produção usando o login ADMIN?">
+                    <button type="submit" class="btn btn-primary" th:disabled="${status == 'EXECUTANDO'}">
+                        <i class="bi bi-play-fill me-1"></i>
+                        <span th:text="${status == 'EXECUTANDO'} ? 'Robô em execução' : 'Executar robô em produção'">Executar robô em produção</span>
+                    </button>
+                </form>
+                <form th:action="@{/admin/robo/parar}" method="post"
+                      data-confirm-msg="Interromper a execução atual do robô?">
+                    <button type="submit" class="btn btn-outline-danger" th:disabled="${status != 'EXECUTANDO'}">
+                        <i class="bi bi-stop-fill me-1"></i> Parar robô
+                    </button>
+                </form>
+            </div>
         </div>
     </section>
 
@@ -46,7 +59,13 @@
                 <span class="badge bg-danger" th:if="${status == 'EXECUTANDO'}">AO VIVO</span>
             </div>
             <img id="robo-live" th:src="@{/admin/robo/live.png}" class="img-fluid border rounded"
-                 alt="Viewport atual do navegador do robô">
+                 alt="Viewport atual do navegador do robô"
+                 onerror="this.classList.add('d-none'); document.getElementById('robo-live-aguardando').classList.remove('d-none');"
+                 onload="this.classList.remove('d-none'); document.getElementById('robo-live-aguardando').classList.add('d-none');">
+            <p id="robo-live-aguardando" class="text-muted small mb-0 d-none">
+                <i class="bi bi-hourglass-split me-1"></i>
+                Aguardando a primeira captura de tela do robô (ainda abrindo o navegador/fazendo login)...
+            </p>
         </div>
     </section>
 </main>
@@ -55,11 +74,30 @@
 <script th:replace="~{layout :: scripts}"></script>
 <script th:replace="~{layout :: confirmarAcaoScript}"></script>
 <script th:if="${status == 'EXECUTANDO'}">
-    setInterval(function () {
-        var imagem = document.getElementById('robo-live');
-        if (imagem) imagem.src = '/admin/robo/live.png?t=' + Date.now();
-        window.location.reload();
-    }, 5000);
+    (function () {
+        // Atualizar imagem.src antes do reload nao tem efeito nenhum: o reload acontece
+        // antes do navegador terminar de buscar a imagem nova (a pagina recarregada ja traz
+        // uma <img> nova via o HTML recem-servido) - era codigo morto (achado real de
+        // vistoria), removido.
+        setInterval(function () {
+            window.location.reload();
+        }, 5000);
+
+        // Se o usuario deixar a aba em segundo plano enquanto o robo roda (o que pode
+        // levar varios minutos), o navegador pode suspender/atrasar drasticamente o
+        // setInterval acima (throttling/"freeze" de aba em background do Chrome/Edge) —
+        // a pagina fica parada mostrando "Aguardando a primeira captura..." mesmo depois
+        // do robo ja ter terminado, exigindo F5 manual (bug real relatado). Ao voltar
+        // para a aba, forca um reload imediato: se o robo ja tiver saido de EXECUTANDO,
+        // esse reload mostra o resultado final e nao reagenda mais nada (o th:if acima
+        // deixa de renderizar este script); se ainda estiver executando, o reload so
+        // atualiza a tela e o setInterval de uma pagina nova recomeca a contagem.
+        document.addEventListener('visibilitychange', function () {
+            if (document.visibilityState === 'visible') {
+                window.location.reload();
+            }
+        });
+    })();
 </script>
 <div th:replace="~{layout :: footer}"></div>
 </body>

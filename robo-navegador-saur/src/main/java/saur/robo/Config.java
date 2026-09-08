@@ -103,9 +103,15 @@ public final class Config {
                 "/logout", "/login?", "/excluir", "/alternar-ativo", "/reabrir",
                 "/decidir", "/cancelar", "/votar", "/retomar-analise", "/lembrete",
                 "/comprovante-snt", "/documento-clinico", "/informacao-complementar",
-                "/registrar-envio", "/finalizar", "/enviar", "/anexos", "/h2-console",
+                "/registrar-envio", "/finalizar", "/enviar", "/h2-console",
                 "/marcar", "/nao-lidas", "/ajax",
-                // endpoints de download (não são páginas; navegar neles = "Download is starting")
+                // endpoints de download (não são páginas; navegar neles = "Download is starting").
+                // "anexo" (sem barra, sem plural fixo) casa TANTO singular quanto plural E o caso
+                // "-anexo-" (ex.: "/{id}/processo-anexo/{anexoId}", SolicitanteController) - antes só
+                // "/anexos" (plural, com barra) estava aqui, então os endpoints singulares de
+                // download real (/{id}/anexo/{anexoId} e /{id}/processo-anexo/{anexoId}) escapavam
+                // da denylist e viravam ruído no relatório ("download-pulado" desnecessário).
+                "anexo",
                 "/exportar", "/export", "/baixar", "/download", "/gerar-pdf",
                 "/oficio", "/dossie", "/relatorio-final", "/capa-processo", "/rascunho-rtf"));
         String extra = valor(p, "denylist-url-extra", "");
