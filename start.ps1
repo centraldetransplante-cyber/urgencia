@@ -6,7 +6,7 @@
 param([string]$Perfil = "dev")
 
 # --- Java 21 (forca o JDK 21, mesmo que JAVA_HOME aponte para outra versao) ---
-$jdk21 = "C:\Users\rafae\Tools\jdk-21.0.11+10"
+$jdk21 = "C:\Users\rafael-ioppi\Tools\jdk-21"
 if (Test-Path "$jdk21\bin\java.exe") {
     $env:JAVA_HOME = $jdk21
 } elseif (-not $env:JAVA_HOME -or -not (Test-Path "$env:JAVA_HOME\bin\java.exe")) {
@@ -18,7 +18,7 @@ $env:Path = "$env:JAVA_HOME\bin;" + $env:Path
 # --- Maven (PATH ou caminho conhecido) ---
 $mvn = (Get-Command mvn -ErrorAction SilentlyContinue).Source
 if (-not $mvn) {
-    $cand = "C:\Users\rafae\Tools\apache-maven-3.9.6\bin\mvn.cmd"
+    $cand = "C:\Users\rafael-ioppi\apache-maven-3.9.9\bin\mvn.cmd"
     if (Test-Path $cand) { $mvn = $cand }
 }
 if (-not $mvn) {

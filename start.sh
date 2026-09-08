@@ -34,8 +34,8 @@ export PATH="$JAVA_HOME/bin:$PATH"
 
 # --- Maven (PATH ou caminho conhecido) ---
 MVN="$(command -v mvn || true)"
-if [ -z "$MVN" ] && [ -x "$HOME/Tools/apache-maven-3.9.6/bin/mvn" ]; then
-  MVN="$HOME/Tools/apache-maven-3.9.6/bin/mvn"
+if [ -z "$MVN" ] && [ -x "$HOME/apache-maven-3.9.9/bin/mvn" ]; then
+  MVN="$HOME/apache-maven-3.9.9/bin/mvn"
 fi
 if [ -z "$MVN" ]; then
   echo "Maven nao encontrado. Instale o Maven ou ajuste o caminho em start.sh." >&2

@@ -64,12 +64,19 @@ class RoboNavegadorControllerTest {
 
     @Test
     @WithMockUser(roles = "ADMIN")
-    @DisplayName("live.png retorna 404 quando imagem nao existe")
-    void livePngRetorna404QuandoNaoExiste() throws Exception {
-        when(robo.getLiveScreenshot()).thenReturn(Path.of("caminho/inexistente/live.png"));
+    @DisplayName("live.png retorna placeholder quando a captura ainda nao existe")
+    void livePngRetornaPlaceholderQuandoNaoExiste() throws Exception {
+        Path liveDir = Files.createTempDirectory("live-placeholder-test-");
+        try {
+            when(robo.getLiveScreenshot()).thenReturn(liveDir.resolve("latest.png"));
 
-        mockMvc.perform(get("/admin/robo/live.png"))
-                .andExpect(status().isNotFound());
+            mockMvc.perform(get("/admin/robo/live.png"))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Content-Type", org.hamcrest.Matchers.containsString("image/png")));
+        } finally {
+            Files.deleteIfExists(liveDir.resolve("placeholder.png"));
+            Files.deleteIfExists(liveDir);
+        }
     }
 
     @Test

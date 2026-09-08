@@ -22,8 +22,9 @@ verdade mais atualizada do projeto (mais recente que este arquivo em caso
 de divergência).
 
 ## Stack e ambiente
-- **Java 21** (JDK Temurin `C:\Users\rafae\Tools\jdk-21.0.11+10` — NÃO usar
-  o Java 17 do sistema).
+- **Java 21** (JDK Temurin `C:\Users\rafael-ioppi\Tools\jdk-21` — instalação
+  fixa fora de qualquer pasta de extensão do VS Code, ver `CLAUDE.md` seção
+  Toolchain; NÃO usar o Java 8 do sistema, que é o único no `PATH` global).
 - **Spring Boot 3.5.16** (web, data-jpa, thymeleaf, security, validation).
 - **PostgreSQL** em prod (desde 2026-07-25, rodando na própria VM Oracle —
   `localhost:5432`, banco `sgpur`, usuário `sgpur`; usou Neon até essa data,
@@ -32,7 +33,7 @@ de divergência).
 - **OpenPDF 1.3.34** (LibrePDF, atualizado por CVE de XXE) para geração de PDF.
 - Pacote base `br.gov.saude.sgpur`, env vars `SGPUR_*`. `artifactId` Maven
   é `saur` (gera `target/saur-0.0.1-SNAPSHOT.jar`).
-- **Maven** em `C:\Users\rafae\Tools\apache-maven-3.9.6`.
+- **Maven** em `C:\Users\rafael-ioppi\apache-maven-3.9.9`.
 - Vercel **não** hospeda o app Java — nem serve mais o Postgres (era só
   front pro Neon; produção hoje é o Postgres da própria VM).
 - Sem Flyway/Liquibase: `ddl-auto: update`. Coluna nova tratada como

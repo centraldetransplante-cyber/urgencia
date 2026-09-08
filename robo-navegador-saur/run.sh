@@ -44,16 +44,16 @@ fi
 
 # --- JDK 21 ---
 for j in "${JAVA_HOME:-}" \
-         "/c/Users/rafael-ioppi/.vscode/extensions/redhat.java-1.55.0-win32-x64/jre/21.0.11-win32-x86_64" \
-         "/c/Users/rafae/Tools/jdk-21.0.11+10"; do
+         "/c/Users/rafael-ioppi/Tools/jdk-21" \
+         "/usr/lib/jvm/temurin-21-jdk-amd64" \
+         "/usr/lib/jvm/java-21-openjdk-amd64"; do
   if [ -n "$j" ] && [ -x "$j/bin/java" ]; then export JAVA_HOME="$j"; break; fi
 done
 [ -x "${JAVA_HOME:-/nao}/bin/java" ] || { echo "JDK 21 nao encontrado (defina JAVA_HOME)."; exit 1; }
 export PATH="$JAVA_HOME/bin:$PATH"
 
 MVN="$(command -v mvn || true)"
-[ -z "$MVN" ] && for m in "/c/Users/rafael-ioppi/apache-maven-3.9.9/bin/mvn" \
-                          "/c/Users/rafae/Tools/apache-maven-3.9.6/bin/mvn"; do
+[ -z "$MVN" ] && for m in "/c/Users/rafael-ioppi/apache-maven-3.9.9/bin/mvn"; do
   [ -x "$m" ] && MVN="$m" && break
 done
 [ -n "$MVN" ] || { echo "Maven nao encontrado."; exit 1; }

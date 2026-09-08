@@ -28,8 +28,14 @@ não renomeados no rebrand SAUR). `artifactId` do Maven é `saur` (gera
 `target/saur-0.0.1-SNAPSHOT.jar`).
 
 ## Toolchain (Windows desta máquina)
-- JDK 21: `C:\Users\rafae\Tools\jdk-21.0.11+10` (NÃO usar o Java 17 do sistema).
-- Maven: `C:\Users\rafae\Tools\apache-maven-3.9.6`.
+- JDK 21: `C:\Users\rafael-ioppi\Tools\jdk-21` (Temurin 21.0.12.1, copiado em
+  2026-09-08 do JRE embutido na extensão VS Code `redhat.java` pra um local
+  estável — a pasta da extensão muda de nome a cada auto-update dela, então
+  nunca apontar direto pra dentro de `.vscode/extensions/...`; NÃO usar o
+  Java 8 do sistema, que é o único no `PATH` global). `JAVA_HOME` também está
+  fixado como variável de usuário do Windows (`setx`), então qualquer
+  terminal novo já resolve sozinho.
+- Maven: `C:\Users\rafael-ioppi\apache-maven-3.9.9`.
 
 ## Como rodar / testar
 ```powershell
@@ -1454,6 +1460,37 @@ Achados médios de performance nessa mesma execução (`/`, `/processos`
 acima de ~5s) são esperados nesse cenário de robô+app disputando
 recursos na mesma VM pequena — não é regressão nova, só reforça o
 motivo do timeout ter precisado subir.
+
+**`RoboNavegadorController` não compilava com um JDK/javac de verdade
+(achado em 2026-09-08, numa vistoria completa do projeto) — passou
+despercebido porque nenhuma sessão anterior tinha um JDK 21 real
+configurado nesta máquina para rodar `mvn clean test-compile`.** Dois
+problemas no mesmo método `liveScreenshot()` (endpoint `/admin/robo/live.png`,
+a mesma feature do "Fix live.png 404" citada no histórico de commits):
+faltava `import java.nio.file.Path;` (`Path` usado sem import, só
+`Files` estava importado) e o array de bytes do PNG placeholder tinha
+vários literais hexadecimais >0x7F (`0xBC`, `0xCF`, `0xFF` etc.) sem o
+cast `(byte)` explícito — `int` não converte implicitamente pra `byte`
+em Java, então `javac` rejeita a inicialização do array. Corrigido
+adicionando o import e colocando `(byte)` em TODO elemento do array
+(mais simples e à prova de recaída do que decorar quais literais
+precisam do cast). **O teste `RoboNavegadorControllerTest` também
+estava dessincronizado do comportamento real:** `livePngRetorna404QuandoNaoExiste`
+ainda esperava `404` — o comportamento ANTES do "Fix live.png 404"
+(que trocou 404 por um placeholder PNG gerado sob demanda) — e usava
+um `Path.of("caminho/inexistente/live.png")` literal, o que faria o
+fallback do controller **criar diretórios reais dentro do repositório**
+(`caminho/inexistente/`) toda vez que o teste rodasse. Renomeado para
+`livePngRetornaPlaceholderQuandoNaoExiste`, agora espera `200`
+(`image/png`) e usa `Files.createTempDirectory` (limpo no `finally`) em
+vez de um caminho fixo dentro do repo. **Lição:** como nenhuma sessão
+anterior tinha um JDK 21 de verdade aqui (só o Java 8 do `PATH` global
+e um JRE efêmero embutido na extensão VS Code `redhat.java`, cujo
+caminho muda a cada auto-update dela), builds/testes nunca rodaram de
+fato nesta máquina — só em CI. Corrigido fixando um JDK 21 estável em
+`C:\Users\rafael-ioppi\Tools\jdk-21` (cópia do JRE da extensão, não um
+symlink pra dentro dela) e `JAVA_HOME` permanente via `setx`; suíte
+completa (1208 testes) rodada e verde depois da correção.
 
 **RESOLVIDO em 2026-08-21: IP público efêmero mudou, deploy automático
 quebrado desde antes de 2026-08-17.** A pendência "Reservar o IP público"
