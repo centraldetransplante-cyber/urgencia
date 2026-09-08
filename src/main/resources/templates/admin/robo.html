@@ -8,9 +8,14 @@
 <main id="conteudo" class="container my-4">
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h1 class="h3 mb-0">Robô navegador</h1>
-        <a th:href="@{/usuarios}" class="btn btn-outline-secondary">
-            <i class="bi bi-people me-1"></i> Usuários
-        </a>
+        <div class="d-flex gap-2">
+            <a th:href="@{/admin/robo/relatorio}" target="_blank" class="btn btn-outline-secondary">
+                <i class="bi bi-file-earmark-text me-1"></i> Ver relatório
+            </a>
+            <a th:href="@{/usuarios}" class="btn btn-outline-secondary">
+                <i class="bi bi-people me-1"></i> Usuários
+            </a>
+        </div>
     </div>
 
     <section class="card border-0 shadow-sm mb-4">
@@ -29,13 +34,21 @@
                 <dt class="col-sm-3">Finalização</dt>
                 <dd class="col-sm-9" th:text="${finalizadoEm ?: '-'}">-</dd>
             </dl>
-            <form th:action="@{/admin/robo/executar}" method="post"
-                  data-confirm-msg="Executar o robô em produção usando o login ADMIN?">
-                <button type="submit" class="btn btn-primary" th:disabled="${status == 'EXECUTANDO'}">
-                    <i class="bi bi-play-fill me-1"></i>
-                    <span th:text="${status == 'EXECUTANDO'} ? 'Robô em execução' : 'Executar robô em produção'">Executar robô em produção</span>
-                </button>
-            </form>
+            <div class="d-flex gap-2">
+                <form th:action="@{/admin/robo/executar}" method="post"
+                      data-confirm-msg="Executar o robô em produção usando o login ADMIN?">
+                    <button type="submit" class="btn btn-primary" th:disabled="${status == 'EXECUTANDO'}">
+                        <i class="bi bi-play-fill me-1"></i>
+                        <span th:text="${status == 'EXECUTANDO'} ? 'Robô em execução' : 'Executar robô em produção'">Executar robô em produção</span>
+                    </button>
+                </form>
+                <form th:action="@{/admin/robo/parar}" method="post"
+                      data-confirm-msg="Interromper a execução atual do robô?">
+                    <button type="submit" class="btn btn-outline-danger" th:disabled="${status != 'EXECUTANDO'}">
+                        <i class="bi bi-stop-fill me-1"></i> Parar robô
+                    </button>
+                </form>
+            </div>
         </div>
     </section>
 

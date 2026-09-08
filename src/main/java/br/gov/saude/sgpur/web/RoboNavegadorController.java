@@ -12,6 +12,8 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.security.Principal;
 
 @Controller
@@ -59,5 +61,30 @@ public class RoboNavegadorController {
                 request.getRemoteAddr());
         ra.addFlashAttribute("msg", "Robo iniciado em modo producao com o login ADMIN.");
         return "redirect:/admin/robo";
+    }
+
+    @PostMapping("/parar")
+    public String parar(Principal principal, HttpServletRequest request, RedirectAttributes ra) {
+        String usuario = principal == null ? "desconhecido" : principal.getName();
+        if (!robo.parar()) {
+            auditoria.registrar("ROBO_PRODUCAO_PARADA_RECUSADA",
+                    "Nenhuma execucao em andamento (solicitado por " + usuario + ")", request.getRemoteAddr());
+            ra.addFlashAttribute("aviso", "O robo nao esta em execucao.");
+            return "redirect:/admin/robo";
+        }
+        auditoria.registrar("ROBO_PRODUCAO_PARADO", "Parada solicitada por " + usuario, request.getRemoteAddr());
+        ra.addFlashAttribute("msg", "Robo interrompido.");
+        return "redirect:/admin/robo";
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/relatorio")
+    public ResponseEntity<byte[]> relatorio() {
+        try {
+            return ResponseEntity.ok().cacheControl(CacheControl.noCache())
+                    .contentType(MediaType.TEXT_HTML)
+                    .body(Files.readAllBytes(robo.getRelatorioHtml()));
+        } catch (IOException e) {
+            return ResponseEntity.notFound().build();
+        }
     }
 }

@@ -12,6 +12,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 public class RoboNavegadorService {
@@ -23,6 +24,8 @@ public class RoboNavegadorService {
         return thread;
     });
     private final AtomicBoolean executando = new AtomicBoolean();
+    private final AtomicReference<Process> processoAtual = new AtomicReference<>();
+    private final AtomicBoolean paradaSolicitada = new AtomicBoolean();
     private volatile String status = "PARADO";
     private volatile Instant iniciadoEm;
     private volatile Instant finalizadoEm;
@@ -63,6 +66,27 @@ public class RoboNavegadorService {
         return executando.get();
     }
 
+    /**
+     * Interrompe a execucao em andamento, se houver. Mata o processo do robo
+     * (destroyForcibly, mesmo tratamento ja usado no estouro de timeout) e sinaliza
+     * `paradaSolicitada` para que `executar()` reporte "interrompido manualmente" em vez
+     * do texto generico de "concluido com achados" que sairia so olhando o exit code.
+     * Nunca deixa `executando` travado: quem zera esse estado continua sendo o `finally`
+     * de `executar()`, disparado normalmente assim que `waitFor` retorna apos o kill.
+     */
+    public boolean parar() {
+        if (!executando.get()) return false;
+        Process processo = processoAtual.get();
+        if (processo == null) return false;
+        paradaSolicitada.set(true);
+        processo.destroyForcibly();
+        return true;
+    }
+
+    public Path getRelatorioHtml() {
+        return script.getParent().resolve("report").resolve("index.html");
+    }
+
     public String getStatus() {
         return status;
     }
@@ -99,6 +123,7 @@ public class RoboNavegadorService {
                     .directory(script.getParent().toFile())
                     .redirectErrorStream(true)
                     .start();
+            processoAtual.set(processo);
             // Fecha o stdin do processo filho imediatamente: força EOF em qualquer leitura de
             // stdin dentro do robô (ex.: Robo.pedirSenha, acionado quando SAUR_PROD_ADMIN
             // resolve para string vazia/ausente) em vez de bloquear pra sempre esperando uma
@@ -130,6 +155,12 @@ public class RoboNavegadorService {
             }
             codigo = processo.exitValue();
             leitura.join();
+            if (paradaSolicitada.get()) {
+                status = "PARADO";
+                mensagem = "Robo interrompido manualmente pelo administrador.";
+                System.out.println("Robo navegador SAUR interrompido manualmente.");
+                return;
+            }
             // Antes de sobrescrever `mensagem` com o texto generico abaixo, guarda a
             // ultima linha real de stdout/stderr do processo (capturada pela thread de
             // leitura acima) - sem isso o motivo real de uma falha (ex. "Maven nao
@@ -159,6 +190,8 @@ public class RoboNavegadorService {
             System.err.println("Nao foi possivel iniciar o robo navegador SAUR: " + e.getMessage());
         } finally {
             finalizadoEm = Instant.now();
+            processoAtual.set(null);
+            paradaSolicitada.set(false);
             executando.set(false);
         }
     }
