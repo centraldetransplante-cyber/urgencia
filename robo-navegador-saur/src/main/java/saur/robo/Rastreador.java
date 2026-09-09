@@ -178,15 +178,20 @@ final class Rastreador {
             return;
         }
         s.statusNavegacao = resp.status();
+        try { page.waitForLoadState(LoadState.NETWORKIDLE,
+                new Page.WaitForLoadStateOptions().setTimeout(4000)); } catch (RuntimeException ignore) {}
         if (cfg.liveScreenshot) {
+            // Captura DEPOIS do NETWORKIDLE (não logo após o DOMCONTENTLOADED do navigate acima):
+            // numa VM sob contenção de recursos, tirar o screenshot antes da página renderizar de
+            // verdade pegava quase sempre uma tela em branco/esqueleto de carregamento - visualmente
+            // indistinguível entre páginas diferentes, dando a impressão de que a "Navegação ao vivo"
+            // trava sempre na mesma imagem (bug real relatado em produção).
             try {
                 Path live = dirScreenshots.resolveSibling("live");
                 java.nio.file.Files.createDirectories(live);
                 page.screenshot(new Page.ScreenshotOptions().setPath(live.resolve("latest.png")));
             } catch (RuntimeException | java.io.IOException ignore) {}
         }
-        try { page.waitForLoadState(LoadState.NETWORKIDLE,
-                new Page.WaitForLoadStateOptions().setTimeout(4000)); } catch (RuntimeException ignore) {}
 
         if (page.url().contains("/login")) {
             achados.add(Achado.media("sessao-perdida", tr.perfil, url, "",
